@@ -34,8 +34,17 @@ PromptWorks is a full-stack solution focused on prompt asset management and larg
 # Sync backend dependencies (including development tools)
 uv sync --extra dev
 
-# Initialize environment variables and apply database migrations
+# Initialize environment variables
 cp .env.example .env
+
+# Create the database and user if not already present (assuming postgres superuser)
+createuser promptworks -P            # Skip if the role already exists
+createdb promptworks -O promptworks
+# Or execute the following SQL:
+# psql -U postgres -c "CREATE USER promptworks WITH PASSWORD 'promptworks';"
+# psql -U postgres -c "CREATE DATABASE promptworks OWNER promptworks;"
+
+# Apply database migrations
 uv run alembic upgrade head
 ```
 
