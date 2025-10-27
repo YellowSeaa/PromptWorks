@@ -69,6 +69,11 @@ uv run poe test-all    # 顺序执行上述三项
 npm run build
 ```
 
+## 🧪 测试任务消息约定
+- 若测试任务的 Schema 未显式提供 `system` 消息，平台会把当前 Prompt 快照以 `user` 角色注入消息列表，兼容仅识别用户输入的模型。
+- Schema 中若包含 `system` 消息，则保持原有顺序，不会重复注入快照内容。
+- 仍会保证测试输入（`inputs`/`test_inputs`）中的问题作为后续 `user` 消息发送，支持多轮回放。
+
 ## 🐳 Docker 一键部署
 - **环境准备**：确保本机已安装 Docker 与 Docker Compose（Docker Desktop 或 NerdCTL 均可）。
 - **启动命令**：

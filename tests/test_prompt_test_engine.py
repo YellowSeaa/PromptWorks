@@ -65,6 +65,26 @@ def _create_provider_and_model(
     return model
 
 
+def test_prompt_test_engine_build_messages_snapshot_uses_user_role():
+    unit = PromptTestUnit(
+        task_id=1,
+        prompt_version_id=None,
+        name="快照测试",
+        model_name="mock-model",
+        rounds=1,
+        prompt_template="第 {run_index} 次提问",
+    )
+    context = {"run_index": 1}
+    messages = prompt_test_engine._build_messages(
+        unit, "你是一位审校专家。", context, run_index=1
+    )
+    assert len(messages) >= 2
+    assert messages[0]["role"] == "user"
+    assert messages[0]["content"] == "你是一位审校专家。"
+    assert messages[1]["role"] == "user"
+    assert "第 1 次提问" in messages[1]["content"]
+
+
 def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatch):
     prompt_version = _create_prompt_version(db_session)
     model = _create_provider_and_model(db_session)

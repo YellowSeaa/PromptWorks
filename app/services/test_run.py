@@ -296,14 +296,20 @@ def _build_messages(
                 continue
             messages.append({"role": role, "content": content})
 
-    if not messages and prompt_snapshot:
-        messages.append({"role": "system", "content": prompt_snapshot})
+    snapshot_message: dict[str, Any] | None = None
+    if prompt_snapshot:
+        if not messages:
+            snapshot_message = {"role": "user", "content": prompt_snapshot}
+            messages.append(snapshot_message)
+        elif not any(message.get("role") == "system" for message in messages):
+            snapshot_message = {"role": "user", "content": prompt_snapshot}
+            messages.insert(0, snapshot_message)
 
-    has_system = any(message.get("role") == "system" for message in messages)
-    if not has_system and prompt_snapshot:
-        messages.insert(0, {"role": "system", "content": prompt_snapshot})
-
-    has_user = any(message.get("role") == "user" for message in messages)
+    has_user = any(
+        message.get("role") == "user"
+        and (snapshot_message is None or message is not snapshot_message)
+        for message in messages
+    )
     if not has_user:
         user_inputs = schema_data.get("inputs") or schema_data.get("test_inputs")
         user_message: str

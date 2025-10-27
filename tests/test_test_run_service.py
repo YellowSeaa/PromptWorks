@@ -270,6 +270,18 @@ def test_build_messages_with_inputs_and_placeholders(prompt_version):
     assert "2" in messages[1]["content"]
 
 
+def test_build_messages_uses_user_role_for_prompt_snapshot(prompt_version):
+    schema = {
+        "inputs": ["提问 {{run_index}}"],
+    }
+    messages = test_run_service._build_messages(schema, prompt_version.content, 1)
+    assert len(messages) >= 2
+    assert messages[0]["role"] == "user"
+    assert messages[0]["content"] == prompt_version.content
+    assert messages[1]["role"] == "user"
+    assert "1" in messages[1]["content"]
+
+
 def test_resolve_base_url_requires_value(db_session):
     provider = LLMProvider(
         provider_name="NoBase",
