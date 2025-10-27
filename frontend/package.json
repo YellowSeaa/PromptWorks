@@ -16,11 +16,15 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@formily/reactive-vue": "^2.3.7",
+    "axios": "^1.12.2",
     "diff": "^8.0.2",
     "echarts": "^6.0.0",
     "element-plus": "^2.11.3",
+    "element-plus-x": "^1.1.11",
+    "markdown-it": "^14.1.0",
     "vue": "^3.5.21",
-    "vue-router": "^4.5.1",
-    "vue-i18n": "^9.14.0"
+    "vue-i18n": "^9.14.0",
+    "vue-router": "^4.5.1"
   }
 }

@@ -169,6 +169,12 @@ export const messages = {
         model: '模型与参数',
         chat: '对话调试'
       },
+      markdown: {
+        label: 'Markdown 渲染',
+        on: '开',
+        off: '关',
+        tooltip: '开启后以 Markdown 方式渲染消息内容'
+      },
       stream: {
         label: '流式输出',
         on: '开',
@@ -1111,6 +1117,12 @@ export const messages = {
       sections: {
         model: 'Model & Parameters',
         chat: 'Conversation Debugging'
+      },
+      markdown: {
+        label: 'Markdown',
+        on: 'On',
+        off: 'Off',
+        tooltip: 'Render messages with Markdown formatting'
       },
       stream: {
         label: 'Streaming',

@@ -79,21 +79,39 @@
           <div class="card-header">
             <span>{{ t('quickTest.sections.chat') }}</span>
             <div class="card-header__actions">
-              <span class="stream-switch__label">{{ t('quickTest.stream.label') }}</span>
-              <el-tooltip
-                effect="dark"
-                :content="t('quickTest.stream.tooltip')"
-                placement="top"
-              >
-                <el-switch
-                  v-model="isStreamingEnabled"
-                  class="stream-switch"
-                  inline-prompt
-                  :active-text="t('quickTest.stream.on')"
-                  :inactive-text="t('quickTest.stream.off')"
-                  :disabled="isSending"
-                />
-              </el-tooltip>
+              <div class="card-header__toggle">
+                <span class="card-header__toggle-label">{{ t('quickTest.markdown.label') }}</span>
+                <el-tooltip
+                  effect="dark"
+                  :content="t('quickTest.markdown.tooltip')"
+                  placement="top"
+                >
+                  <el-switch
+                    v-model="isMarkdownEnabled"
+                    size="small"
+                    active-text=""
+                    inactive-text=""
+                  />
+                </el-tooltip>
+              </div>
+              <div class="card-header__toggle">
+                <span class="card-header__toggle-label">{{ t('quickTest.stream.label') }}</span>
+                <el-tooltip
+                  effect="dark"
+                  :content="t('quickTest.stream.tooltip')"
+                  placement="top"
+                >
+                  <el-switch
+                    v-model="isStreamingEnabled"
+                    class="stream-switch"
+                    size="small"
+                    inline-prompt
+                    :active-text="t('quickTest.stream.on')"
+                    :inactive-text="t('quickTest.stream.off')"
+                    :disabled="isSending"
+                  />
+                </el-tooltip>
+              </div>
             </div>
           </div>
         </template>
@@ -108,28 +126,64 @@
                 :key="message.id"
                 :class="['chat-message', `chat-message--${message.role}`]"
               >
-                <el-avatar :size="36" class="chat-message__avatar">
-                  <template v-if="message.role === 'assistant'">
-                    <img v-if="message.avatarUrl" :src="message.avatarUrl" :alt="message.avatarAlt" />
-                    <span v-else>{{ message.avatarEmoji ?? message.avatarFallback }}</span>
+                <el-bubble
+                  :placement="message.role === 'user' ? 'end' : 'start'"
+                  variant="filled"
+                  shape="corner"
+                  :class="['chat-message__bubble', `chat-message__bubble--${message.role}`]"
+                  :header-class="resolveBubbleHeaderClass(message)"
+                  :content-class="resolveBubbleContentClass(message)"
+                  :footer-class="message.tokens ? resolveBubbleFooterClass(message) : undefined"
+                >
+                  <template #avatar>
+                    <el-avatar :size="36" class="chat-message__avatar">
+                      <template v-if="message.role === 'assistant'">
+                        <img
+                          v-if="message.avatarUrl"
+                          :src="message.avatarUrl"
+                          :alt="message.avatarAlt"
+                        />
+                        <span v-else>{{ message.avatarEmoji ?? message.avatarFallback }}</span>
+                      </template>
+                      <template v-else>
+                        <img
+                          v-if="userAvatar"
+                          :src="userAvatar"
+                          :alt="t('quickTest.chat.avatar.user')"
+                        />
+                        <span v-else>{{ t('quickTest.chat.avatar.self') }}</span>
+                      </template>
+                    </el-avatar>
                   </template>
-                  <template v-else>
-                    <img v-if="userAvatar" :src="userAvatar" :alt="t('quickTest.chat.avatar.user')" />
-                    <span v-else>{{ t('quickTest.chat.avatar.self') }}</span>
+                  <template #header>
+                    <p class="chat-message__name">{{ message.displayName }}</p>
                   </template>
-                </el-avatar>
-                <div class="chat-message__bubble">
-                  <p class="chat-message__name">{{ message.displayName }}</p>
-                  <div class="chat-message__content">
-                    <el-skeleton v-if="message.isStreaming && !message.content" animated :rows="2" />
-                    <span v-else v-text="message.content" />
-                  </div>
-                  <div v-if="message.tokens" class="chat-message__meta">
-                    <span>{{ t('quickTest.chat.tokens.input') }}：{{ formatTokenValue(message.tokens.input) }}</span>
-                    <span>{{ t('quickTest.chat.tokens.output') }}：{{ formatTokenValue(message.tokens.output) }}</span>
-                    <span>{{ t('quickTest.chat.tokens.total') }}：{{ formatTokenValue(message.tokens.total) }}</span>
-                  </div>
-                </div>
+                  <template #default>
+                    <el-skeleton
+                      v-if="message.isStreaming && !message.content"
+                      animated
+                      :rows="2"
+                    />
+                    <div
+                      v-else-if="isMarkdownEnabled"
+                      class="chat-message__content chat-message__content--markdown"
+                      v-html="renderMessageMarkdown(message.content)"
+                    />
+                    <span
+                      v-else
+                      class="chat-message__content chat-message__content--text"
+                    >
+                      {{ message.content }}
+                    </span>
+                  </template>
+                  <template v-if="message.tokens" #footer>
+                    <div class="chat-message__meta">
+                      <span>{{ t('quickTest.chat.tokens.input') }}：{{ formatTokenValue(message.tokens.input) }}</span>
+                      <span>{{ t('quickTest.chat.tokens.output') }}：{{ formatTokenValue(message.tokens.output) }}</span>
+                      <span>{{ t('quickTest.chat.tokens.total') }}：{{ formatTokenValue(message.tokens.total) }}</span>
+                    </div>
+                  </template>
+                </el-bubble>
               </div>
             </template>
           </div>
@@ -286,6 +340,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ElBubble } from 'element-plus-x'
+import 'element-plus-x/theme-chalk/el-bubble.css'
+import MarkdownIt from 'markdown-it'
 import { listLLMProviders, type LLMProvider } from '../api/llmProvider'
 import {
   streamQuickTest,
@@ -387,6 +444,7 @@ const messages = ref<QuickTestMessage[]>([])
 const userAvatar = ''
 const isComposing = ref(false)
 const isStreamingEnabled = ref(true)
+const isMarkdownEnabled = ref(true)
 
 const promptTags = ref<PromptTagStats[]>([])
 
@@ -397,6 +455,11 @@ const STREAM_INTERVAL_MS = 25
 const streamingQueues = new Map<number, { buffer: string; timer: number | null }>()
 let activeStreamingMessageId: number | null = null
 let streamingScrollScheduled = false
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true
+})
 
 const sessionOptions = computed(() =>
   [...chatSessions.value]
@@ -528,6 +591,25 @@ function clearStreamingQueue(
 
 function findMessageById(id: number) {
   return messages.value.find((item) => item.id === id)
+}
+
+function resolveBubbleHeaderClass(message: QuickTestMessage) {
+  return `chat-message__header chat-message__header--${message.role}`
+}
+
+function resolveBubbleContentClass(message: QuickTestMessage) {
+  return `chat-message__bubble-content chat-message__bubble-content--${message.role}`
+}
+
+function resolveBubbleFooterClass(message: QuickTestMessage) {
+  return `chat-message__footer chat-message__footer--${message.role}`
+}
+
+function renderMessageMarkdown(content: string) {
+  if (!content) {
+    return ''
+  }
+  return markdownRenderer.render(content)
 }
 
 function nextMessageId(): number {
@@ -1606,16 +1688,21 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
 .card-header__actions {
   display: flex;
   align-items: center;
+  gap: 12px;
+}
+
+.card-header__toggle {
+  display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.card-header__toggle-label {
   color: var(--text-weak-color);
   font-size: 12px;
 }
 
 .stream-switch {
-  flex-shrink: 0;
-}
-
-.stream-switch__label {
   flex-shrink: 0;
 }
 
@@ -1668,52 +1755,93 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
 
 .chat-message {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+}
+
+.chat-message--assistant {
+  justify-content: flex-start;
 }
 
 .chat-message--user {
-  flex-direction: row-reverse;
+  justify-content: flex-end;
 }
 
-.chat-message--user .chat-message__bubble {
-  background: rgba(64, 158, 255, 0.12);
-  align-items: flex-end;
-}
-
-.chat-message--user .chat-message__name {
-  text-align: right;
-}
-
-.chat-message--assistant .chat-message__bubble {
-  background: var(--content-bg-color);
-  border: 1px solid var(--side-border-color);
+.chat-message__bubble {
+  max-width: 80%;
 }
 
 .chat-message__avatar {
   flex-shrink: 0;
 }
 
-.chat-message__bubble {
-  max-width: 80%;
-  border-radius: 12px;
-  padding: 12px 14px;
+.chat-message__header {
+  margin: 0 0 4px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  line-height: 1.6;
-}
-
-.chat-message__name {
-  margin: 0;
   font-size: 12px;
   color: var(--text-weak-color);
 }
 
-.chat-message__content {
-  white-space: pre-wrap;
+.chat-message__header--assistant {
+  justify-content: flex-start;
+}
+
+.chat-message__header--user {
+  justify-content: flex-end;
+}
+
+.chat-message__name {
+  margin: 0;
+}
+
+.chat-message__bubble-content {
   word-break: break-word;
   font-size: 14px;
+  line-height: 1.6;
+  padding: 12px 14px;
+}
+
+.chat-message__bubble-content--assistant {
+  background: var(--content-bg-color);
+  border: 1px solid var(--side-border-color);
+}
+
+.chat-message__bubble-content--user {
+  background: rgba(64, 158, 255, 0.12);
+}
+
+.chat-message__content--text {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.chat-message__content--markdown {
+  width: 100%;
+}
+
+.chat-message__content--markdown :deep(p) {
+  margin: 0 0 8px;
+}
+
+.chat-message__content--markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.chat-message__content--markdown :deep(code) {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 90%;
+}
+
+.chat-message__content--markdown :deep(pre code) {
+  display: block;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.chat-message__content--markdown :deep(ul),
+.chat-message__content--markdown :deep(ol) {
+  padding-left: 20px;
+  margin: 0 0 8px;
 }
 
 .chat-message__meta {
@@ -1723,6 +1851,19 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
   font-size: 12px;
   color: var(--text-weak-color);
   margin-top: 4px;
+}
+
+.chat-message__footer {
+  display: flex;
+  margin-top: 8px;
+}
+
+.chat-message__footer--assistant {
+  justify-content: flex-start;
+}
+
+.chat-message__footer--user {
+  justify-content: flex-end;
 }
 
 .chat-input {
