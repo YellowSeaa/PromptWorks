@@ -34,8 +34,17 @@ PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决
 # 同步后端依赖（包含开发工具）
 uv sync --extra dev
 
-# 初始化环境变量并迁移数据库结构
+# 初始化环境变量
 cp .env.example .env
+
+# 首次运行请先创建数据库与账号（以本地 postgres 超级用户为例）
+createuser promptworks -P            # 若已存在同名用户可跳过
+createdb promptworks -O promptworks
+# 或执行以下 SQL：
+# psql -U postgres -c "CREATE USER promptworks WITH PASSWORD 'promptworks';"
+# psql -U postgres -c "CREATE DATABASE promptworks OWNER promptworks;"
+
+# 同步数据库结构
 uv run alembic upgrade head
 ```
 
