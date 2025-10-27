@@ -29,7 +29,7 @@
     </el-row>
 
     <el-row :gutter="16" class="detail-row">
-      <el-col :xs="24" :lg="10" class="model-col">
+      <el-col :xs="24" :lg="12" class="model-col">
         <el-card shadow="hover" class="model-card" v-loading="modelLoading">
           <template #header>
             <div class="model-card__header">
@@ -50,6 +50,7 @@
             :row-class-name="rowClassName"
             @current-change="handleModelSelect"
             :empty-text="t('usageManagement.modelCard.empty')"
+            style="width: 100%"
           >
             <el-table-column prop="modelName" :label="t('usageManagement.modelCard.columns.model')" min-width="160">
               <template #default="{ row }">
@@ -57,16 +58,16 @@
                 <span class="provider-name">{{ row.provider }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="totalTokens" :label="t('usageManagement.modelCard.columns.totalTokens')" width="120">
+            <el-table-column prop="totalTokens" :label="t('usageManagement.modelCard.columns.totalTokens')" min-width="120">
               <template #default="{ row }">{{ formatNumber(row.totalTokens) }}</template>
             </el-table-column>
-            <el-table-column prop="callCount" :label="t('usageManagement.modelCard.columns.callCount')" width="120">
+            <el-table-column prop="callCount" :label="t('usageManagement.modelCard.columns.callCount')" min-width="120">
               <template #default="{ row }">{{ formatNumber(row.callCount) }}</template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-col>
-      <el-col :xs="24" :lg="14" class="chart-col">
+      <el-col :xs="24" :lg="12" class="chart-col">
         <el-card shadow="hover" class="chart-card" v-loading="chartLoading">
           <template #header>
             <div class="chart-card__header">
@@ -520,7 +521,6 @@ onBeforeUnmount(() => {
 .detail-row {
   margin-top: 4px;
   align-items: stretch;
-  flex-wrap: wrap;
 }
 
 .detail-row :deep(.el-col) {
@@ -535,15 +535,6 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.model-col {
-  flex: 1 1 auto !important;
-  max-width: none !important;
-}
-
-.chart-card {
-  max-width: 100%;
-}
-
 .model-card :deep(.el-card__body),
 .chart-card :deep(.el-card__body) {
   display: flex;
@@ -553,6 +544,7 @@ onBeforeUnmount(() => {
 
 .model-card :deep(.el-table) {
   flex: 1;
+  width: 100%;
 }
 
 .model-card :deep(.el-table__body-wrapper) {
@@ -569,22 +561,6 @@ onBeforeUnmount(() => {
   width: 100%;
   flex: 1;
   min-height: 340px;
-}
-
-@media (min-width: 1200px) {
-  .detail-row {
-    flex-wrap: nowrap;
-  }
-
-  .chart-col {
-    flex: 0 0 680px !important;
-    max-width: 680px !important;
-    width: 680px !important;
-  }
-
-  .chart-card {
-    width: 680px;
-  }
 }
 
 .model-card__header,
