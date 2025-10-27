@@ -415,14 +415,26 @@ def _build_messages(
                 continue
             messages.append({"role": role, "content": content})
 
-    system_prompt = _format_text(prompt_snapshot, context, run_index)
-    if system_prompt and not any(msg["role"] == "system" for msg in messages):
-        messages.insert(0, {"role": "system", "content": system_prompt})
+    snapshot_message: dict[str, Any] | None = None
+    prompt_message = _format_text(prompt_snapshot, context, run_index)
+    if prompt_message:
+        if not messages:
+            snapshot_message = {"role": "user", "content": prompt_message}
+            messages.append(snapshot_message)
+        elif not any(msg["role"] == "system" for msg in messages):
+            snapshot_message = {"role": "user", "content": prompt_message}
+            messages.insert(0, snapshot_message)
 
     user_template = unit.prompt_template or context.get("user_prompt")
     user_message = _format_text(user_template, context, run_index)
 
-    if user_message and not any(msg["role"] == "user" for msg in messages):
+    has_user = any(
+        msg.get("role") == "user"
+        and (snapshot_message is None or msg is not snapshot_message)
+        for msg in messages
+    )
+
+    if user_message and not has_user:
         messages.append({"role": "user", "content": user_message})
 
     if not messages:

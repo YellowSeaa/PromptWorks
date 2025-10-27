@@ -171,7 +171,7 @@ def test_create_and_retrieve_test_prompt(
         assert payload["model"] == model["name"]
         assert payload["max_tokens"] == 64
         assert payload["temperature"] == 0.2
-        assert payload["messages"][0]["role"] == "system"
+        assert payload["messages"][0]["role"] == "user"
         assert (
             payload["messages"][0]["content"]
             == prompt_payload["current_version"]["content"]

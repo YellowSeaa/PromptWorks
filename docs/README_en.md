@@ -78,6 +78,11 @@ uv run poe test-all    # Run the three commands sequentially
 npm run build
 ```
 
+## 🧪 Test Message Rules
+- When a test run schema does not declare a `system` message, the platform injects the current prompt snapshot as a `user` message so providers that only honor user turns keep working.
+- If a schema already includes a `system` role, we preserve the original order and do not duplicate the snapshot.
+- Entries from `inputs`/`test_inputs` are still appended as subsequent `user` messages to support multi-run playback.
+
 ## 🐳 Docker Deployment
 - **Prerequisites**: Ensure Docker and Docker Compose are installed (Docker Desktop or NerdCTL).
 - **Startup**:
