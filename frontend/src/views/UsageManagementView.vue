@@ -364,10 +364,18 @@ function formatNumber(value?: number | null) {
 
 const chartRef = ref<HTMLDivElement | null>(null)
 let chartInstance: echarts.ECharts | null = null
+let chartContainerObserver: ResizeObserver | null = null
 
 function initChart() {
   if (chartRef.value) {
     chartInstance = echarts.init(chartRef.value)
+    if (chartContainerObserver) {
+      chartContainerObserver.disconnect()
+    }
+    chartContainerObserver = new ResizeObserver(() => {
+      chartInstance?.resize()
+    })
+    chartContainerObserver.observe(chartRef.value)
   }
 }
 
@@ -442,6 +450,10 @@ onBeforeUnmount(() => {
   if (chartInstance) {
     chartInstance.dispose()
     chartInstance = null
+  }
+  if (chartContainerObserver) {
+    chartContainerObserver.disconnect()
+    chartContainerObserver = null
   }
 })
 </script>
@@ -533,6 +545,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
 }
 
 .model-card :deep(.el-card__body),
