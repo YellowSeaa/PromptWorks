@@ -237,21 +237,24 @@
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.status')" width="120">
           <template #default="{ row }">
-            <el-tag :type="statusTagType[row.status] ?? 'info'" size="small">
-              {{ statusLabel.value[row.status] ?? row.status }}
+            <el-tag :type="statusTagType[row.statusKey] ?? 'info'" size="small">
+              {{ row.statusDisplay }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.createdAt')" min-width="160">
           <template #default="{ row }">
-            {{ formatDateTime(row.createdAt) }}
+            {{ row.createdAtDisplay }}
           </template>
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.actions')" width="120">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleViewTestRecord(row)">
-              {{ t('promptDetail.test.viewResult') }}
-            </el-button>
+            <template v-if="row.canNavigate">
+              <el-button type="primary" link size="small" @click="handleViewTestRecord(row)">
+                {{ t('promptDetail.test.viewResult') }}
+              </el-button>
+            </template>
+            <span v-else class="test-record-empty-action">--</span>
           </template>
         </el-table-column>
       </el-table>
@@ -338,17 +341,24 @@ const selectedVersion = computed(() => {
   return match ?? prompt.current_version ?? null
 })
 
+type TestRecordType = 'legacy' | 'task'
+type TestRecordStatus = 'completed' | 'failed' | 'running' | 'pending'
+
 interface TestRecordRow {
   key: string
-  type: 'legacy' | 'task'
+  type: TestRecordType
   versionLabel: string
   modelLabel: string
   temperature: number | null
   repetitions: number
-  status: string
-  createdAt: string
+  statusKey: TestRecordStatus
+  statusDisplay: string
+  createdAtDisplay: string
+  createdAtSortValue: number
+  canNavigate: boolean
   runId?: number
   taskId?: number
+  disabledReason?: string | null
 }
 
 const testRuns = ref<TestRun[]>([])
@@ -389,7 +399,7 @@ const testRecords = computed<TestRecordRow[]>(() => {
     records.push(buildPromptTestTaskRecord(task, versionLabelMap))
   })
 
-  return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return records.sort((a, b) => b.createdAtSortValue - a.createdAtSortValue)
 })
 
 watch(
@@ -448,6 +458,22 @@ function mapPromptTestTaskStatus(status: string): 'pending' | 'running' | 'compl
   if (normalized === 'completed') return 'completed'
   if (normalized === 'failed') return 'failed'
   return 'pending'
+}
+
+function normalizeLegacyStatus(status: string | null | undefined): TestRecordStatus {
+  const normalized = typeof status === 'string' ? status.toLowerCase() : ''
+  if (normalized === 'completed') return 'completed'
+  if (normalized === 'failed') return 'failed'
+  if (normalized === 'running') return 'running'
+  return 'pending'
+}
+
+function safeDateValue(value: string): number {
+  const time = new Date(value).getTime()
+  if (Number.isNaN(time)) {
+    return 0
+  }
+  return time
 }
 
 const canSaveMeta = computed(() => {
@@ -557,15 +583,32 @@ function buildLegacyTestRecord(
         t('promptDetail.table.versionFallback', { id: run.prompt_version_id })
       : t('promptDetail.content.versionFallback'))
 
+  const modelLabel = run.model_name?.trim() || '--'
+  const temperature =
+    typeof run.temperature === 'number' && !Number.isNaN(run.temperature)
+      ? run.temperature
+      : null
+  const repetitions =
+    typeof run.repetitions === 'number' && !Number.isNaN(run.repetitions)
+      ? run.repetitions
+      : 1
+  const statusKey = normalizeLegacyStatus(run.status)
+  const createdAtSource = run.created_at ?? run.updated_at ?? ''
+  const createdAtSortValue = createdAtSource ? safeDateValue(createdAtSource) : 0
+  const createdAtDisplay = createdAtSource ? formatDateTime(createdAtSource) : '--'
+
   return {
     key: `legacy-${run.id}`,
     type: 'legacy',
     versionLabel,
-    modelLabel: run.model_name,
-    temperature: typeof run.temperature === 'number' ? run.temperature : null,
-    repetitions: run.repetitions,
-    status: run.status,
-    createdAt: run.created_at,
+    modelLabel,
+    temperature,
+    repetitions,
+    statusKey,
+    statusDisplay: statusLabel.value[statusKey] ?? statusKey,
+    createdAtDisplay,
+    createdAtSortValue,
+    canNavigate: typeof run.id === 'number' && run.id > 0,
     runId: run.id
   }
 }
@@ -693,7 +736,10 @@ function buildPromptTestTaskRecord(
   const modelLabel = modelNames.size ? Array.from(modelNames).join(' / ') : '--'
   const temperature = temperatureValues.length ? temperatureValues[0] : null
   const repetitions = roundsValues.length ? Math.max(...roundsValues) : 1
-  const status = mapPromptTestTaskStatus(task.status)
+  const statusKey = mapPromptTestTaskStatus(task.status)
+  const createdAtSource = task.created_at ?? task.updated_at ?? ''
+  const createdAtSortValue = createdAtSource ? safeDateValue(createdAtSource) : 0
+  const createdAtDisplay = createdAtSource ? formatDateTime(createdAtSource) : '--'
 
   return {
     key: `task-${task.id}`,
@@ -702,8 +748,11 @@ function buildPromptTestTaskRecord(
     modelLabel,
     temperature,
     repetitions,
-    status,
-    createdAt: task.created_at,
+    statusKey,
+    statusDisplay: statusLabel.value[statusKey] ?? statusKey,
+    createdAtDisplay,
+    createdAtSortValue,
+    canNavigate: typeof task.id === 'number' && task.id > 0,
     taskId: task.id
   }
 }
@@ -870,13 +919,23 @@ function handleCreateTest() {
 }
 
 function handleViewTestRecord(record: TestRecordRow) {
+  if (!record.canNavigate) {
+    ElMessage.warning(t('promptDetail.messages.testUnavailable'))
+    return
+  }
   if (record.type === 'task' && record.taskId) {
-    router.push({ name: 'prompt-test-task-result', params: { taskId: record.taskId } })
+    void router
+      .push({ name: 'prompt-test-task-result', params: { taskId: String(record.taskId) } })
+      .catch(() => {})
     return
   }
   if (record.runId) {
-    router.push({ name: 'test-job-result', params: { id: record.runId } })
+    void router
+      .push({ name: 'test-job-result', params: { id: record.runId } })
+      .catch(() => {})
+    return
   }
+  ElMessage.warning(t('promptDetail.messages.testUnavailable'))
 }
 
 function goHome() {
@@ -1188,6 +1247,10 @@ function goHome() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.test-record-empty-action {
+  color: var(--text-weak-color);
 }
 
 .test-alert {

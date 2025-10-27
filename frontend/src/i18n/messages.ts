@@ -582,7 +582,8 @@ export const messages = {
         metaNotFound: '分类或标签数据未找到',
         metaLoadFailed: '加载分类或标签数据失败',
         testLoadFailed: '加载测试记录失败',
-        contentEmpty: '暂无内容摘要'
+        contentEmpty: '暂无内容摘要',
+        testUnavailable: '无法打开测试记录，请稍后重试'
       },
       status: {
         completed: '已完成',
@@ -1518,7 +1519,8 @@ export const messages = {
         metaNotFound: 'Category or tag information not found.',
         metaLoadFailed: 'Failed to load category or tag data.',
         testLoadFailed: 'Failed to load test records.',
-        contentEmpty: 'No summary available.'
+        contentEmpty: 'No summary available.',
+        testUnavailable: 'Unable to open this test record. Please try again later.'
       },
       status: {
         completed: 'Completed',
