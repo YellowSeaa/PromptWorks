@@ -11,6 +11,7 @@ export interface QuickTestStreamPayload {
   parameters?: Record<string, unknown>
   promptId?: number | null
   promptVersionId?: number | null
+  persistUsage?: boolean
 }
 
 export interface QuickTestHistoryMessage {
@@ -143,6 +144,50 @@ export async function* streamQuickTest(
   } finally {
     reader.releaseLock()
   }
+}
+
+export async function invokeQuickTest(
+  payload: QuickTestStreamPayload,
+  options: { signal?: AbortSignal } = {}
+): Promise<unknown> {
+  const url = `${API_BASE_URL}/llm-providers/${payload.providerId}/invoke`
+  const body: Record<string, unknown> = {
+    messages: payload.messages,
+    parameters: payload.parameters ?? {}
+  }
+  if (payload.modelId != null) {
+    body.model_id = payload.modelId
+  }
+  if (payload.modelName) {
+    body.model = payload.modelName
+  }
+  if (payload.promptId != null) {
+    body.prompt_id = payload.promptId
+  }
+  if (payload.promptVersionId != null) {
+    body.prompt_version_id = payload.promptVersionId
+  }
+  if (typeof payload.temperature === 'number') {
+    body.temperature = payload.temperature
+  }
+  if (payload.persistUsage === true) {
+    body.persist_usage = true
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: options.signal
+  })
+
+  if (!response.ok) {
+    const error: HttpError = new Error('请求接口失败')
+    error.status = response.status
+    error.payload = await parseErrorPayload(response)
+    throw error
+  }
+  return response.json()
 }
 
 export async function fetchQuickTestHistory(

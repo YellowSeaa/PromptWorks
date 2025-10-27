@@ -78,6 +78,23 @@
         <template #header>
           <div class="card-header">
             <span>{{ t('quickTest.sections.chat') }}</span>
+            <div class="card-header__actions">
+              <span class="stream-switch__label">{{ t('quickTest.stream.label') }}</span>
+              <el-tooltip
+                effect="dark"
+                :content="t('quickTest.stream.tooltip')"
+                placement="top"
+              >
+                <el-switch
+                  v-model="isStreamingEnabled"
+                  class="stream-switch"
+                  inline-prompt
+                  :active-text="t('quickTest.stream.on')"
+                  :inactive-text="t('quickTest.stream.off')"
+                  :disabled="isSending"
+                />
+              </el-tooltip>
+            </div>
           </div>
         </template>
         <div class="chat-panel">
@@ -272,6 +289,7 @@ import { ElMessage } from 'element-plus'
 import { listLLMProviders, type LLMProvider } from '../api/llmProvider'
 import {
   streamQuickTest,
+  invokeQuickTest,
   fetchQuickTestHistory,
   type QuickTestHistoryItem
 } from '../api/quickTest'
@@ -368,11 +386,17 @@ let sessionSeed = 0
 const messages = ref<QuickTestMessage[]>([])
 const userAvatar = ''
 const isComposing = ref(false)
+const isStreamingEnabled = ref(true)
 
 const promptTags = ref<PromptTagStats[]>([])
 
 const providerMap = ref(new Map<number, LLMProvider>())
 const promptMap = ref(new Map<number, Prompt>())
+
+const STREAM_INTERVAL_MS = 25
+const streamingQueues = new Map<number, { buffer: string; timer: number | null }>()
+let activeStreamingMessageId: number | null = null
+let streamingScrollScheduled = false
 
 const sessionOptions = computed(() =>
   [...chatSessions.value]
@@ -426,6 +450,85 @@ let activeStreamController: AbortController | null = null
 let messageId = 0
 
 const HISTORY_LIMIT = 30
+
+function scheduleStreamScroll() {
+  if (streamingScrollScheduled) {
+    return
+  }
+  if (typeof window === 'undefined') {
+    void scrollToBottom()
+    return
+  }
+  streamingScrollScheduled = true
+  window.requestAnimationFrame(() => {
+    streamingScrollScheduled = false
+    void scrollToBottom()
+  })
+}
+
+function scheduleStreamingFlush(message: QuickTestMessage) {
+  const entry = streamingQueues.get(message.id)
+  if (!entry) {
+    return
+  }
+  if (!entry.buffer.length) {
+    entry.timer = null
+    streamingQueues.delete(message.id)
+    return
+  }
+  if (typeof window === 'undefined') {
+    message.content += entry.buffer
+    streamingQueues.delete(message.id)
+    return
+  }
+  const char = entry.buffer[0]
+  entry.buffer = entry.buffer.slice(1)
+  message.content += char
+  scheduleStreamScroll()
+  entry.timer = window.setTimeout(() => {
+    scheduleStreamingFlush(message)
+  }, STREAM_INTERVAL_MS)
+}
+
+function enqueueStreamingContent(message: QuickTestMessage, text: string) {
+  if (!text) {
+    return
+  }
+  if (typeof window === 'undefined') {
+    message.content += text
+    return
+  }
+  let entry = streamingQueues.get(message.id)
+  if (!entry) {
+    entry = { buffer: '', timer: null }
+    streamingQueues.set(message.id, entry)
+  }
+  entry.buffer += text
+  if (entry.timer === null) {
+    scheduleStreamingFlush(message)
+  }
+}
+
+function clearStreamingQueue(
+  messageId: number,
+  options: { flush?: boolean; target?: QuickTestMessage } = {}
+) {
+  const entry = streamingQueues.get(messageId)
+  if (!entry) {
+    return
+  }
+  if (entry.timer !== null && typeof window !== 'undefined') {
+    window.clearTimeout(entry.timer)
+  }
+  if (options.flush && entry.buffer && options.target) {
+    options.target.content += entry.buffer
+  }
+  streamingQueues.delete(messageId)
+}
+
+function findMessageById(id: number) {
+  return messages.value.find((item) => item.id === id)
+}
 
 function nextMessageId(): number {
   messageId += 1
@@ -545,6 +648,15 @@ function cancelActiveStream() {
   if (activeStreamController) {
     activeStreamController.abort()
     activeStreamController = null
+  }
+  if (activeStreamingMessageId !== null) {
+    const target = findMessageById(activeStreamingMessageId)
+    if (target) {
+      clearStreamingQueue(activeStreamingMessageId, { flush: true, target })
+    } else {
+      clearStreamingQueue(activeStreamingMessageId)
+    }
+    activeStreamingMessageId = null
   }
 }
 
@@ -1116,9 +1228,11 @@ async function handleSend() {
     temperature: temperature.value,
     parameters: extraParameters,
     promptId: promptMeta?.promptId ?? null,
-    promptVersionId: promptMeta?.versionId ?? null
+    promptVersionId: promptMeta?.versionId ?? null,
+    persistUsage: isStreamingEnabled.value ? undefined : true
   }
 
+  let finalResponseText = ''
   let shouldScrollAfterStream = false
   let shouldRefreshHistory = false
   const matchCriteria: HistoryMatchCriteria = {
@@ -1128,47 +1242,87 @@ async function handleSend() {
     draftId: session.isPersisted ? undefined : session.id
   }
   try {
-    for await (const event of streamQuickTest(payload, { signal: controller.signal })) {
-      const data = event.data
-      if (data === '[DONE]') {
-        break
-      }
-      let parsed: any
-      try {
-        parsed = JSON.parse(data)
-      } catch (error) {
-        void error
-        continue
-      }
+    if (isStreamingEnabled.value) {
+      for await (const event of streamQuickTest(payload, { signal: controller.signal })) {
+        const data = event.data
+        if (data === '[DONE]') {
+          break
+        }
+        let parsed: any
+        try {
+          parsed = JSON.parse(data)
+        } catch (error) {
+          void error
+          continue
+        }
 
-      if (parsed?.usage) {
-        applyUsageToMessage(assistantMessage, parsed.usage)
-        updateActiveSessionTimestamp()
-      }
-
-      const choices = Array.isArray(parsed?.choices) ? parsed.choices : []
-      for (const choice of choices) {
-        const delta = choice?.delta
-        if (delta && typeof delta.content === 'string') {
-          assistantMessage.content += delta.content
-          shouldScrollAfterStream = true
+        if (parsed?.usage) {
+          applyUsageToMessage(assistantMessage, parsed.usage)
           updateActiveSessionTimestamp()
+        }
+
+        const choices = Array.isArray(parsed?.choices) ? parsed.choices : []
+        for (const choice of choices) {
+          const delta = choice?.delta
+          if (delta && typeof delta.content === 'string') {
+            finalResponseText += delta.content
+            enqueueStreamingContent(assistantMessage, delta.content)
+            shouldScrollAfterStream = true
+            updateActiveSessionTimestamp()
+            continue
+          }
+          const message = choice?.message
+          if (message && typeof message.content === 'string') {
+            finalResponseText += message.content
+            enqueueStreamingContent(assistantMessage, message.content)
+            shouldScrollAfterStream = true
+            updateActiveSessionTimestamp()
+            continue
+          }
+          const text = choice?.text
+          if (typeof text === 'string') {
+            finalResponseText += text
+            enqueueStreamingContent(assistantMessage, text)
+            shouldScrollAfterStream = true
+            updateActiveSessionTimestamp()
+          }
+        }
+      }
+      shouldRefreshHistory = true
+    } else {
+      const response = await invokeQuickTest(payload, { signal: controller.signal })
+      if (response?.usage) {
+        applyUsageToMessage(assistantMessage, response.usage)
+      }
+      clearStreamingQueue(assistantMessage.id)
+      const choices = Array.isArray(response?.choices) ? response.choices : []
+      let combined = ''
+      for (const choice of choices) {
+        if (!choice || typeof choice !== 'object') {
           continue
         }
         const message = choice?.message
         if (message && typeof message.content === 'string') {
-          assistantMessage.content += message.content
-          shouldScrollAfterStream = true
-          updateActiveSessionTimestamp()
+          combined += message.content
+          continue
+        }
+        const text = choice?.text
+        if (typeof text === 'string') {
+          combined += text
         }
       }
+      assistantMessage.content = combined || assistantMessage.content
+      finalResponseText = combined || assistantMessage.content
+      shouldScrollAfterStream = true
+      shouldRefreshHistory = true
+      updateActiveSessionTimestamp()
     }
-    shouldRefreshHistory = true
   } catch (error: any) {
     if (error?.name === 'AbortError') {
       if (!assistantMessage.content) {
         assistantMessage.content = t('quickTest.messages.requestCancelled')
       }
+      clearStreamingQueue(assistantMessage.id, { flush: true, target: assistantMessage })
       assistantMessage.tokens = undefined
       shouldScrollAfterStream = true
       updateActiveSessionTimestamp()
@@ -1183,6 +1337,7 @@ async function handleSend() {
     } else if (error?.message) {
       message = error.message
     }
+    clearStreamingQueue(assistantMessage.id)
     assistantMessage.content = message
     assistantMessage.tokens = undefined
     ElMessage.error(message)
@@ -1194,6 +1349,9 @@ async function handleSend() {
     if (activeStreamController === controller) {
       activeStreamController = null
     }
+    if (activeStreamingMessageId === assistantMessage.id) {
+      activeStreamingMessageId = null
+    }
     if (assistantMessage.content) {
       shouldScrollAfterStream = true
     }
@@ -1202,7 +1360,7 @@ async function handleSend() {
       void scrollToBottom()
     }
     if (shouldRefreshHistory) {
-      matchCriteria.responseText = assistantMessage.content
+      matchCriteria.responseText = finalResponseText || assistantMessage.content
       await refreshHistory(matchCriteria)
     }
   }
@@ -1313,6 +1471,7 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
   const lastStreaming = [...messages.value].reverse().find((item) => item.role === 'assistant' && item.isStreaming)
   if (lastStreaming) {
     lastStreaming.isStreaming = false
+    clearStreamingQueue(lastStreaming.id, { flush: true, target: lastStreaming })
   }
   const message: QuickTestMessage = {
     id: nextMessageId(),
@@ -1327,6 +1486,8 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
     tokens: undefined
   }
   messages.value.push(message)
+  streamingQueues.delete(message.id)
+  activeStreamingMessageId = message.id
   const session = getActiveSession()
   if (session) {
     session.providerId = provider.id
@@ -1434,8 +1595,28 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
 }
 
 .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 14px;
   font-weight: 600;
+}
+
+.card-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-weak-color);
+  font-size: 12px;
+}
+
+.stream-switch {
+  flex-shrink: 0;
+}
+
+.stream-switch__label {
+  flex-shrink: 0;
 }
 
 

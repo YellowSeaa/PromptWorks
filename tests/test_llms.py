@@ -313,6 +313,104 @@ def test_invoke_llm_uses_known_base_url_when_missing(client, db_session, monkeyp
     assert captured["json"]["model"] == "gpt-4o"
 
 
+def test_invoke_llm_persists_usage_when_requested(client, db_session, monkeypatch):
+    provider = create_provider(
+        client,
+        {
+            "provider_name": "Persist",
+            "api_key": "persist-key",
+            "base_url": "https://persist.llm/api",
+        },
+    )
+    model = create_model(
+        client,
+        provider["id"],
+        {
+            "name": "chat-nonstream",
+        },
+    )
+
+    class DummyResponse:
+        status_code = 200
+
+        def __init__(self) -> None:
+            self.elapsed = timedelta(milliseconds=18)
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "非流式输出内容",
+                        }
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 8,
+                    "completion_tokens": 12,
+                    "total_tokens": 20,
+                },
+            }
+
+        @property
+        def text(self) -> str:
+            return ""
+
+    captured: dict[str, Any] = {}
+
+    def fake_post(
+        url: str, headers: dict[str, str], json: dict[str, Any], timeout: float
+    ) -> DummyResponse:
+        captured.update(
+            {"url": url, "headers": headers, "json": json, "timeout": timeout}
+        )
+        return DummyResponse()
+
+    monkeypatch.setattr("app.api.v1.endpoints.llms.httpx.post", fake_post)
+
+    before_count = db_session.query(LLMUsageLog).count()
+
+    body = {
+        "messages": [{"role": "user", "content": "你好"}],
+        "model_id": model["id"],
+        "temperature": 0.5,
+        "persist_usage": True,
+    }
+    response = client.post(f"{API_PREFIX}/{provider['id']}/invoke", json=body)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["choices"][0]["message"]["content"] == "非流式输出内容"
+
+    assert captured["url"] == "https://persist.llm/api/chat/completions"
+    assert captured["headers"]["Authorization"] == "Bearer persist-key"
+    assert captured["json"]["model"] == model["name"]
+    assert captured["json"]["messages"][0]["content"] == "你好"
+    assert captured["json"]["temperature"] == pytest.approx(0.5)
+
+    after_count = db_session.query(LLMUsageLog).count()
+    assert after_count == before_count + 1
+
+    usage_log = (
+        db_session.query(LLMUsageLog)
+        .order_by(LLMUsageLog.id.desc())
+        .first()
+    )
+    assert usage_log is not None
+    assert usage_log.source == "quick_test"
+    assert usage_log.provider_id == provider["id"]
+    assert usage_log.model_id == model["id"]
+    assert usage_log.model_name == model["name"]
+    assert usage_log.temperature == pytest.approx(0.5)
+    assert usage_log.response_text == "非流式输出内容"
+    assert usage_log.parameters == {"temperature": 0.5}
+    assert usage_log.prompt_tokens == 8
+    assert usage_log.completion_tokens == 12
+    assert usage_log.total_tokens == 20
+    assert usage_log.latency_ms is not None
+    assert usage_log.messages is not None
+    assert usage_log.messages[0]["content"] == "你好"
+
+
 def test_delete_missing_model_returns_404(client):
     provider = create_provider(
         client,

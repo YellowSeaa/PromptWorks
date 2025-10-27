@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Iterator, cast
+from typing import Any, Iterator, Mapping, Sequence, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -51,11 +51,8 @@ class LLMInvocationRequest(BaseModel):
     )
     model: str | None = Field(default=None, description="覆盖使用的模型名称")
     model_id: int | None = Field(default=None, description="指定已配置模型的 ID")
-
-
-class LLMStreamInvocationRequest(LLMInvocationRequest):
-    temperature: float = Field(
-        default=0.7,
+    temperature: float | None = Field(
+        default=None,
         ge=0.0,
         le=2.0,
         description="对话生成温度，范围 0~2",
@@ -65,6 +62,18 @@ class LLMStreamInvocationRequest(LLMInvocationRequest):
     )
     prompt_version_id: int | None = Field(
         default=None, description="可选的 Prompt 版本 ID"
+    )
+    persist_usage: bool = Field(
+        default=False, description="是否将本次调用记录到用量日志"
+    )
+
+
+class LLMStreamInvocationRequest(LLMInvocationRequest):
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="对话生成温度，范围 0~2",
     )
 
 
@@ -583,12 +592,15 @@ def invoke_llm(
     """使用兼容 OpenAI Chat Completion 的方式调用目标 LLM。"""
 
     provider = _get_provider_or_404(db, provider_id)
-    model_name, _ = _determine_model_for_invocation(db, provider, payload)
+    model_name, target_model = _determine_model_for_invocation(db, provider, payload)
     base_url = _resolve_base_url_or_400(provider)
 
     request_payload: dict[str, Any] = dict(payload.parameters)
+    if payload.temperature is not None:
+        request_payload.setdefault("temperature", payload.temperature)
     request_payload["model"] = model_name
-    request_payload["messages"] = [message.model_dump() for message in payload.messages]
+    request_messages = [message.model_dump() for message in payload.messages]
+    request_payload["messages"] = request_messages
 
     headers = {
         "Authorization": f"Bearer {provider.api_key}",
@@ -598,6 +610,8 @@ def invoke_llm(
     url = f"{base_url}/chat/completions"
     logger.info("调用外部 LLM 接口: provider_id=%s url=%s", provider.id, url)
     logger.debug("LLM 请求参数: %s", request_payload)
+
+    start_time = time.perf_counter()
     try:
         response = httpx.post(
             url,
@@ -629,15 +643,119 @@ def invoke_llm(
         raise HTTPException(status_code=response.status_code, detail=error_payload)
 
     elapsed = getattr(response, "elapsed", None)
-    elapsed_ms = elapsed.total_seconds() * 1000 if elapsed is not None else None
-    if elapsed_ms is not None:
+    if elapsed is not None:
+        latency_ms = int(elapsed.total_seconds() * 1000)
+    else:
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+    if latency_ms >= 0:
         logger.info(
-            "外部 LLM 接口调用成功: provider_id=%s 耗时 %.2fms", provider.id, elapsed_ms
+            "外部 LLM 接口调用成功: provider_id=%s 耗时 %.2fms",
+            provider.id,
+            max(latency_ms, 0),
         )
     else:
         logger.info("外部 LLM 接口调用成功: provider_id=%s", provider.id)
 
-    return response.json()
+    try:
+        response_payload = response.json()
+    except ValueError as exc:
+        logger.error(
+            "LLM 响应解析失败: provider_id=%s model=%s", provider.id, model_name
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="LLM 响应解析失败。"
+        ) from exc
+
+    if payload.persist_usage:
+        usage_obj = (
+            response_payload.get("usage")
+            if isinstance(response_payload.get("usage"), Mapping)
+            else {}
+        )
+        prompt_tokens = (
+            int(usage_obj.get("prompt_tokens"))
+            if isinstance(usage_obj, Mapping)
+            and isinstance(usage_obj.get("prompt_tokens"), (int, float))
+            else None
+        )
+        completion_tokens = (
+            int(usage_obj.get("completion_tokens"))
+            if isinstance(usage_obj, Mapping)
+            and isinstance(usage_obj.get("completion_tokens"), (int, float))
+            else None
+        )
+        total_tokens = (
+            int(usage_obj.get("total_tokens"))
+            if isinstance(usage_obj, Mapping)
+            and isinstance(usage_obj.get("total_tokens"), (int, float))
+            else None
+        )
+        if total_tokens is None and any(
+            value is not None for value in (prompt_tokens, completion_tokens)
+        ):
+            total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
+
+        choices = response_payload.get("choices")
+        generated_chunks: list[str] = []
+        if isinstance(choices, Sequence):
+            for choice in choices:
+                if not isinstance(choice, Mapping):
+                    continue
+                message_obj = choice.get("message")
+                if isinstance(message_obj, Mapping) and isinstance(
+                    message_obj.get("content"), str
+                ):
+                    generated_chunks.append(message_obj["content"])
+                    continue
+                text_content = choice.get("text")
+                if isinstance(text_content, str):
+                    generated_chunks.append(text_content)
+        response_text = "".join(generated_chunks)
+
+        original_parameters = dict(payload.parameters)
+        if payload.temperature is not None:
+            original_parameters.setdefault("temperature", payload.temperature)
+
+        log_entry = LLMUsageLog(
+            provider_id=provider.id,
+            model_id=target_model.id if target_model else None,
+            model_name=model_name,
+            source="quick_test",
+            prompt_id=payload.prompt_id,
+            prompt_version_id=payload.prompt_version_id,
+            messages=request_messages,
+            parameters=original_parameters or None,
+            response_text=response_text or None,
+            temperature=payload.temperature,
+            latency_ms=max(latency_ms, 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+        )
+
+        try:
+            db.add(log_entry)
+            db.commit()
+            logger.info(
+                "非流式调用已记录用量: provider_id=%s model=%s tokens=%s",
+                provider.id,
+                model_name,
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                },
+            )
+        except Exception:  # pragma: no cover - 防御性回滚
+            db.rollback()
+            logger.exception(
+                "保存 LLM 调用日志失败: provider_id=%s model=%s",
+                provider.id,
+                model_name,
+            )
+
+    return response_payload
 
 
 @router.post(

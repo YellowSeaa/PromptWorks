@@ -169,6 +169,12 @@ export const messages = {
         model: '模型与参数',
         chat: '对话调试'
       },
+      stream: {
+        label: '流式输出',
+        on: '开',
+        off: '关',
+        tooltip: '关闭后将一次性返回完整响应，并记录调用用量'
+      },
       form: {
         modelLabel: '模型选择',
         modelPlaceholder: '先选择厂商，再选择模型',
@@ -1105,6 +1111,12 @@ export const messages = {
       sections: {
         model: 'Model & Parameters',
         chat: 'Conversation Debugging'
+      },
+      stream: {
+        label: 'Streaming',
+        on: 'On',
+        off: 'Off',
+        tooltip: 'Turn off to receive the full response at once and keep usage records'
       },
       form: {
         modelLabel: 'Model Selection',
