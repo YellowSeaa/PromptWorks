@@ -34,8 +34,17 @@ PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决
 # 同步后端依赖（包含开发工具）
 uv sync --extra dev
 
-# 初始化环境变量并迁移数据库结构
+# 初始化环境变量
 cp .env.example .env
+
+# 首次运行请先创建数据库与账号（以本地 postgres 超级用户为例）
+createuser promptworks -P            # 若已存在同名用户可跳过
+createdb promptworks -O promptworks
+# 或执行以下 SQL：
+# psql -U postgres -c "CREATE USER promptworks WITH PASSWORD 'promptworks';"
+# psql -U postgres -c "CREATE DATABASE promptworks OWNER promptworks;"
+
+# 同步数据库结构
 uv run alembic upgrade head
 ```
 
@@ -68,6 +77,11 @@ uv run poe test-all    # 顺序执行上述三项
 # 在 frontend 目录执行构建生产包
 npm run build
 ```
+
+## 🧪 测试任务消息约定
+- 若测试任务的 Schema 未显式提供 `system` 消息，平台会把当前 Prompt 快照以 `user` 角色注入消息列表，兼容仅识别用户输入的模型。
+- Schema 中若包含 `system` 消息，则保持原有顺序，不会重复注入快照内容。
+- 仍会保证测试输入（`inputs`/`test_inputs`）中的问题作为后续 `user` 消息发送，支持多轮回放。
 
 ## 🐳 Docker 一键部署
 - **环境准备**：确保本机已安装 Docker 与 Docker Compose（Docker Desktop 或 NerdCTL 均可）。

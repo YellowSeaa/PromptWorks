@@ -76,4 +76,8 @@ export interface LLMInvokePayload {
   parameters?: Record<string, unknown>
   model?: string | null
   model_id?: number | null
+  temperature?: number | null
+  prompt_id?: number | null
+  prompt_version_id?: number | null
+  persist_usage?: boolean
 }

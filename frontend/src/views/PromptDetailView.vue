@@ -222,12 +222,12 @@
         <el-table-column :label="t('promptDetail.test.columns.version')" min-width="180">
           <template #default="{ row }">
             <div class="test-record-name">
-              <span>{{ row.prompt_version?.version ?? t('promptDetail.table.versionFallback', { id: row.prompt_version_id }) }}</span>
+              <span>{{ row.versionLabel }}</span>
             </div>
           </template>
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.model')" min-width="140">
-          <template #default="{ row }">{{ row.model_name }}</template>
+          <template #default="{ row }">{{ row.modelLabel }}</template>
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.temperature')" width="100">
           <template #default="{ row }">{{ formatTemperature(row.temperature) }}</template>
@@ -237,21 +237,24 @@
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.status')" width="120">
           <template #default="{ row }">
-            <el-tag :type="statusTagType[row.status] ?? 'info'" size="small">
-              {{ statusLabel.value[row.status] ?? row.status }}
+            <el-tag :type="statusTagType[row.statusKey] ?? 'info'" size="small">
+              {{ row.statusDisplay }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.createdAt')" min-width="160">
           <template #default="{ row }">
-            {{ formatDateTime(row.created_at) }}
+            {{ row.createdAtDisplay }}
           </template>
         </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.actions')" width="120">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleViewTestJob(row.id)">
-              {{ t('promptDetail.test.viewResult') }}
-            </el-button>
+            <template v-if="row.canNavigate">
+              <el-button type="primary" link size="small" @click="handleViewTestRecord(row)">
+                {{ t('promptDetail.test.viewResult') }}
+              </el-button>
+            </template>
+            <span v-else class="test-record-empty-action">--</span>
           </template>
         </el-table-column>
       </el-table>
@@ -270,7 +273,9 @@ import { listPromptClasses, type PromptClassStats } from '../api/promptClass'
 import { listPromptTags, type PromptTagStats } from '../api/promptTag'
 import { updatePrompt } from '../api/prompt'
 import { listTestRuns } from '../api/testRun'
+import { listPromptTestTasks } from '../api/promptTest'
 import type { TestRun } from '../types/testRun'
+import type { PromptTestTask } from '../types/promptTest'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 
@@ -336,22 +341,71 @@ const selectedVersion = computed(() => {
   return match ?? prompt.current_version ?? null
 })
 
+type TestRecordType = 'legacy' | 'task'
+type TestRecordStatus = 'completed' | 'failed' | 'running' | 'pending'
+
+interface TestRecordRow {
+  key: string
+  type: TestRecordType
+  versionLabel: string
+  modelLabel: string
+  temperature: number | null
+  repetitions: number
+  statusKey: TestRecordStatus
+  statusDisplay: string
+  createdAtDisplay: string
+  createdAtSortValue: number
+  canNavigate: boolean
+  runId?: number
+  taskId?: number
+  disabledReason?: string | null
+}
+
 const testRuns = ref<TestRun[]>([])
+const promptTestTasks = ref<PromptTestTask[]>([])
 const testRunLoading = ref(false)
 const testRunError = ref<string | null>(null)
 
-const testRecords = computed(() => {
+const testRecords = computed<TestRecordRow[]>(() => {
   const promptId = currentId.value
   if (!promptId) return []
-  return testRuns.value
-    .filter((item) => item.prompt?.id === promptId)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+
+  const records: TestRecordRow[] = []
+  const promptDetail = detail.value
+  const versionLabelMap = new Map<number, string>()
+
+  if (promptDetail) {
+    promptDetail.versions.forEach((version) => {
+      versionLabelMap.set(version.id, version.version)
+    })
+  }
+
+  const versionIdSet = new Set<number>()
+  versionLabelMap.forEach((_, id) => {
+    versionIdSet.add(id)
+  })
+
+  testRuns.value.forEach((run) => {
+    if (!isRunRelatedToPrompt(run, promptId, versionIdSet)) {
+      return
+    }
+    records.push(buildLegacyTestRecord(run, versionLabelMap))
+  })
+
+  promptTestTasks.value.forEach((task) => {
+    if (!isTaskRelatedToPrompt(task, promptId, versionIdSet)) {
+      return
+    }
+    records.push(buildPromptTestTaskRecord(task, versionLabelMap))
+  })
+
+  return records.sort((a, b) => b.createdAtSortValue - a.createdAtSortValue)
 })
 
 watch(
   currentId,
   () => {
-    void fetchTestRuns()
+    void fetchTestRecords()
   },
   { immediate: true }
 )
@@ -397,6 +451,30 @@ const statusLabel = computed<Record<string, string>>(() => ({
   running: t('promptDetail.status.running'),
   pending: t('promptDetail.status.pending')
 }))
+
+function mapPromptTestTaskStatus(status: string): 'pending' | 'running' | 'completed' | 'failed' {
+  const normalized = typeof status === 'string' ? status.toLowerCase() : ''
+  if (normalized === 'running') return 'running'
+  if (normalized === 'completed') return 'completed'
+  if (normalized === 'failed') return 'failed'
+  return 'pending'
+}
+
+function normalizeLegacyStatus(status: string | null | undefined): TestRecordStatus {
+  const normalized = typeof status === 'string' ? status.toLowerCase() : ''
+  if (normalized === 'completed') return 'completed'
+  if (normalized === 'failed') return 'failed'
+  if (normalized === 'running') return 'running'
+  return 'pending'
+}
+
+function safeDateValue(value: string): number {
+  const time = new Date(value).getTime()
+  if (Number.isNaN(time)) {
+    return 0
+  }
+  return time
+}
 
 const canSaveMeta = computed(() => {
   const prompt = detail.value
@@ -452,22 +530,230 @@ async function fetchMeta() {
   }
 }
 
-async function fetchTestRuns() {
+async function fetchTestRecords() {
   if (!currentId.value) {
     testRuns.value = []
+    promptTestTasks.value = []
     testRunError.value = null
     return
   }
   testRunLoading.value = true
   testRunError.value = null
   try {
-    const runs = await listTestRuns({ limit: 200 })
-    testRuns.value = runs.filter((run) => run.prompt?.id === currentId.value)
+    const [runs, tasks] = await Promise.all([
+      listTestRuns({ limit: 200 }),
+      listPromptTestTasks()
+    ])
+    testRuns.value = runs
+    promptTestTasks.value = tasks
   } catch (error) {
     testRunError.value = extractTestRunError(error)
     testRuns.value = []
+    promptTestTasks.value = []
   } finally {
     testRunLoading.value = false
+  }
+}
+
+function isRunRelatedToPrompt(
+  run: TestRun,
+  promptId: number,
+  versionIdSet: Set<number>
+): boolean {
+  if (run.prompt?.id === promptId) {
+    return true
+  }
+  if (run.prompt_version?.prompt_id === promptId) {
+    return true
+  }
+  if (typeof run.prompt_version_id === 'number' && versionIdSet.has(run.prompt_version_id)) {
+    return true
+  }
+  return false
+}
+
+function buildLegacyTestRecord(
+  run: TestRun,
+  versionLabelMap: Map<number, string>
+): TestRecordRow {
+  const versionLabel =
+    run.prompt_version?.version ??
+    (typeof run.prompt_version_id === 'number'
+      ? versionLabelMap.get(run.prompt_version_id) ??
+        t('promptDetail.table.versionFallback', { id: run.prompt_version_id })
+      : t('promptDetail.content.versionFallback'))
+
+  const modelLabel = run.model_name?.trim() || '--'
+  const temperature =
+    typeof run.temperature === 'number' && !Number.isNaN(run.temperature)
+      ? run.temperature
+      : null
+  const repetitions =
+    typeof run.repetitions === 'number' && !Number.isNaN(run.repetitions)
+      ? run.repetitions
+      : 1
+  const statusKey = normalizeLegacyStatus(run.status)
+  const createdAtSource = run.created_at ?? run.updated_at ?? ''
+  const createdAtSortValue = createdAtSource ? safeDateValue(createdAtSource) : 0
+  const createdAtDisplay = createdAtSource ? formatDateTime(createdAtSource) : '--'
+
+  return {
+    key: `legacy-${run.id}`,
+    type: 'legacy',
+    versionLabel,
+    modelLabel,
+    temperature,
+    repetitions,
+    statusKey,
+    statusDisplay: statusLabel.value[statusKey] ?? statusKey,
+    createdAtDisplay,
+    createdAtSortValue,
+    canNavigate: typeof run.id === 'number' && run.id > 0,
+    runId: run.id
+  }
+}
+
+function extractRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+function extractString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : null
+  }
+  return null
+}
+
+function extractPromptIdsFromConfig(
+  config: Record<string, unknown> | null | undefined
+): number[] {
+  if (!config) {
+    return []
+  }
+  const record = extractRecord(config)
+  const result: number[] = []
+  const single = record['prompt_id']
+  if (typeof single === 'number' && Number.isFinite(single)) {
+    result.push(single)
+  } else if (typeof single === 'string') {
+    const parsed = Number(single)
+    if (Number.isFinite(parsed)) {
+      result.push(parsed)
+    }
+  }
+  const multiple = record['prompt_ids']
+  if (Array.isArray(multiple)) {
+    multiple.forEach((item) => {
+      const parsed =
+        typeof item === 'number'
+          ? item
+          : typeof item === 'string'
+          ? Number(item)
+          : Number.NaN
+      if (Number.isFinite(parsed)) {
+        result.push(parsed)
+      }
+    })
+  }
+  return Array.from(new Set(result))
+}
+
+function isTaskRelatedToPrompt(
+  task: PromptTestTask,
+  promptId: number,
+  versionIdSet: Set<number>
+): boolean {
+  const configIds = extractPromptIdsFromConfig(task.config)
+  if (configIds.includes(promptId)) {
+    return true
+  }
+  const units = Array.isArray(task.units) ? task.units : []
+  if (!units.length) {
+    return false
+  }
+  if (versionIdSet.size > 0) {
+    const match = units.some(
+      (unit) =>
+        typeof unit.prompt_version_id === 'number' && versionIdSet.has(unit.prompt_version_id)
+    )
+    if (match) {
+      return true
+    }
+  }
+  if (typeof task.prompt_version_id === 'number' && versionIdSet.has(task.prompt_version_id)) {
+    return true
+  }
+  return false
+}
+
+function buildPromptTestTaskRecord(
+  task: PromptTestTask,
+  versionLabelMap: Map<number, string>
+): TestRecordRow {
+  const units = Array.isArray(task.units) ? task.units : []
+  const versionLabels = new Set<string>()
+  const modelNames = new Set<string>()
+  const temperatureValues: number[] = []
+  const roundsValues: number[] = []
+
+  units.forEach((unit) => {
+    if (typeof unit.model_name === 'string' && unit.model_name.trim()) {
+      modelNames.add(unit.model_name.trim())
+    }
+    if (typeof unit.temperature === 'number' && !Number.isNaN(unit.temperature)) {
+      temperatureValues.push(unit.temperature)
+    }
+    if (typeof unit.rounds === 'number' && !Number.isNaN(unit.rounds)) {
+      roundsValues.push(unit.rounds)
+    }
+    const extra = extractRecord(unit.extra)
+    const extraLabel = extractString(extra['prompt_version'])
+    if (extraLabel) {
+      versionLabels.add(extraLabel)
+    } else if (typeof unit.prompt_version_id === 'number') {
+      const mapped = versionLabelMap.get(unit.prompt_version_id)
+      versionLabels.add(
+        mapped ?? t('promptDetail.table.versionFallback', { id: unit.prompt_version_id })
+      )
+    }
+  })
+
+  if (!versionLabels.size && typeof task.prompt_version_id === 'number') {
+    const mapped = versionLabelMap.get(task.prompt_version_id)
+    versionLabels.add(
+      mapped ?? t('promptDetail.table.versionFallback', { id: task.prompt_version_id })
+    )
+  }
+
+  const versionLabel = versionLabels.size
+    ? Array.from(versionLabels).join(' / ')
+    : t('promptDetail.content.versionFallback')
+
+  const modelLabel = modelNames.size ? Array.from(modelNames).join(' / ') : '--'
+  const temperature = temperatureValues.length ? temperatureValues[0] : null
+  const repetitions = roundsValues.length ? Math.max(...roundsValues) : 1
+  const statusKey = mapPromptTestTaskStatus(task.status)
+  const createdAtSource = task.created_at ?? task.updated_at ?? ''
+  const createdAtSortValue = createdAtSource ? safeDateValue(createdAtSource) : 0
+  const createdAtDisplay = createdAtSource ? formatDateTime(createdAtSource) : '--'
+
+  return {
+    key: `task-${task.id}`,
+    type: 'task',
+    versionLabel,
+    modelLabel,
+    temperature,
+    repetitions,
+    statusKey,
+    statusDisplay: statusLabel.value[statusKey] ?? statusKey,
+    createdAtDisplay,
+    createdAtSortValue,
+    canNavigate: typeof task.id === 'number' && task.id > 0,
+    taskId: task.id
   }
 }
 
@@ -632,8 +918,24 @@ function handleCreateTest() {
   router.push({ name: 'prompt-test-task-create', query })
 }
 
-function handleViewTestJob(jobId: number) {
-  router.push({ name: 'test-job-result', params: { id: jobId } })
+function handleViewTestRecord(record: TestRecordRow) {
+  if (!record.canNavigate) {
+    ElMessage.warning(t('promptDetail.messages.testUnavailable'))
+    return
+  }
+  if (record.type === 'task' && record.taskId) {
+    void router
+      .push({ name: 'prompt-test-task-result', params: { taskId: String(record.taskId) } })
+      .catch(() => {})
+    return
+  }
+  if (record.runId) {
+    void router
+      .push({ name: 'test-job-result', params: { id: record.runId } })
+      .catch(() => {})
+    return
+  }
+  ElMessage.warning(t('promptDetail.messages.testUnavailable'))
 }
 
 function goHome() {
@@ -945,6 +1247,10 @@ function goHome() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.test-record-empty-action {
+  color: var(--text-weak-color);
 }
 
 .test-alert {

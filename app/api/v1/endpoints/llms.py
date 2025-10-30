@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Iterator, cast
+from typing import Any, AsyncIterator, Iterator, Mapping, Sequence, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -51,11 +52,8 @@ class LLMInvocationRequest(BaseModel):
     )
     model: str | None = Field(default=None, description="覆盖使用的模型名称")
     model_id: int | None = Field(default=None, description="指定已配置模型的 ID")
-
-
-class LLMStreamInvocationRequest(LLMInvocationRequest):
-    temperature: float = Field(
-        default=0.7,
+    temperature: float | None = Field(
+        default=None,
         ge=0.0,
         le=2.0,
         description="对话生成温度，范围 0~2",
@@ -65,6 +63,18 @@ class LLMStreamInvocationRequest(LLMInvocationRequest):
     )
     prompt_version_id: int | None = Field(
         default=None, description="可选的 Prompt 版本 ID"
+    )
+    persist_usage: bool = Field(
+        default=False, description="是否将本次调用记录到用量日志"
+    )
+
+
+class LLMStreamInvocationRequest(LLMInvocationRequest):
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="对话生成温度，范围 0~2",
     )
 
 
@@ -583,12 +593,15 @@ def invoke_llm(
     """使用兼容 OpenAI Chat Completion 的方式调用目标 LLM。"""
 
     provider = _get_provider_or_404(db, provider_id)
-    model_name, _ = _determine_model_for_invocation(db, provider, payload)
+    model_name, target_model = _determine_model_for_invocation(db, provider, payload)
     base_url = _resolve_base_url_or_400(provider)
 
     request_payload: dict[str, Any] = dict(payload.parameters)
+    if payload.temperature is not None:
+        request_payload.setdefault("temperature", payload.temperature)
     request_payload["model"] = model_name
-    request_payload["messages"] = [message.model_dump() for message in payload.messages]
+    request_messages = [message.model_dump() for message in payload.messages]
+    request_payload["messages"] = request_messages
 
     headers = {
         "Authorization": f"Bearer {provider.api_key}",
@@ -598,6 +611,8 @@ def invoke_llm(
     url = f"{base_url}/chat/completions"
     logger.info("调用外部 LLM 接口: provider_id=%s url=%s", provider.id, url)
     logger.debug("LLM 请求参数: %s", request_payload)
+
+    start_time = time.perf_counter()
     try:
         response = httpx.post(
             url,
@@ -629,22 +644,124 @@ def invoke_llm(
         raise HTTPException(status_code=response.status_code, detail=error_payload)
 
     elapsed = getattr(response, "elapsed", None)
-    elapsed_ms = elapsed.total_seconds() * 1000 if elapsed is not None else None
-    if elapsed_ms is not None:
+    if elapsed is not None:
+        latency_ms = int(elapsed.total_seconds() * 1000)
+    else:
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+    if latency_ms >= 0:
         logger.info(
-            "外部 LLM 接口调用成功: provider_id=%s 耗时 %.2fms", provider.id, elapsed_ms
+            "外部 LLM 接口调用成功: provider_id=%s 耗时 %.2fms",
+            provider.id,
+            max(latency_ms, 0),
         )
     else:
         logger.info("外部 LLM 接口调用成功: provider_id=%s", provider.id)
 
-    return response.json()
+    try:
+        response_payload = response.json()
+    except ValueError as exc:
+        logger.error(
+            "LLM 响应解析失败: provider_id=%s model=%s", provider.id, model_name
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="LLM 响应解析失败。"
+        ) from exc
+
+    if payload.persist_usage:
+        usage_raw = response_payload.get("usage")
+        usage_obj: Mapping[str, Any] | None = (
+            usage_raw if isinstance(usage_raw, Mapping) else None
+        )
+
+        prompt_value = usage_obj.get("prompt_tokens") if usage_obj else None
+        prompt_tokens = (
+            int(prompt_value) if isinstance(prompt_value, (int, float)) else None
+        )
+
+        completion_value = usage_obj.get("completion_tokens") if usage_obj else None
+        completion_tokens = (
+            int(completion_value)
+            if isinstance(completion_value, (int, float))
+            else None
+        )
+
+        total_value = usage_obj.get("total_tokens") if usage_obj else None
+        total_tokens = (
+            int(total_value) if isinstance(total_value, (int, float)) else None
+        )
+        if total_tokens is None and any(
+            value is not None for value in (prompt_tokens, completion_tokens)
+        ):
+            total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
+
+        choices = response_payload.get("choices")
+        generated_chunks: list[str] = []
+        if isinstance(choices, Sequence):
+            for choice in choices:
+                if not isinstance(choice, Mapping):
+                    continue
+                message_obj = choice.get("message")
+                if isinstance(message_obj, Mapping) and isinstance(
+                    message_obj.get("content"), str
+                ):
+                    generated_chunks.append(message_obj["content"])
+                    continue
+                text_content = choice.get("text")
+                if isinstance(text_content, str):
+                    generated_chunks.append(text_content)
+        response_text = "".join(generated_chunks)
+
+        original_parameters = dict(payload.parameters)
+        if payload.temperature is not None:
+            original_parameters.setdefault("temperature", payload.temperature)
+
+        log_entry = LLMUsageLog(
+            provider_id=provider.id,
+            model_id=target_model.id if target_model else None,
+            model_name=model_name,
+            source="quick_test",
+            prompt_id=payload.prompt_id,
+            prompt_version_id=payload.prompt_version_id,
+            messages=request_messages,
+            parameters=original_parameters or None,
+            response_text=response_text or None,
+            temperature=payload.temperature,
+            latency_ms=max(latency_ms, 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+        )
+
+        try:
+            db.add(log_entry)
+            db.commit()
+            logger.info(
+                "非流式调用已记录用量: provider_id=%s model=%s tokens=%s",
+                provider.id,
+                model_name,
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                },
+            )
+        except Exception:  # pragma: no cover - 防御性回滚
+            db.rollback()
+            logger.exception(
+                "保存 LLM 调用日志失败: provider_id=%s model=%s",
+                provider.id,
+                model_name,
+            )
+
+    return response_payload
 
 
 @router.post(
     "/{provider_id}/invoke/stream",
     response_class=StreamingResponse,
 )
-def stream_invoke_llm(
+async def stream_invoke_llm(
     *,
     db: Session = Depends(get_db),
     provider_id: int,
@@ -690,10 +807,10 @@ def stream_invoke_llm(
     request_messages = [message.model_dump() for message in payload.messages]
     original_parameters = dict(payload.parameters)
 
-    def _process_event(lines: list[str]) -> None:
+    def _process_event(lines: list[str]) -> list[str]:
         nonlocal usage_summary
         if not lines:
-            return
+            return []
         data_segments: list[str] = []
         for item in lines:
             if item.startswith(":"):
@@ -701,18 +818,26 @@ def stream_invoke_llm(
             if item.startswith("data:"):
                 data_segments.append(item[5:].lstrip())
         if not data_segments:
-            return
+            return []
         data_str = "\n".join(data_segments).strip()
         if not data_str:
-            return
+            return []
         if data_str == "[DONE]":
-            return
+            return ["[DONE]"]
+        snippet = data_str if len(data_str) <= 200 else f"{data_str[:200]}…"
+        logger.info(
+            "接收到流式事件: provider_id=%s model=%s data=%s",
+            provider.id,
+            model_name,
+            snippet,
+        )
         try:
             payload_obj = json.loads(data_str)
         except json.JSONDecodeError:
             logger.debug("忽略无法解析的流式分片: %s", data_str)
-            return
+            return []
 
+        usage_payload = payload_obj.get("usage")
         usage = payload_obj.get("usage")
         if isinstance(usage, dict):
             usage_summary = {
@@ -721,17 +846,89 @@ def stream_invoke_llm(
                 "total_tokens": usage.get("total_tokens"),
             }
 
-        for choice in payload_obj.get("choices", []):
-            delta = choice.get("delta") or {}
-            content = delta.get("content")
-            if content:
-                generated_chunks.append(content)
-                continue
+        base_payload = {
+            key: value
+            for key, value in payload_obj.items()
+            if key not in ("choices", "usage")
+        }
+
+        def _split_choice(choice: Mapping[str, Any]) -> list[dict[str, Any]]:
+            """将单个 choice 拆分为逐字符的子分片，确保前端逐字渲染。"""
+            pieces: list[dict[str, Any]] = []
+            common_fields = {
+                key: value
+                for key, value in choice.items()
+                if key not in ("delta", "message", "text")
+            }
+
+            delta_obj = choice.get("delta")
+            if isinstance(delta_obj, dict):
+                extra_delta = {k: v for k, v in delta_obj.items() if k != "content"}
+                content = delta_obj.get("content")
+                if isinstance(content, str) and content:
+                    generated_chunks.append(content)
+                    for symbol in content:
+                        new_choice = dict(common_fields)
+                        new_delta = dict(extra_delta)
+                        new_delta["content"] = symbol
+                        new_choice["delta"] = new_delta
+                        pieces.append(new_choice)
+                    return pieces
+                new_choice = dict(common_fields)
+                new_choice["delta"] = dict(delta_obj)
+                pieces.append(new_choice)
+                return pieces
+
             message_obj = choice.get("message")
             if isinstance(message_obj, dict):
+                extra_message = {k: v for k, v in message_obj.items() if k != "content"}
                 content = message_obj.get("content")
-                if content:
+                if isinstance(content, str) and content:
                     generated_chunks.append(content)
+                    for symbol in content:
+                        new_choice = dict(common_fields)
+                        new_message = dict(extra_message)
+                        new_message["content"] = symbol
+                        new_choice["message"] = new_message
+                        pieces.append(new_choice)
+                    return pieces
+                new_choice = dict(common_fields)
+                new_choice["message"] = dict(message_obj)
+                pieces.append(new_choice)
+                return pieces
+
+            text_value = choice.get("text")
+            if isinstance(text_value, str) and text_value:
+                generated_chunks.append(text_value)
+                for symbol in text_value:
+                    new_choice = dict(common_fields)
+                    new_choice["text"] = symbol
+                    pieces.append(new_choice)
+                return pieces
+
+            pieces.append(dict(choice))
+            return pieces
+
+        event_payloads: list[dict[str, Any]] = []
+        choices = payload_obj.get("choices")
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, Mapping):
+                    continue
+                for piece in _split_choice(choice):
+                    event_payloads.append({**base_payload, "choices": [piece]})
+
+        if not event_payloads:
+            payload_copy = dict(payload_obj)
+            return [json.dumps(payload_copy, ensure_ascii=False, separators=(",", ":"))]
+
+        if isinstance(usage_payload, dict):
+            event_payloads[-1]["usage"] = usage_payload
+
+        return [
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            for payload in event_payloads
+        ]
 
     def _persist_usage() -> None:
         if not should_persist:
@@ -775,65 +972,72 @@ def stream_invoke_llm(
                 model_name,
             )
 
-    def _event_stream() -> Iterator[bytes]:
+    async def _event_stream() -> AsyncIterator[bytes]:
         nonlocal should_persist
         event_lines: list[str] = []
-        try:
-            with httpx.stream(
-                "POST",
-                url,
-                headers=headers,
-                json=request_payload,
-                timeout=DEFAULT_INVOKE_TIMEOUT,
-            ) as response:
-                if response.status_code >= 400:
-                    should_persist = False
-                    error_body = response.read()
-                    decoded = error_body.decode("utf-8", errors="ignore")
-                    try:
-                        error_payload = json.loads(decoded)
-                    except ValueError:
-                        error_payload = {"message": decoded}
-                    logger.error(
-                        "流式调用返回错误: provider_id=%s 状态码=%s 响应=%s",
-                        provider.id,
-                        response.status_code,
-                        error_payload,
-                    )
-                    raise HTTPException(
-                        status_code=response.status_code, detail=error_payload
-                    )
+        async with httpx.AsyncClient(timeout=DEFAULT_INVOKE_TIMEOUT) as async_client:
+            try:
+                async with async_client.stream(
+                    "POST",
+                    url,
+                    headers=headers,
+                    json=request_payload,
+                ) as response:
+                    if response.status_code >= 400:
+                        should_persist = False
+                        error_body = await response.aread()
+                        decoded = error_body.decode("utf-8", errors="ignore")
+                        try:
+                            error_payload = json.loads(decoded)
+                        except ValueError:
+                            error_payload = {"message": decoded}
+                        logger.error(
+                            "流式调用返回错误: provider_id=%s 状态码=%s 响应=%s",
+                            provider.id,
+                            response.status_code,
+                            error_payload,
+                        )
+                        raise HTTPException(
+                            status_code=response.status_code, detail=error_payload
+                        )
 
-                for line in response.iter_lines():
-                    if line is None:
-                        continue
-                    if line == "":
-                        _process_event(event_lines)
-                        event_lines = []
-                        yield b"\n"
-                        continue
-                    event_lines.append(line)
-                    yield (line + "\n").encode("utf-8")
+                    async for line in response.aiter_lines():
+                        if line is None:
+                            continue
+                        if line == "":
+                            for payload in _process_event(event_lines):
+                                if payload == "[DONE]":
+                                    yield b"data: [DONE]\n\n"
+                                else:
+                                    yield f"data: {payload}\n\n".encode("utf-8")
+                            event_lines = []
+                            continue
+                        event_lines.append(line)
 
-                if event_lines:
-                    _process_event(event_lines)
+                    if event_lines:
+                        for payload in _process_event(event_lines):
+                            if payload == "[DONE]":
+                                yield b"data: [DONE]\n\n"
+                            else:
+                                yield f"data: {payload}\n\n".encode("utf-8")
 
-        except httpx.HTTPError as exc:
-            should_persist = False
-            logger.error(
-                "流式调用外部 LLM 出现异常: provider_id=%s 错误=%s",
-                provider.id,
-                exc,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-            ) from exc
-        finally:
-            _persist_usage()
+            except httpx.HTTPError as exc:
+                should_persist = False
+                logger.error(
+                    "流式调用外部 LLM 出现异常: provider_id=%s 错误=%s",
+                    provider.id,
+                    exc,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+                ) from exc
+            finally:
+                await run_in_threadpool(_persist_usage)
 
     headers_extra = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
     }
     return StreamingResponse(
         _event_stream(), media_type="text/event-stream", headers=headers_extra

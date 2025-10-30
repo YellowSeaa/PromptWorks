@@ -5,6 +5,7 @@ export interface PromptTestResultOutput {
   content: string
   meta: string
   variables: Record<string, string>
+  rawResponse: string | null
 }
 
 export interface PromptTestResultUnit {
@@ -125,11 +126,23 @@ function buildOutputs(experiment: PromptTestExperiment | null): PromptTestResult
             ? contextVariables
             : parameterRecord
     const variables = normalizeRecord(variablesSource)
+    const rawResponseSource = record.raw_response ?? record.rawResponse ?? null
+    let rawResponse: string | null = null
+    if (typeof rawResponseSource === 'string' && rawResponseSource.trim()) {
+      rawResponse = rawResponseSource
+    } else if (rawResponseSource && typeof rawResponseSource === 'object') {
+      try {
+        rawResponse = JSON.stringify(rawResponseSource, null, 2)
+      } catch {
+        rawResponse = String(rawResponseSource)
+      }
+    }
     return {
       runIndex,
       content,
       meta,
-      variables
+      variables,
+      rawResponse
     }
   })
 }

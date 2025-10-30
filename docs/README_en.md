@@ -34,8 +34,17 @@ PromptWorks is a full-stack solution focused on prompt asset management and larg
 # Sync backend dependencies (including development tools)
 uv sync --extra dev
 
-# Initialize environment variables and apply database migrations
+# Initialize environment variables
 cp .env.example .env
+
+# Create the database and user if not already present (assuming postgres superuser)
+createuser promptworks -P            # Skip if the role already exists
+createdb promptworks -O promptworks
+# Or execute the following SQL:
+# psql -U postgres -c "CREATE USER promptworks WITH PASSWORD 'promptworks';"
+# psql -U postgres -c "CREATE DATABASE promptworks OWNER promptworks;"
+
+# Apply database migrations
 uv run alembic upgrade head
 ```
 
@@ -68,6 +77,11 @@ uv run poe test-all    # Run the three commands sequentially
 # Build production assets from the frontend directory
 npm run build
 ```
+
+## 🧪 Test Message Rules
+- When a test run schema does not declare a `system` message, the platform injects the current prompt snapshot as a `user` message so providers that only honor user turns keep working.
+- If a schema already includes a `system` role, we preserve the original order and do not duplicate the snapshot.
+- Entries from `inputs`/`test_inputs` are still appended as subsequent `user` messages to support multi-run playback.
 
 ## 🐳 Docker Deployment
 - **Prerequisites**: Ensure Docker and Docker Compose are installed (Docker Desktop or NerdCTL).
