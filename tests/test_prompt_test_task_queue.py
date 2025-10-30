@@ -85,7 +85,9 @@ def test_prompt_test_task_execution_failure_sets_last_error(db_session, monkeypa
     assert refreshed.status == PromptTestTaskStatus.FAILED
     assert refreshed.config and refreshed.config.get("last_error") == "执行失败"
     assert refreshed.config["progress"]["percentage"] == 100
-    assert refreshed.config["progress"]["current"] == refreshed.config["progress"]["total"]
+    assert (
+        refreshed.config["progress"]["current"] == refreshed.config["progress"]["total"]
+    )
 
 
 def test_prompt_test_task_execution_succeeds(db_session, monkeypatch):
