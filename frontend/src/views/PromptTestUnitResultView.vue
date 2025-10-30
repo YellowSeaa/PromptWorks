@@ -121,17 +121,39 @@
           placement="top"
         >
           <el-card shadow="hover">
-            <div
-              v-if="!unitMarkdownEnabled"
-              class="output-content output-content--plain"
-            >
-              {{ output.content }}
+            <div v-if="shouldShowWarning(output)" class="output-warning">
+              <el-alert
+                type="warning"
+                show-icon
+                :closable="false"
+                :title="t('promptTestResult.warnings.missingOutputTitle')"
+              >
+                <template #description>
+                  <span>{{ t('promptTestResult.warnings.missingOutputDescription') }}</span>
+                  <el-link
+                    type="primary"
+                    :underline="false"
+                    class="raw-response-link"
+                    @click="openRawResponseDialog(unit?.name, output.runIndex, output.rawResponse)"
+                  >
+                    {{ t('promptTestResult.warnings.viewRawResponse') }}
+                  </el-link>
+                </template>
+              </el-alert>
             </div>
-            <div
-              v-else
-              class="output-content output-content--markdown"
-              v-html="renderMarkdown(output.content)"
-            />
+            <template v-else>
+              <div
+                v-if="!unitMarkdownEnabled"
+                class="output-content output-content--plain"
+              >
+                {{ resolveOutputContent(output) || placeholderText }}
+              </div>
+              <div
+                v-else
+                class="output-content output-content--markdown"
+                v-html="renderMarkdown(resolveOutputContent(output) || placeholderText)"
+              />
+            </template>
             <p class="output-meta">{{ output.meta ?? '' }}</p>
             <div v-if="output.variables && Object.keys(output.variables).length" class="output-variables">
               <div
@@ -147,6 +169,15 @@
         </el-timeline-item>
       </el-timeline>
     </el-card>
+    <el-dialog
+      v-model="rawResponseDialog.visible"
+      :title="rawResponseDialog.title"
+      width="640px"
+    >
+      <div class="raw-response-dialog__content">
+        <pre>{{ rawResponseDialog.content || t('promptTestResult.dialog.rawResponsePlaceholder') }}</pre>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -156,7 +187,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getPromptTestUnit, listPromptTestExperiments } from '../api/promptTest'
-import type { PromptTestResultUnit } from '../utils/promptTestResult'
+import type { PromptTestResultUnit, PromptTestResultOutput } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit, buildParameterEntries } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
 
@@ -168,6 +199,11 @@ const unit = ref<PromptTestResultUnit | null>(null)
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const unitMarkdownEnabled = ref(false)
+const rawResponseDialog = reactive({
+  visible: false,
+  title: '',
+  content: ''
+})
 
 const routeTaskId = computed(() => (route.params.taskId as string | undefined) ?? '')
 const unitIdParam = computed(() => route.params.unitId)
@@ -262,6 +298,7 @@ const outputsTitle = computed(() => {
   const key = isVariableFilterActive.value ? 'filteredTitle' : 'outputsTitle'
   return t(`promptTestResult.unitDetail.${key}`, { count })
 })
+const placeholderText = computed(() => t('promptTestResult.empty.placeholder'))
 const markdownRenderer = new MarkdownIt({
   breaks: true,
   linkify: true,
@@ -271,6 +308,36 @@ const markdownRenderer = new MarkdownIt({
 function renderMarkdown(content: string | null | undefined) {
   const source = content ?? ''
   return markdownRenderer.render(source || '')
+}
+
+function resolveOutputContent(output: PromptTestResultOutput | null | undefined) {
+  const content = output?.content ?? ''
+  return typeof content === 'string' && content.trim().length > 0 ? content : ''
+}
+
+function shouldShowWarning(
+  output: PromptTestResultOutput | null | undefined
+): output is PromptTestResultOutput {
+  if (!output) return false
+  const hasContent = typeof output.content === 'string' && output.content.trim().length > 0
+  const hasRawResponse =
+    typeof output.rawResponse === 'string' && output.rawResponse.trim().length > 0
+  return !hasContent && hasRawResponse
+}
+
+function openRawResponseDialog(
+  unitName: string | undefined | null,
+  runIndex: number,
+  rawResponse: string | null
+) {
+  if (!rawResponse) return
+  const name = unitName?.trim()
+  rawResponseDialog.title = t('promptTestResult.dialog.rawResponseTitle', {
+    unit: name && name.length ? name : t('promptTestResult.empty.noSelection'),
+    index: runIndex
+  })
+  rawResponseDialog.content = rawResponse
+  rawResponseDialog.visible = true
 }
 
 function resetVariableFilter() {
@@ -493,6 +560,32 @@ watch(availableVariableKeys, (keys) => {
   background-color: var(--el-color-info-light-9);
   padding: 0 4px;
   border-radius: 4px;
+}
+
+.output-warning {
+  margin: 4px 0 8px;
+}
+
+.raw-response-link {
+  margin-left: 8px;
+  font-size: 13px;
+}
+
+.raw-response-dialog__content {
+  max-height: 60vh;
+  overflow: auto;
+  background-color: #1f1f1f;
+  border-radius: 6px;
+  padding: 16px;
+  color: #f5f5f5;
+}
+
+.raw-response-dialog__content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--el-font-family-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace);
+  font-size: 13px;
 }
 
 .output-meta {

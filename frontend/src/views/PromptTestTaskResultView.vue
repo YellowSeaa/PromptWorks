@@ -127,25 +127,47 @@
                 <div
                   v-for="(cell, cellIndex) in row.cells"
                   :key="cellIndex"
-                  class="grid-cell"
-                >
-                  <div class="output-badge">#{{ row.index }}</div>
+                class="grid-cell"
+              >
+                <div class="output-badge">#{{ row.index }}</div>
+                <div v-if="shouldShowWarning(cell)" class="output-warning">
+                  <el-alert
+                    type="warning"
+                    show-icon
+                    :closable="false"
+                    :title="t('promptTestResult.warnings.missingOutputTitle')"
+                  >
+                    <template #description>
+                      <span>{{ t('promptTestResult.warnings.missingOutputDescription') }}</span>
+                      <el-link
+                        type="primary"
+                        :underline="false"
+                        class="raw-response-link"
+                        @click="openRawResponseDialog(selectedUnits[idx]?.name, row.index, cell?.rawResponse ?? null)"
+                      >
+                        {{ t('promptTestResult.warnings.viewRawResponse') }}
+                      </el-link>
+                    </template>
+                  </el-alert>
+                </div>
+                <template v-else>
                   <div
                     v-if="!resultMarkdownEnabled"
                     class="output-content output-content--plain"
                   >
-                    {{ cell?.content ?? placeholderText }}
+                    {{ resolveCellContent(cell) || placeholderText }}
                   </div>
                   <div
                     v-else
                     class="output-content output-content--markdown"
-                    v-html="renderMarkdown(cell?.content ?? placeholderText)"
+                    v-html="renderMarkdown(resolveCellContent(cell) || placeholderText)"
                   />
-                  <div class="output-meta">{{ cell?.meta ?? '' }}</div>
-                  <div v-if="cell?.variables && Object.keys(cell.variables).length" class="output-variables">
-                    <div
-                      v-for="(value, key) in cell.variables"
-                      :key="key"
+                </template>
+                <div class="output-meta">{{ cell?.meta ?? '' }}</div>
+                <div v-if="cell?.variables && Object.keys(cell.variables).length" class="output-variables">
+                  <div
+                    v-for="(value, key) in cell.variables"
+                    :key="key"
                       class="variable-item"
                     >
                       <span class="variable-key">{{ key }}:</span>
@@ -248,6 +270,15 @@
         <el-empty :description="t('promptTestResult.empty.analysis')" />
       </div>
     </el-card>
+    <el-dialog
+      v-model="rawResponseDialog.visible"
+      :title="rawResponseDialog.title"
+      width="640px"
+    >
+      <div class="raw-response-dialog__content">
+        <pre>{{ rawResponseDialog.content || t('promptTestResult.dialog.rawResponsePlaceholder') }}</pre>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -283,6 +314,11 @@ const units = ref<PromptTestResultUnit[]>([])
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const resultMarkdownEnabled = ref(false)
+const rawResponseDialog = reactive({
+  visible: false,
+  title: '',
+  content: ''
+})
 
 const tabList = ['units', 'results', 'analysis'] as const
 type TabKey = (typeof tabList)[number]
@@ -384,6 +420,34 @@ const placeholderText = computed(() => t('promptTestResult.empty.placeholder'))
 function renderMarkdown(content: string | null | undefined) {
   const source = content ?? ''
   return markdownRenderer.render(source || '')
+}
+
+function resolveCellContent(cell: UnitOutput | null | undefined) {
+  const content = cell?.content ?? ''
+  return typeof content === 'string' && content.trim().length > 0 ? content : ''
+}
+
+function shouldShowWarning(cell: UnitOutput | null | undefined): cell is UnitOutput {
+  if (!cell) return false
+  const hasContent = typeof cell.content === 'string' && cell.content.trim().length > 0
+  const hasRawResponse =
+    typeof cell.rawResponse === 'string' && cell.rawResponse.trim().length > 0
+  return !hasContent && hasRawResponse
+}
+
+function openRawResponseDialog(
+  unitName: string | undefined | null,
+  runIndex: number,
+  rawResponse: string | null
+) {
+  if (!rawResponse) return
+  const name = unitName?.trim()
+  rawResponseDialog.title = t('promptTestResult.dialog.rawResponseTitle', {
+    unit: name && name.length ? name : t('promptTestResult.empty.noSelection'),
+    index: runIndex
+  })
+  rawResponseDialog.content = rawResponse
+  rawResponseDialog.visible = true
 }
 
 const filterForm = reactive({
@@ -900,6 +964,32 @@ watch(
   background-color: var(--el-color-info-light-9);
   padding: 0 4px;
   border-radius: 4px;
+}
+
+.output-warning {
+  margin: 4px 0 8px;
+}
+
+.raw-response-link {
+  margin-left: 8px;
+  font-size: 13px;
+}
+
+.raw-response-dialog__content {
+  max-height: 60vh;
+  overflow: auto;
+  background-color: #1f1f1f;
+  border-radius: 6px;
+  padding: 16px;
+  color: #f5f5f5;
+}
+
+.raw-response-dialog__content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--el-font-family-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace);
+  font-size: 13px;
 }
 
 .output-meta {

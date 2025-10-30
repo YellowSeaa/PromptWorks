@@ -925,6 +925,15 @@ export const messages = {
       labels: {
         outputs: '条结果'
       },
+      warnings: {
+        missingOutputTitle: 'LLM 响应未能解析结果',
+        missingOutputDescription: '模型返回了响应内容，但未提取到可展示的结果，请检查格式或解析规则。',
+        viewRawResponse: '查看原始响应'
+      },
+      dialog: {
+        rawResponseTitle: '原始响应 · {unit} · 第 {index} 轮',
+        rawResponsePlaceholder: '暂无原始响应内容，可尝试重新执行测试。'
+      },
       unitDetail: {
         outputsTitle: '全部结果（共 {count} 条）',
         filteredTitle: '筛选结果（共 {count} 条）',
@@ -1881,6 +1890,15 @@ export const messages = {
       },
       labels: {
         outputs: 'outputs'
+      },
+      warnings: {
+        missingOutputTitle: 'LLM response could not be parsed',
+        missingOutputDescription: 'The model returned a payload but no displayable result was extracted. Please review the format or parsing rules.',
+        viewRawResponse: 'View raw response'
+      },
+      dialog: {
+        rawResponseTitle: 'Raw Response · {unit} · Run #{index}',
+        rawResponsePlaceholder: 'Raw response is unavailable. Please retry the test.'
       },
       unitDetail: {
         outputsTitle: 'All Outputs ({count})',

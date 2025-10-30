@@ -329,6 +329,7 @@ def _execute_single_round(
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
         "latency_ms": latency_ms,
+        "raw_response": payload_obj,
     }
 
 
