@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 import random
 import statistics
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,6 +26,8 @@ from app.services.test_run import (
     _format_error_detail,
     _try_parse_json,
 )
+
+logger = logging.getLogger("promptworks.prompt_test_engine")
 
 _KNOWN_PARAMETER_KEYS = {
     "max_tokens",
@@ -57,7 +60,9 @@ class PromptTestExecutionError(Exception):
 
 
 def execute_prompt_test_experiment(
-    db: Session, experiment: PromptTestExperiment
+    db: Session,
+    experiment: PromptTestExperiment,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> PromptTestExperiment:
     """执行单个最小测试单元的实验，并存储结果。"""
 
@@ -109,6 +114,11 @@ def execute_prompt_test_experiment(
             return experiment
 
         run_records.append(run_record)
+        if progress_callback is not None:
+            try:
+                progress_callback(1)
+            except Exception:  # pragma: no cover - 防御性兜底
+                logger.exception("更新 Prompt 测试进度时出现异常")
         usage_log = _build_usage_log(
             provider=provider,
             model=model,
@@ -319,6 +329,7 @@ def _execute_single_round(
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
         "latency_ms": latency_ms,
+        "raw_response": payload_obj,
     }
 
 

@@ -169,6 +169,18 @@ export const messages = {
         model: '模型与参数',
         chat: '对话调试'
       },
+      markdown: {
+        label: 'Markdown 渲染',
+        on: '开',
+        off: '关',
+        tooltip: '开启后以 Markdown 方式渲染消息内容'
+      },
+      stream: {
+        label: '流式输出',
+        on: '开',
+        off: '关',
+        tooltip: '关闭后将一次性返回完整响应，并记录调用用量'
+      },
       form: {
         modelLabel: '模型选择',
         modelPlaceholder: '先选择厂商，再选择模型',
@@ -904,8 +916,23 @@ export const messages = {
         columnCount: '当前列数：{count}',
         exportCsv: '导出 CSV'
       },
+      markdown: {
+        label: 'Markdown 渲染',
+        on: '开',
+        off: '关',
+        tooltip: '开启后以 Markdown 方式展示模型输出'
+      },
       labels: {
         outputs: '条结果'
+      },
+      warnings: {
+        missingOutputTitle: 'LLM 响应未能解析结果',
+        missingOutputDescription: '模型返回了响应内容，但未提取到可展示的结果，请检查格式或解析规则。',
+        viewRawResponse: '查看原始响应'
+      },
+      dialog: {
+        rawResponseTitle: '原始响应 · {unit} · 第 {index} 轮',
+        rawResponsePlaceholder: '暂无原始响应内容，可尝试重新执行测试。'
       },
       unitDetail: {
         outputsTitle: '全部结果（共 {count} 条）',
@@ -1105,6 +1132,18 @@ export const messages = {
       sections: {
         model: 'Model & Parameters',
         chat: 'Conversation Debugging'
+      },
+      markdown: {
+        label: 'Markdown',
+        on: 'On',
+        off: 'Off',
+        tooltip: 'Render messages with Markdown formatting'
+      },
+      stream: {
+        label: 'Streaming',
+        on: 'On',
+        off: 'Off',
+        tooltip: 'Turn off to receive the full response at once and keep usage records'
       },
       form: {
         modelLabel: 'Model Selection',
@@ -1843,8 +1882,23 @@ export const messages = {
         columnCount: 'Columns: {count}',
         exportCsv: 'Export CSV'
       },
+      markdown: {
+        label: 'Markdown',
+        on: 'On',
+        off: 'Off',
+        tooltip: 'Render model outputs with Markdown formatting'
+      },
       labels: {
         outputs: 'outputs'
+      },
+      warnings: {
+        missingOutputTitle: 'LLM response could not be parsed',
+        missingOutputDescription: 'The model returned a payload but no displayable result was extracted. Please review the format or parsing rules.',
+        viewRawResponse: 'View raw response'
+      },
+      dialog: {
+        rawResponseTitle: 'Raw Response · {unit} · Run #{index}',
+        rawResponsePlaceholder: 'Raw response is unavailable. Please retry the test.'
       },
       unitDetail: {
         outputsTitle: 'All Outputs ({count})',

@@ -20,27 +20,30 @@
       </div>
     </section>
 
-    <el-card>
+    <el-card class="job-card">
       <template #header>
         <div class="card-header">
           <span>{{ t('testJobManagement.listTitle') }}</span>
         </div>
       </template>
-      <el-alert
-        v-if="errorMessage"
-        :title="errorMessage"
-        type="error"
-        show-icon
-        class="table-alert"
-      />
-      <el-table
-        :data="jobs"
-        border
-        stripe
-        height="520"
-        :empty-text="tableEmptyText"
-        v-loading="isLoading"
-      >
+      <div ref="tableWrapperRef" class="table-wrapper">
+        <el-alert
+          v-if="errorMessage"
+          :title="errorMessage"
+          type="error"
+          show-icon
+          class="table-alert"
+        />
+        <el-table
+          class="job-table"
+          :data="jobs"
+          border
+          stripe
+          :height="tableHeight"
+          :max-height="tableHeight"
+          :empty-text="tableEmptyText"
+          v-loading="isLoading"
+        >
         <el-table-column :label="t('testJobManagement.table.columns.name')" min-width="260">
           <template #default="{ row }">
             <div class="table-name-cell">
@@ -88,11 +91,26 @@
         <el-table-column :label="t('testJobManagement.table.columns.repetitions')" width="100">
           <template #default="{ row }">{{ row.repetitions }}</template>
         </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.status')" width="120">
+        <el-table-column :label="t('testJobManagement.table.columns.status')" width="180">
           <template #default="{ row }">
-            <el-tag :type="statusTagType[row.status] ?? 'info'" size="small">
-              {{ statusLabel[row.status] ?? row.status }}
-            </el-tag>
+            <div class="status-cell">
+              <el-tag :type="statusTagType[row.status] ?? 'info'" size="small">
+                {{ statusLabel[row.status] ?? row.status }}
+              </el-tag>
+              <div
+                v-if="(row.status === 'running' || row.status === 'pending') && row.progressPercent !== null"
+                class="status-progress"
+              >
+                <el-progress
+                  :show-text="false"
+                  :stroke-width="6"
+                  :percentage="row.progressPercent ?? 0"
+                />
+                <span class="status-progress__text">
+                  {{ row.progressCurrent ?? '--' }} / {{ row.progressTotal ?? '--' }}
+                </span>
+              </div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column :label="t('testJobManagement.table.columns.createdAt')" min-width="160">
@@ -103,7 +121,7 @@
         </el-table-column>
         <el-table-column :label="t('testJobManagement.table.columns.actions')" width="210" fixed="right">
           <template #default="{ row }">
-            <el-space size="4">
+            <el-space :size="4">
               <el-button type="primary" link size="small" @click="handleViewJob(row)">
                 {{ t('testJobManagement.table.viewDetails') }}
               </el-button>
@@ -130,19 +148,24 @@
           </template>
         </el-table-column>
       </el-table>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Memo, WarningFilled } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteTestRun, listTestRuns, retryTestRun } from '../api/testRun'
-import { deletePromptTestTask, listPromptTestTasks } from '../api/promptTest'
+import {
+  deletePromptTestTask,
+  listPromptTestExperiments,
+  listPromptTestTasks
+} from '../api/promptTest'
 import type { TestRun } from '../types/testRun'
-import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
+import type { PromptTestTask, PromptTestUnit, PromptTestExperiment } from '../types/promptTest'
 import { useI18n } from 'vue-i18n'
 
 interface AggregatedJobRow {
@@ -165,6 +188,15 @@ interface AggregatedJobRow {
   mode: string
   isNewResultPage: boolean
   newResultTaskId: number | null
+  progressCurrent: number | null
+  progressTotal: number | null
+  progressPercent: number | null
+}
+
+interface ProgressMetrics {
+  current: number | null
+  total: number | null
+  percent: number | null
 }
 
 const router = useRouter()
@@ -178,6 +210,12 @@ const promptTestTasks = ref<PromptTestTask[]>([])
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 const pollingTimer = ref<number | null>(null)
+const tableWrapperRef = ref<HTMLElement | null>(null)
+const tableHeight = ref(520)
+
+const TABLE_BOTTOM_PADDING = 24
+const TABLE_MIN_HEIGHT = 240
+const promptTaskProgress = ref<Record<number, ProgressMetrics>>({})
 
 function clearPolling() {
   if (pollingTimer.value !== null) {
@@ -203,6 +241,169 @@ function scheduleNextPoll() {
 }
 
 const tableEmptyText = computed(() => errorMessage.value ?? t('testJobManagement.empty'))
+
+function updateTableHeight() {
+  const wrapper = tableWrapperRef.value
+  if (!wrapper) {
+    tableHeight.value = Math.max(TABLE_MIN_HEIGHT, tableHeight.value)
+    return
+  }
+  const rect = wrapper.getBoundingClientRect()
+  const available =
+    window.innerHeight - rect.top - TABLE_BOTTOM_PADDING
+  const usable = Number.isFinite(available) ? Math.floor(available) : TABLE_MIN_HEIGHT
+  tableHeight.value = Math.max(TABLE_MIN_HEIGHT, usable)
+}
+
+function handleWindowResize() {
+  updateTableHeight()
+}
+
+function safeNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return null
+    }
+    const parsed = Number(trimmed)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
+function resolveVariableCaseCount(variables: unknown): number {
+  if (Array.isArray(variables)) {
+    return variables.length || 1
+  }
+  if (variables && typeof variables === 'object') {
+    const record = variables as Record<string, unknown>
+    const rows = record.rows
+    if (Array.isArray(rows)) {
+      return rows.length || 1
+    }
+    const lengthValue = safeNumber(record.length)
+    if (lengthValue && lengthValue > 0) {
+      return Math.floor(lengthValue)
+    }
+  }
+  return 1
+}
+
+function estimatePromptTaskTotalRuns(units: PromptTestUnit[]): number | null {
+  let total = 0
+  for (const unit of units) {
+    const baseRounds = safeNumber(unit.rounds) ?? 1
+    const caseCount = resolveVariableCaseCount(unit.variables)
+    total += Math.max(1, Math.floor(baseRounds)) * Math.max(1, caseCount)
+  }
+  return total > 0 ? total : null
+}
+
+function normalizeProgressMetrics(
+  current: number | null | undefined,
+  total: number | null | undefined
+): ProgressMetrics {
+  const totalValue =
+    typeof total === 'number' && Number.isFinite(total) ? Math.floor(total) : null
+  if (totalValue === null || totalValue <= 0) {
+    return { current: null, total: null, percent: null }
+  }
+
+  const currentValue =
+    typeof current === 'number' && Number.isFinite(current) ? Math.floor(current) : 0
+  const clampedCurrent = Math.max(0, Math.min(totalValue, currentValue))
+  const percent = Math.max(
+    0,
+    Math.min(100, Math.round((clampedCurrent / Math.max(totalValue, 1)) * 100))
+  )
+
+  return {
+    current: clampedCurrent,
+    total: totalValue,
+    percent
+  }
+}
+
+function extractProgressFromConfig(
+  configRecord: Record<string, unknown>,
+  fallbackTotal: number | null
+): ProgressMetrics | null {
+  const directProgress = configRecord.progress
+  const directRecord =
+    directProgress && typeof directProgress === 'object' && !Array.isArray(directProgress)
+      ? (directProgress as Record<string, unknown>)
+      : null
+
+  const currentCandidates = [
+    configRecord.progressCurrent,
+    configRecord.progress_current,
+    configRecord.completedUnits,
+    configRecord.completed_units,
+    configRecord.completedCount,
+    configRecord.completed_count,
+    directRecord?.current,
+    directRecord?.completed,
+    directRecord?.done
+  ]
+
+  const totalCandidates = [
+    configRecord.progressTotal,
+    configRecord.progress_total,
+    configRecord.totalUnits,
+    configRecord.total_units,
+    configRecord.expectedCount,
+    configRecord.expected_count,
+    directRecord?.total,
+    directRecord?.expected,
+    fallbackTotal
+  ]
+
+  const currentValue = currentCandidates
+    .map((value) => safeNumber(value))
+    .find((value): value is number => typeof value === 'number')
+  const totalValue = totalCandidates
+    .map((value) => safeNumber(value))
+    .find((value): value is number => typeof value === 'number')
+
+  if (totalValue === undefined || totalValue === null || totalValue <= 0) {
+    return null
+  }
+
+  return normalizeProgressMetrics(currentValue ?? 0, totalValue)
+}
+
+function pickProgressMetrics(
+  primary: ProgressMetrics | null | undefined,
+  secondary: ProgressMetrics | null | undefined
+): ProgressMetrics | null {
+  if (primary && primary.total !== null) {
+    return primary
+  }
+  if (secondary && secondary.total !== null) {
+    return secondary
+  }
+  return null
+}
+
+function calculateLegacyProgress(runs: TestRun[]): ProgressMetrics | null {
+  let total = 0
+  let completed = 0
+  for (const run of runs) {
+    const repetitions = safeNumber(run.repetitions) ?? 0
+    const resultsCount = Array.isArray(run.results) ? run.results.length : 0
+    total += repetitions
+    completed += Math.min(resultsCount, repetitions || resultsCount)
+  }
+  if (total <= 0) {
+    return null
+  }
+  return normalizeProgressMetrics(completed, total)
+}
 
 function resolveFailureReason(run: TestRun): string | null {
   const direct = typeof run.failure_reason === 'string' ? run.failure_reason.trim() : ''
@@ -254,6 +455,12 @@ const jobs = computed<AggregatedJobRow[]>(() => {
   const merged = [...legacyRows, ...promptTaskRows]
   return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 })
+
+watch([jobs, isLoading], () => {
+  nextTick(() => {
+    updateTableHeight()
+  })
+}, { immediate: true })
 
 function buildLegacyJobRows(runs: TestRun[]): AggregatedJobRow[] {
   const groups = new Map<string, TestRun[]>()
@@ -324,6 +531,8 @@ function buildLegacyJobRows(runs: TestRun[]): AggregatedJobRow[] {
         ? schema.new_result_page
         : Boolean(newResultTaskId)
 
+    const progress = calculateLegacyProgress(ordered)
+
     return {
       id: key,
       batchId: primary.batch_id ?? null,
@@ -343,7 +552,10 @@ function buildLegacyJobRows(runs: TestRun[]): AggregatedJobRow[] {
       failedRunIds,
       mode,
       isNewResultPage,
-      newResultTaskId
+      newResultTaskId,
+      progressCurrent: progress?.current ?? null,
+      progressTotal: progress?.total ?? null,
+      progressPercent: progress?.percent ?? null
     }
   })
 }
@@ -394,6 +606,13 @@ function buildPromptTestTaskRows(tasks: PromptTestTask[]): AggregatedJobRow[] {
 
     const failureDetail = extractString(configRecord.last_error)
     const status = mapPromptTestTaskStatus(task.status)
+    const fallbackTotal = estimatePromptTaskTotalRuns(units)
+    const configProgress = extractProgressFromConfig(configRecord, fallbackTotal)
+    const runtimeProgress = promptTaskProgress.value[task.id] ?? null
+    const progressCandidate = pickProgressMetrics(runtimeProgress, configProgress)
+    const progress =
+      progressCandidate ??
+      (typeof fallbackTotal === 'number' ? normalizeProgressMetrics(0, fallbackTotal) : null)
 
     return {
       id: `task-${task.id}`,
@@ -414,9 +633,130 @@ function buildPromptTestTaskRows(tasks: PromptTestTask[]): AggregatedJobRow[] {
       failedRunIds: [],
       mode: 'prompt-test-task',
       isNewResultPage: true,
-      newResultTaskId: task.id
+      newResultTaskId: task.id,
+      progressCurrent: progress?.current ?? null,
+      progressTotal: progress?.total ?? null,
+      progressPercent: progress?.percent ?? null
     }
   })
+}
+
+async function refreshPromptTaskProgress(tasks: PromptTestTask[]): Promise<void> {
+  if (!tasks.length) {
+    promptTaskProgress.value = {}
+    await nextTick(() => updateTableHeight())
+    return
+  }
+
+  try {
+    const progressEntries = await Promise.all(
+      tasks.map(async (task) => {
+        const units = Array.isArray(task.units) ? task.units : []
+        const fallbackTotal = estimatePromptTaskTotalRuns(units)
+        const configRecord = extractRecord(task.config)
+        const configProgress = extractProgressFromConfig(configRecord, fallbackTotal)
+
+        if (!units.length) {
+          const status = mapPromptTestTaskStatus(task.status)
+          const metrics =
+            status === 'completed'
+              ? normalizeProgressMetrics(1, 1)
+              : normalizeProgressMetrics(0, 1)
+          return [task.id, metrics] as const
+        }
+
+        if (configProgress) {
+          return [task.id, configProgress] as const
+        }
+
+        const computed = await computeProgressFromExperiments(units, fallbackTotal)
+        const status = mapPromptTestTaskStatus(task.status)
+        const totalBaseline = fallbackTotal ?? units.length
+        const fallbackProgress =
+          status === 'completed'
+            ? normalizeProgressMetrics(totalBaseline ?? 1, totalBaseline ?? 1)
+            : normalizeProgressMetrics(0, totalBaseline ?? 1)
+
+        return [task.id, computed ?? fallbackProgress] as const
+      })
+    )
+
+    const progressMap: Record<number, ProgressMetrics> = {}
+    for (const entry of progressEntries) {
+      if (!entry) continue
+      const [taskId, metrics] = entry
+      progressMap[taskId] = metrics
+    }
+    promptTaskProgress.value = progressMap
+  } catch (error) {
+    console.error('加载测试任务进度失败', error)
+  } finally {
+    await nextTick(() => updateTableHeight())
+  }
+}
+
+async function computeProgressFromExperiments(
+  units: PromptTestUnit[],
+  fallbackTotal: number | null
+): Promise<ProgressMetrics | null> {
+  if (!units.length) {
+    return null
+  }
+
+  const experimentsList = await Promise.all(
+    units.map((unit) =>
+      listPromptTestExperiments(unit.id).catch(() => [] as PromptTestExperiment[])
+    )
+  )
+
+  let totalRuns = 0
+  let completedRuns = 0
+
+  units.forEach((unit, index) => {
+    const expectedRuns =
+      Math.max(1, Math.floor(safeNumber(unit.rounds) ?? 1)) *
+      Math.max(1, resolveVariableCaseCount(unit.variables))
+    totalRuns += expectedRuns
+    const experiments = experimentsList[index]
+    if (!experiments.length) {
+      return
+    }
+
+    let remaining = expectedRuns
+    const ordered = [...experiments].sort((a, b) => a.sequence - b.sequence)
+    for (const experiment of ordered) {
+      if (remaining <= 0) {
+        break
+      }
+      if (experiment.status === 'completed') {
+        const outputsLength = Array.isArray(experiment.outputs)
+          ? experiment.outputs.length
+          : expectedRuns
+        const credited = Math.min(remaining, outputsLength || expectedRuns)
+        completedRuns += credited
+        remaining -= credited
+      } else if (experiment.status === 'running') {
+        const outputsLength = Array.isArray(experiment.outputs)
+          ? experiment.outputs.length
+          : 0
+        const credited = Math.min(remaining, outputsLength)
+        completedRuns += credited
+        remaining -= credited
+      } else if (
+        experiment.status === 'failed' ||
+        experiment.status === 'cancelled'
+      ) {
+        completedRuns += remaining
+        remaining = 0
+      }
+    }
+  })
+
+  const total = totalRuns || fallbackTotal || units.length
+  if (!total) {
+    return null
+  }
+  return normalizeProgressMetrics(completedRuns, total)
 }
 
 function deduplicateStrings(values: Array<string | null | undefined>): string[] {
@@ -537,10 +877,12 @@ async function fetchAllJobs(withLoading = true) {
     ])
     testRuns.value = runs
     promptTestTasks.value = tasks
+    void refreshPromptTaskProgress(tasks)
   } catch (error) {
     errorMessage.value = extractErrorMessage(error, t('testJobManagement.messages.loadFailed'))
     testRuns.value = []
     promptTestTasks.value = []
+    promptTaskProgress.value = {}
   } finally {
     isLoading.value = false
     if (!errorMessage.value) {
@@ -552,11 +894,16 @@ async function fetchAllJobs(withLoading = true) {
 }
 
 onMounted(() => {
+  window.addEventListener('resize', handleWindowResize)
+  nextTick(() => {
+    updateTableHeight()
+  })
   void fetchAllJobs()
 })
 
 onUnmounted(() => {
   clearPolling()
+  window.removeEventListener('resize', handleWindowResize)
 })
 
 function handleCreateTestJob() {
@@ -693,8 +1040,30 @@ async function handleDelete(job: AggregatedJobRow) {
   font-weight: 600;
 }
 
+.job-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.job-card :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.table-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
 .table-alert {
-  margin-bottom: 12px;
+  margin-bottom: 0;
+}
+
+.job-table {
+  flex: 1;
 }
 
 .table-name-cell {
@@ -746,5 +1115,30 @@ async function handleDelete(job: AggregatedJobRow) {
 .table-failure__content {
   word-break: break-word;
   flex: 1;
+}
+
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.status-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 220px;
+}
+
+.status-progress :deep(.el-progress) {
+  flex: 1;
+}
+
+.status-progress__text {
+  font-size: 12px;
+  color: var(--text-weak-color);
+  white-space: nowrap;
 }
 </style>
