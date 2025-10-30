@@ -128,6 +128,10 @@ export async function* streamQuickTest(
         buffer = buffer.slice(separatorIndex + 2)
         const parsed = parseSSEChunk(chunk)
         if (parsed) {
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.debug('[QuickTest][SSE]', performance.now(), parsed)
+          }
           yield parsed
         }
         separatorIndex = buffer.indexOf('\n\n')
@@ -138,6 +142,10 @@ export async function* streamQuickTest(
     if (remaining) {
       const parsed = parseSSEChunk(remaining)
       if (parsed) {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.debug('[QuickTest][SSE]', performance.now(), parsed)
+        }
         yield parsed
       }
     }

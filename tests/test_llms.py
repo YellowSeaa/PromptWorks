@@ -390,11 +390,7 @@ def test_invoke_llm_persists_usage_when_requested(client, db_session, monkeypatc
     after_count = db_session.query(LLMUsageLog).count()
     assert after_count == before_count + 1
 
-    usage_log = (
-        db_session.query(LLMUsageLog)
-        .order_by(LLMUsageLog.id.desc())
-        .first()
-    )
+    usage_log = db_session.query(LLMUsageLog).order_by(LLMUsageLog.id.desc()).first()
     assert usage_log is not None
     assert usage_log.source == "quick_test"
     assert usage_log.provider_id == provider["id"]
@@ -509,30 +505,6 @@ def test_stream_invoke_llm_persists_usage(client, db_session, monkeypatch):
 
     captured: dict[str, Any] = {}
 
-    class DummyStream:
-        status_code = 200
-
-        def __init__(self, lines: list[str]) -> None:
-            self._lines = lines
-
-        def __enter__(self) -> "DummyStream":
-            return self
-
-        def __exit__(
-            self,
-            exc_type: type[BaseException] | None,
-            exc: BaseException | None,
-            tb: TracebackType | None,
-        ) -> Literal[False]:
-            return False
-
-        def read(self) -> bytes:
-            return b""
-
-        def iter_lines(self):  # noqa: ANN201 - 接口保持与 httpx 一致
-            for item in self._lines:
-                yield item
-
     lines = [
         'data: {"id":"chatcmpl-1","choices":[{"delta":{"role":"assistant"}}]}',
         "",
@@ -547,19 +519,62 @@ def test_stream_invoke_llm_persists_usage(client, db_session, monkeypatch):
         "",
     ]
 
-    def fake_stream(method, url, headers, json, timeout):  # noqa: ANN001 - 与 httpx 接口对齐
-        captured.update(
-            {
-                "method": method,
-                "url": url,
-                "headers": headers,
-                "json": json,
-                "timeout": timeout,
-            }
-        )
-        return DummyStream(lines)
+    class DummyAsyncStream:
+        status_code = 200
 
-    monkeypatch.setattr("app.api.v1.endpoints.llms.httpx.stream", fake_stream)
+        def __init__(self, payload_lines: list[str]) -> None:
+            self._lines = payload_lines
+
+        async def __aenter__(self) -> "DummyAsyncStream":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> Literal[False]:
+            return False
+
+        async def aiter_lines(self):
+            for item in self._lines:
+                yield item
+
+        async def aread(self) -> bytes:
+            return b""
+
+    class DummyAsyncClient:
+        def __init__(self, timeout: float | httpx.Timeout | None = None, **kwargs):
+            self.timeout = timeout
+            self.kwargs = kwargs
+
+        async def __aenter__(self) -> "DummyAsyncClient":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> Literal[False]:
+            return False
+
+        def stream(self, method, url, headers=None, json=None):
+            captured.update(
+                {
+                    "method": method,
+                    "url": url,
+                    "headers": headers,
+                    "json": json,
+                    "timeout": self.timeout,
+                }
+            )
+            return DummyAsyncStream(lines)
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.llms.httpx.AsyncClient",
+        DummyAsyncClient,
+    )
 
     body = {
         "model_id": model["id"],
@@ -575,7 +590,8 @@ def test_stream_invoke_llm_persists_usage(client, db_session, monkeypatch):
         chunks = list(response.iter_text())
 
     aggregated = "".join(chunks)
-    assert '"content":"你好"' in aggregated
+    assert '"content":"你"' in aggregated
+    assert '"content":"好"' in aggregated
     assert "[DONE]" in aggregated
 
     usage_logs = db_session.query(LLMUsageLog).all()
@@ -743,24 +759,38 @@ def test_stream_invoke_llm_handles_error_status(db_session, monkeypatch):
     db_session.add_all([provider, model])
     db_session.commit()
 
-    class ErrorStream:
+    class ErrorAsyncStream:
         status_code = 502
 
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        def read(self) -> bytes:
+        async def aiter_lines(self):
+            if False:  # pragma: no cover - 兼容 async for
+                yield ""
+
+        async def aread(self) -> bytes:
             return b'{"message": "bad"}'
 
-        def iter_lines(self):  # noqa: ANN201
-            yield from []
+    class ErrorAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return ErrorAsyncStream()
 
     monkeypatch.setattr(
-        "app.api.v1.endpoints.llms.httpx.stream",
-        lambda *args, **kwargs: ErrorStream(),
+        "app.api.v1.endpoints.llms.httpx.AsyncClient",
+        ErrorAsyncClient,
     )
 
     payload = LLMStreamInvocationRequest(
@@ -770,11 +800,14 @@ def test_stream_invoke_llm_handles_error_status(db_session, monkeypatch):
         temperature=0.5,
     )
 
-    response = llms_api.stream_invoke_llm(
-        db=db_session,
-        provider_id=provider.id,
-        payload=payload,
-    )
+    async def invoke():
+        return await llms_api.stream_invoke_llm(
+            db=db_session,
+            provider_id=provider.id,
+            payload=payload,
+        )
+
+    response = anyio.run(invoke)
 
     async def consume():
         async for _ in response.body_iterator:
@@ -796,10 +829,23 @@ def test_stream_invoke_llm_handles_http_exception(db_session, monkeypatch):
     db_session.add_all([provider, model])
     db_session.commit()
 
-    def fake_stream(*args, **kwargs):  # noqa: ANN002
-        raise httpx.HTTPError("stream boom")
+    class RaiseAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
 
-    monkeypatch.setattr("app.api.v1.endpoints.llms.httpx.stream", fake_stream)
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *args, **kwargs):
+            raise httpx.HTTPError("stream boom")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.llms.httpx.AsyncClient",
+        RaiseAsyncClient,
+    )
 
     payload = LLMStreamInvocationRequest(
         model_id=model.id,
@@ -808,11 +854,14 @@ def test_stream_invoke_llm_handles_http_exception(db_session, monkeypatch):
         temperature=0.2,
     )
 
-    response = llms_api.stream_invoke_llm(
-        db=db_session,
-        provider_id=provider.id,
-        payload=payload,
-    )
+    async def invoke():
+        return await llms_api.stream_invoke_llm(
+            db=db_session,
+            provider_id=provider.id,
+            payload=payload,
+        )
+
+    response = anyio.run(invoke)
 
     async def consume():
         async for _ in response.body_iterator:
@@ -836,34 +885,49 @@ def test_stream_invoke_llm_ignores_invalid_chunks(client, db_session, monkeypatc
     )
     model = create_model(client, provider["id"], {"name": "stream-noise-model"})
 
-    class NoiseStream:
+    noise_lines = [
+        "data: not-a-json",
+        "",
+        'data: {"choices": [{"message": {"content": "A"}}]}',
+        "",
+        "data: [DONE]",
+    ]
+
+    class NoiseAsyncStream:
         status_code = 200
 
-        def __init__(self) -> None:
-            self._lines = [
-                "data: not-a-json",
-                "",
-                'data: {"choices": [{"message": {"content": "A"}}]}',
-                "",
-                "data: [DONE]",
-            ]
+        def __init__(self, payload_lines: list[str]) -> None:
+            self._lines = payload_lines
 
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        def iter_lines(self):  # noqa: ANN201
+        async def aiter_lines(self):
             for item in self._lines:
                 yield item
 
-        def read(self) -> bytes:
+        async def aread(self) -> bytes:
             return b""
 
+    class NoiseAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return NoiseAsyncStream(noise_lines)
+
     monkeypatch.setattr(
-        "app.api.v1.endpoints.llms.httpx.stream",
-        lambda *args, **kwargs: NoiseStream(),
+        "app.api.v1.endpoints.llms.httpx.AsyncClient",
+        NoiseAsyncClient,
     )
 
     payload = {

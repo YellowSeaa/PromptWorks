@@ -88,9 +88,11 @@
                 >
                   <el-switch
                     v-model="isMarkdownEnabled"
+                    class="chat-toggle-switch"
                     size="small"
-                    active-text=""
-                    inactive-text=""
+                    inline-prompt
+                    :active-text="t('quickTest.markdown.on')"
+                    :inactive-text="t('quickTest.markdown.off')"
                   />
                 </el-tooltip>
               </div>
@@ -103,7 +105,7 @@
                 >
                   <el-switch
                     v-model="isStreamingEnabled"
-                    class="stream-switch"
+                    class="chat-toggle-switch"
                     size="small"
                     inline-prompt
                     :active-text="t('quickTest.stream.on')"
@@ -130,6 +132,8 @@
                   :placement="message.role === 'user' ? 'end' : 'start'"
                   variant="filled"
                   shape="corner"
+                  :loading="message.isStreaming && !message.content"
+                  :typing="message.isStreaming && !!message.content"
                   :class="['chat-message__bubble', `chat-message__bubble--${message.role}`]"
                   :header-class="resolveBubbleHeaderClass(message)"
                   :content-class="resolveBubbleContentClass(message)"
@@ -159,13 +163,8 @@
                     <p class="chat-message__name">{{ message.displayName }}</p>
                   </template>
                   <template #default>
-                    <el-skeleton
-                      v-if="message.isStreaming && !message.content"
-                      animated
-                      :rows="2"
-                    />
                     <div
-                      v-else-if="isMarkdownEnabled"
+                      v-if="isMarkdownEnabled"
                       class="chat-message__content chat-message__content--markdown"
                       v-html="renderMessageMarkdown(message.content)"
                     />
@@ -451,8 +450,6 @@ const promptTags = ref<PromptTagStats[]>([])
 const providerMap = ref(new Map<number, LLMProvider>())
 const promptMap = ref(new Map<number, Prompt>())
 
-const STREAM_INTERVAL_MS = 25
-const streamingQueues = new Map<number, { buffer: string; timer: number | null }>()
 let activeStreamingMessageId: number | null = null
 let streamingScrollScheduled = false
 const markdownRenderer = new MarkdownIt({
@@ -529,64 +526,26 @@ function scheduleStreamScroll() {
   })
 }
 
-function scheduleStreamingFlush(message: QuickTestMessage) {
-  const entry = streamingQueues.get(message.id)
-  if (!entry) {
-    return
-  }
-  if (!entry.buffer.length) {
-    entry.timer = null
-    streamingQueues.delete(message.id)
-    return
-  }
-  if (typeof window === 'undefined') {
-    message.content += entry.buffer
-    streamingQueues.delete(message.id)
-    return
-  }
-  const char = entry.buffer[0]
-  entry.buffer = entry.buffer.slice(1)
-  message.content += char
-  scheduleStreamScroll()
-  entry.timer = window.setTimeout(() => {
-    scheduleStreamingFlush(message)
-  }, STREAM_INTERVAL_MS)
-}
-
 function enqueueStreamingContent(message: QuickTestMessage, text: string) {
   if (!text) {
     return
   }
-  if (typeof window === 'undefined') {
-    message.content += text
-    return
+  message.content = `${message.content}${text}`
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.debug('[QuickTest][StreamAppend]', performance.now(), text, message.content)
   }
-  let entry = streamingQueues.get(message.id)
-  if (!entry) {
-    entry = { buffer: '', timer: null }
-    streamingQueues.set(message.id, entry)
-  }
-  entry.buffer += text
-  if (entry.timer === null) {
-    scheduleStreamingFlush(message)
-  }
+  scheduleStreamScroll()
 }
 
 function clearStreamingQueue(
   messageId: number,
   options: { flush?: boolean; target?: QuickTestMessage } = {}
 ) {
-  const entry = streamingQueues.get(messageId)
-  if (!entry) {
-    return
+  if (options.flush && options.target) {
+    // 兼容旧逻辑：已直接写入 message.content，无额外缓冲
+    options.target.content = options.target.content
   }
-  if (entry.timer !== null && typeof window !== 'undefined') {
-    window.clearTimeout(entry.timer)
-  }
-  if (options.flush && entry.buffer && options.target) {
-    options.target.content += entry.buffer
-  }
-  streamingQueues.delete(messageId)
 }
 
 function findMessageById(id: number) {
@@ -1555,7 +1514,7 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
     lastStreaming.isStreaming = false
     clearStreamingQueue(lastStreaming.id, { flush: true, target: lastStreaming })
   }
-  const message: QuickTestMessage = {
+  const message = reactive<QuickTestMessage>({
     id: nextMessageId(),
     role: 'assistant',
     content: '',
@@ -1566,9 +1525,8 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
     avatarAlt: provider.provider_name,
     isStreaming: true,
     tokens: undefined
-  }
+  }) as QuickTestMessage
   messages.value.push(message)
-  streamingQueues.delete(message.id)
   activeStreamingMessageId = message.id
   const session = getActiveSession()
   if (session) {
@@ -1702,8 +1660,9 @@ function appendAssistantPlaceholder(provider: LLMProvider) {
   font-size: 12px;
 }
 
-.stream-switch {
+.chat-toggle-switch {
   flex-shrink: 0;
+  min-width: 66px;
 }
 
 
