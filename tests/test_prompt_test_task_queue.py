@@ -46,7 +46,11 @@ def test_prompt_test_task_without_units_marks_completed(db_session):
     db_session.expire_all()
     refreshed = db_session.get(PromptTestTask, task.id)
     assert refreshed.status == PromptTestTaskStatus.COMPLETED
-    assert not refreshed.config or "last_error" not in refreshed.config
+    assert refreshed.config and "last_error" not in refreshed.config
+    progress = refreshed.config["progress"]
+    assert progress["total"] == 1
+    assert progress["current"] == 1
+    assert progress["percentage"] == 100
 
 
 def test_prompt_test_task_execution_failure_sets_last_error(db_session, monkeypatch):
@@ -65,7 +69,7 @@ def test_prompt_test_task_execution_failure_sets_last_error(db_session, monkeypa
     db_session.add_all([task, unit])
     db_session.commit()
 
-    def fail_execute(session, experiment):
+    def fail_execute(session, experiment, progress_callback=None):
         raise PromptTestExecutionError("执行失败")
 
     monkeypatch.setattr(
@@ -80,6 +84,8 @@ def test_prompt_test_task_execution_failure_sets_last_error(db_session, monkeypa
     refreshed = db_session.get(PromptTestTask, task.id)
     assert refreshed.status == PromptTestTaskStatus.FAILED
     assert refreshed.config and refreshed.config.get("last_error") == "执行失败"
+    assert refreshed.config["progress"]["percentage"] == 100
+    assert refreshed.config["progress"]["current"] == refreshed.config["progress"]["total"]
 
 
 def test_prompt_test_task_execution_succeeds(db_session, monkeypatch):
@@ -98,7 +104,9 @@ def test_prompt_test_task_execution_succeeds(db_session, monkeypatch):
     db_session.add_all([task, unit])
     db_session.commit()
 
-    def succeed_execute(session, experiment):
+    def succeed_execute(session, experiment, progress_callback=None):
+        if progress_callback:
+            progress_callback(1)
         experiment.status = PromptTestExperimentStatus.COMPLETED
         experiment.finished_at = datetime.now(UTC)
         session.flush()
@@ -114,9 +122,57 @@ def test_prompt_test_task_execution_succeeds(db_session, monkeypatch):
     db_session.expire_all()
     refreshed = db_session.get(PromptTestTask, task.id)
     assert refreshed.status == PromptTestTaskStatus.COMPLETED
-    assert not refreshed.config or "last_error" not in refreshed.config
+    assert refreshed.config and "last_error" not in refreshed.config
+    progress = refreshed.config["progress"]
+    assert progress["total"] == 1
+    assert progress["current"] == 1
+    assert progress["percentage"] == 100
 
     experiments = db_session.scalars(
         select(PromptTestExperiment).where(PromptTestExperiment.unit_id == unit.id)
     ).all()
     assert experiments and experiments[0].status == PromptTestExperimentStatus.COMPLETED
+
+
+def test_prompt_test_task_progress_tracks_total_runs(db_session, monkeypatch):
+    task = PromptTestTask(
+        name="进度统计任务",
+        status=PromptTestTaskStatus.READY,
+        config=None,
+    )
+    unit = PromptTestUnit(
+        task=task,
+        name="含变量单元",
+        model_name="gpt-4o-mini",
+        rounds=2,
+        temperature=0.5,
+        variables={"rows": [{"text": "A"}, {"text": "B"}, {"text": "C"}]},
+    )
+    db_session.add_all([task, unit])
+    db_session.commit()
+
+    expected_total = 6
+
+    def execute_with_progress(session, experiment, progress_callback=None):
+        if progress_callback:
+            for _ in range(expected_total):
+                progress_callback(1)
+        experiment.status = PromptTestExperimentStatus.COMPLETED
+        experiment.finished_at = datetime.now(UTC)
+        session.flush()
+
+    monkeypatch.setattr(
+        "app.core.prompt_test_task_queue.execute_prompt_test_experiment",
+        execute_with_progress,
+    )
+
+    enqueue_prompt_test_task(task.id)
+    task_queue.wait_for_idle(timeout=2.0)
+
+    db_session.expire_all()
+    refreshed = db_session.get(PromptTestTask, task.id)
+    assert refreshed.status == PromptTestTaskStatus.COMPLETED
+    progress = refreshed.config["progress"]
+    assert progress["total"] == expected_total
+    assert progress["current"] == expected_total
+    assert progress["percentage"] == 100
