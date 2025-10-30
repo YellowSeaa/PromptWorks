@@ -137,7 +137,7 @@
                     :closable="false"
                     :title="t('promptTestResult.warnings.missingOutputTitle')"
                   >
-                    <template #description>
+                    <template #default>
                       <span>{{ t('promptTestResult.warnings.missingOutputDescription') }}</span>
                       <el-link
                         type="primary"
