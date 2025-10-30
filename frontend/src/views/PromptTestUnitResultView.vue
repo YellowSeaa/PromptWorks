@@ -25,6 +25,18 @@
       <template #header>
         <div class="card-header">
           <span>{{ outputsTitle }}</span>
+          <div class="card-markdown">
+            <span class="card-markdown__label" :title="t('promptTestResult.markdown.tooltip')">
+              {{ t('promptTestResult.markdown.label') }}
+            </span>
+            <el-switch
+              v-model="unitMarkdownEnabled"
+              size="small"
+              :active-text="t('promptTestResult.markdown.on')"
+              :inactive-text="t('promptTestResult.markdown.off')"
+              inline-prompt
+            />
+          </div>
         </div>
       </template>
 
@@ -109,7 +121,17 @@
           placement="top"
         >
           <el-card shadow="hover">
-            <p class="output-content">{{ output.content }}</p>
+            <div
+              v-if="!unitMarkdownEnabled"
+              class="output-content output-content--plain"
+            >
+              {{ output.content }}
+            </div>
+            <div
+              v-else
+              class="output-content output-content--markdown"
+              v-html="renderMarkdown(output.content)"
+            />
             <p class="output-meta">{{ output.meta ?? '' }}</p>
             <div v-if="output.variables && Object.keys(output.variables).length" class="output-variables">
               <div
@@ -136,6 +158,7 @@ import { ElMessage } from 'element-plus'
 import { getPromptTestUnit, listPromptTestExperiments } from '../api/promptTest'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit, buildParameterEntries } from '../utils/promptTestResult'
+import MarkdownIt from 'markdown-it'
 
 const route = useRoute()
 const router = useRouter()
@@ -144,6 +167,7 @@ const { t } = useI18n()
 const unit = ref<PromptTestResultUnit | null>(null)
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
+const unitMarkdownEnabled = ref(false)
 
 const routeTaskId = computed(() => (route.params.taskId as string | undefined) ?? '')
 const unitIdParam = computed(() => route.params.unitId)
@@ -238,6 +262,16 @@ const outputsTitle = computed(() => {
   const key = isVariableFilterActive.value ? 'filteredTitle' : 'outputsTitle'
   return t(`promptTestResult.unitDetail.${key}`, { count })
 })
+const markdownRenderer = new MarkdownIt({
+  breaks: true,
+  linkify: true,
+  html: false
+})
+
+function renderMarkdown(content: string | null | undefined) {
+  const source = content ?? ''
+  return markdownRenderer.render(source || '')
+}
 
 function resetVariableFilter() {
   variableFilter.key = ''
@@ -365,7 +399,23 @@ watch(availableVariableKeys, (keys) => {
 }
 
 .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   font-weight: 600;
+}
+
+.card-markdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-weak-color);
+}
+
+.card-markdown__label {
+  white-space: nowrap;
 }
 
 .unit-alert {
@@ -410,7 +460,39 @@ watch(availableVariableKeys, (keys) => {
 
 .output-content {
   margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+.output-content--plain {
   white-space: pre-wrap;
+}
+
+.output-content--markdown {
+  line-height: 1.6;
+}
+
+.output-content--markdown :deep(p) {
+  margin: 0 0 8px;
+}
+
+.output-content--markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.output-content--markdown :deep(pre) {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background-color: var(--el-color-info-light-9);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.output-content--markdown :deep(code) {
+  font-family: var(--el-font-family-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace);
+  background-color: var(--el-color-info-light-9);
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 .output-meta {

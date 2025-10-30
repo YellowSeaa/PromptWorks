@@ -916,6 +916,12 @@ export const messages = {
         columnCount: '当前列数：{count}',
         exportCsv: '导出 CSV'
       },
+      markdown: {
+        label: 'Markdown 渲染',
+        on: '开',
+        off: '关',
+        tooltip: '开启后以 Markdown 方式展示模型输出'
+      },
       labels: {
         outputs: '条结果'
       },
@@ -1866,6 +1872,12 @@ export const messages = {
         removeSingleColumn: 'Remove',
         columnCount: 'Columns: {count}',
         exportCsv: 'Export CSV'
+      },
+      markdown: {
+        label: 'Markdown',
+        on: 'On',
+        off: 'Off',
+        tooltip: 'Render model outputs with Markdown formatting'
       },
       labels: {
         outputs: 'outputs'

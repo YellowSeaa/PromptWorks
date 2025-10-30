@@ -42,6 +42,18 @@
 
       <div v-if="activeTab === 'results'" class="result-panel">
         <div class="result-toolbar">
+          <div class="toolbar-markdown">
+            <span class="toolbar-markdown__label" :title="t('promptTestResult.markdown.tooltip')">
+              {{ t('promptTestResult.markdown.label') }}
+            </span>
+            <el-switch
+              v-model="resultMarkdownEnabled"
+              size="small"
+              :active-text="t('promptTestResult.markdown.on')"
+              :inactive-text="t('promptTestResult.markdown.off')"
+              inline-prompt
+            />
+          </div>
           <div class="columns-control">
             <el-button
               size="small"
@@ -118,7 +130,17 @@
                   class="grid-cell"
                 >
                   <div class="output-badge">#{{ row.index }}</div>
-                  <div class="output-content">{{ cell?.content ?? placeholderText }}</div>
+                  <div
+                    v-if="!resultMarkdownEnabled"
+                    class="output-content output-content--plain"
+                  >
+                    {{ cell?.content ?? placeholderText }}
+                  </div>
+                  <div
+                    v-else
+                    class="output-content output-content--markdown"
+                    v-html="renderMarkdown(cell?.content ?? placeholderText)"
+                  />
                   <div class="output-meta">{{ cell?.meta ?? '' }}</div>
                   <div v-if="cell?.variables && Object.keys(cell.variables).length" class="output-variables">
                     <div
@@ -238,6 +260,7 @@ import { getPromptTestTask, listPromptTestUnits, listPromptTestExperiments } fro
 import type { PromptTestTask } from '../types/promptTest'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit } from '../utils/promptTestResult'
+import MarkdownIt from 'markdown-it'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
 
@@ -259,6 +282,7 @@ const task = ref<PromptTestTask | null>(null)
 const units = ref<PromptTestResultUnit[]>([])
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
+const resultMarkdownEnabled = ref(false)
 
 const tabList = ['units', 'results', 'analysis'] as const
 type TabKey = (typeof tabList)[number]
@@ -281,6 +305,11 @@ const activeTab = ref<TabKey>(queryTab ?? DEFAULT_TAB)
 
 const columnConfigs = ref<UnitColumnConfig[]>([])
 let columnUid = 0
+const markdownRenderer = new MarkdownIt({
+  breaks: true,
+  linkify: true,
+  html: false
+})
 
 const routeTaskIdParam = computed(() => (route.params.taskId as string | undefined) ?? '')
 
@@ -352,6 +381,10 @@ const headerDescription = computed(() => {
 })
 
 const placeholderText = computed(() => t('promptTestResult.empty.placeholder'))
+function renderMarkdown(content: string | null | undefined) {
+  const source = content ?? ''
+  return markdownRenderer.render(source || '')
+}
 
 const filterForm = reactive({
   keyword: '',
@@ -730,7 +763,22 @@ watch(
 
 .result-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-markdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-weak-color);
+}
+
+.toolbar-markdown__label {
+  white-space: nowrap;
 }
 
 .columns-control {
@@ -821,7 +869,37 @@ watch(
 .output-content {
   font-size: 14px;
   color: var(--el-text-color-primary);
+}
+
+.output-content--plain {
   white-space: pre-wrap;
+}
+
+.output-content--markdown {
+  line-height: 1.6;
+}
+
+.output-content--markdown :deep(p) {
+  margin: 0 0 8px;
+}
+
+.output-content--markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.output-content--markdown :deep(pre) {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background-color: var(--el-color-info-light-9);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.output-content--markdown :deep(code) {
+  font-family: var(--el-font-family-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace);
+  background-color: var(--el-color-info-light-9);
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 .output-meta {
