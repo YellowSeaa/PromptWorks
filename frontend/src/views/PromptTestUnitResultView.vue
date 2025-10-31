@@ -109,10 +109,20 @@
         </el-space>
       </div>
 
-      <el-empty
-        v-if="!unit || !filteredOutputs.length"
-        :description="t('promptTestResult.empty.noOutputs')"
-      />
+      <div v-if="!unit || !filteredOutputs.length" class="unit-empty">
+        <el-alert
+          v-if="unitMissingInfo"
+          :type="unitMissingInfo.type"
+          show-icon
+          :closable="false"
+          :title="unitMissingInfo.title"
+        >
+          <template v-if="unitMissingInfo.description" #default>
+            <span>{{ unitMissingInfo.description }}</span>
+          </template>
+        </el-alert>
+        <el-empty :description="t('promptTestResult.empty.noOutputs')" />
+      </div>
       <el-timeline v-else>
         <el-timeline-item
           v-for="output in filteredOutputs"
@@ -188,7 +198,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getPromptTestUnit, listPromptTestExperiments } from '../api/promptTest'
 import type { PromptTestResultUnit, PromptTestResultOutput } from '../utils/promptTestResult'
-import { buildPromptTestResultUnit, buildParameterEntries } from '../utils/promptTestResult'
+import { buildPromptTestResultUnit, buildParameterEntries, detectMissingOutput } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
 
 const route = useRoute()
@@ -232,6 +242,74 @@ const unitStatusTag = computed(() => {
     type: unitStatusTagType[status] ?? 'info'
   }
 })
+
+interface MissingOutputInfo {
+  type: 'info' | 'warning' | 'error'
+  title: string
+  description?: string
+}
+
+function resolveUnitMissingOutputInfo(): MissingOutputInfo | null {
+  const context = detectMissingOutput(unit.value, 1)
+  if (!context) {
+    return null
+  }
+  const produced = context.produced
+  const errorMessage = context.error?.trim() ?? ''
+  switch (context.reason) {
+    case 'partial':
+      if (context.status === 'failed') {
+        return {
+          type: 'error',
+          title: t('promptTestResult.empty.reasons.failedTitle'),
+          description: errorMessage || t('promptTestResult.empty.reasons.failedDescription')
+        }
+      }
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.partialTitle', { count: produced })
+      }
+    case 'failed':
+      return {
+        type: 'error',
+        title: t('promptTestResult.empty.reasons.failedTitle'),
+        description: errorMessage || t('promptTestResult.empty.reasons.failedDescription')
+      }
+    case 'cancelled':
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.cancelledTitle')
+      }
+    case 'running':
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.runningTitle')
+      }
+    case 'pending':
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.pendingTitle')
+      }
+    case 'completed':
+      return {
+        type: errorMessage ? 'warning' : 'info',
+        title: errorMessage
+          ? t('promptTestResult.empty.reasons.completedWithReasonTitle')
+          : t('promptTestResult.empty.reasons.completedTitle'),
+        description:
+          errorMessage || t('promptTestResult.empty.reasons.completedDescription')
+      }
+    default:
+      return {
+        type: errorMessage ? 'warning' : 'info',
+        title: t('promptTestResult.empty.reasons.unknownTitle'),
+        description:
+          errorMessage || t('promptTestResult.empty.reasons.unknownDescription')
+      }
+  }
+}
+
+const unitMissingInfo = computed(() => resolveUnitMissingOutputInfo())
 
 const parameterEntries = computed(() =>
   unit.value ? buildParameterEntries(unit.value.parameters) : []
@@ -510,6 +588,13 @@ watch(availableVariableKeys, (keys) => {
 .unit-parameters__empty {
   font-size: 12px;
   color: var(--text-weak-color);
+}
+
+.unit-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
 }
 
 .variable-filter {

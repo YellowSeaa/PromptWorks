@@ -282,11 +282,27 @@ function resolveVariableCaseCount(variables: unknown): number {
   }
   if (variables && typeof variables === 'object') {
     const record = variables as Record<string, unknown>
+    const cases = record.cases
+    if (Array.isArray(cases)) {
+      return cases.length || 1
+    }
     const rows = record.rows
     if (Array.isArray(rows)) {
       return rows.length || 1
     }
-    const lengthValue = safeNumber(record.length)
+    const data = record.data
+    if (Array.isArray(data)) {
+      return data.length || 1
+    }
+    const values = record.values
+    if (Array.isArray(values)) {
+      return values.length || 1
+    }
+    const lengthValue =
+      safeNumber(record.length) ??
+      safeNumber(record.count) ??
+      safeNumber(record.size) ??
+      safeNumber(record.total)
     if (lengthValue && lengthValue > 0) {
       return Math.floor(lengthValue)
     }

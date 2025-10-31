@@ -17,6 +17,7 @@ export interface PromptTestResultUnit {
   parameters: Record<string, string>
   rounds: number
   status: PromptTestExperiment['status'] | null
+  error: string | null
   metrics: PromptTestExperiment['metrics'] | null
   outputs: PromptTestResultOutput[]
 }
@@ -38,6 +39,7 @@ export function buildPromptTestResultUnit(
     parameters: normalizeRecord(unit.parameters),
     rounds: unit.rounds,
     status: latestExperiment?.status ?? null,
+    error: normalizeError(latestExperiment?.error),
     metrics: latestExperiment?.metrics ?? null,
     outputs: buildOutputs(latestExperiment)
   }
@@ -212,4 +214,68 @@ function safeNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
+}
+
+function normalizeError(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : null
+  }
+  return null
+}
+
+export type MissingOutputReason =
+  | 'partial'
+  | 'failed'
+  | 'cancelled'
+  | 'running'
+  | 'pending'
+  | 'completed'
+  | 'unknown'
+
+export interface MissingOutputContext {
+  reason: MissingOutputReason
+  produced: number
+  status: PromptTestExperiment['status'] | null
+  error: string | null
+}
+
+export function detectMissingOutput(
+  unit: PromptTestResultUnit | null,
+  rowIndex: number
+): MissingOutputContext | null {
+  if (!unit) {
+    return null
+  }
+  const produced = unit.outputs.length
+  if (produced >= rowIndex) {
+    return null
+  }
+  if (produced > 0) {
+    return {
+      reason: 'partial',
+      produced,
+      status: unit.status ?? null,
+      error: unit.error ?? null
+    }
+  }
+  const status = unit.status ?? null
+  let reason: MissingOutputReason = 'unknown'
+  if (status === 'failed') {
+    reason = 'failed'
+  } else if (status === 'cancelled') {
+    reason = 'cancelled'
+  } else if (status === 'running') {
+    reason = 'running'
+  } else if (status === 'pending') {
+    reason = 'pending'
+  } else if (status === 'completed') {
+    reason = 'completed'
+  }
+  return {
+    reason,
+    produced,
+    status,
+    error: unit.error ?? null
+  }
 }
