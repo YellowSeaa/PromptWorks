@@ -137,7 +137,7 @@
                   :class="['chat-message__bubble', `chat-message__bubble--${message.role}`]"
                   :header-class="resolveBubbleHeaderClass(message)"
                   :content-class="resolveBubbleContentClass(message)"
-                  :footer-class="message.tokens ? resolveBubbleFooterClass(message) : undefined"
+                  :footer-class="hasMessageMeta(message) ? resolveBubbleFooterClass(message) : undefined"
                 >
                   <template #avatar>
                     <el-avatar :size="36" class="chat-message__avatar">
@@ -175,11 +175,21 @@
                       {{ message.content }}
                     </span>
                   </template>
-                  <template v-if="message.tokens" #footer>
+                  <template v-if="hasMessageMeta(message)" #footer>
                     <div class="chat-message__meta">
-                      <span>{{ t('quickTest.chat.tokens.input') }}：{{ formatTokenValue(message.tokens.input) }}</span>
-                      <span>{{ t('quickTest.chat.tokens.output') }}：{{ formatTokenValue(message.tokens.output) }}</span>
-                      <span>{{ t('quickTest.chat.tokens.total') }}：{{ formatTokenValue(message.tokens.total) }}</span>
+                      <template v-if="message.tokens">
+                        <span>{{ t('quickTest.chat.tokens.input') }}：{{ formatTokenValue(message.tokens.input) }}</span>
+                        <span>{{ t('quickTest.chat.tokens.output') }}：{{ formatTokenValue(message.tokens.output) }}</span>
+                        <span>{{ t('quickTest.chat.tokens.total') }}：{{ formatTokenValue(message.tokens.total) }}</span>
+                      </template>
+                      <template v-if="message.timing">
+                        <span v-if="message.timing.firstTokenMs != null">
+                          {{ t('quickTest.chat.latency.firstToken') }}：{{ formatLatencyValue(message.timing.firstTokenMs) }}
+                        </span>
+                        <span v-if="message.timing.totalMs != null">
+                          {{ t('quickTest.chat.latency.total') }}：{{ formatLatencyValue(message.timing.totalMs) }}
+                        </span>
+                      </template>
                     </div>
                   </template>
                 </el-bubble>
@@ -368,6 +378,11 @@ interface CascaderOptionNode {
   disabled?: boolean
 }
 
+interface MessageTiming {
+  firstTokenMs: number | null
+  totalMs: number | null
+}
+
 interface QuickTestMessage {
   id: number
   role: 'user' | 'assistant'
@@ -383,6 +398,7 @@ interface QuickTestMessage {
     output: number | null
     total: number | null
   }
+  timing?: MessageTiming
 }
 
 interface ChatSession {
@@ -410,6 +426,7 @@ interface HistoryMatchCriteria {
   providerId?: number
   modelName?: string | null
   draftId?: number
+  timing?: MessageTiming
 }
 
 const cascaderProps = reactive({
@@ -553,6 +570,35 @@ function clearStreamingQueue(
     // 兼容旧逻辑：已直接写入 message.content，无额外缓冲
     options.target.content = options.target.content
   }
+}
+
+function ensureMessageTiming(message: QuickTestMessage): MessageTiming {
+  if (!message.timing) {
+    message.timing = {
+      firstTokenMs: null,
+      totalMs: null
+    }
+  }
+  return message.timing
+}
+
+function clearMessageTiming(message: QuickTestMessage) {
+  message.timing = undefined
+}
+
+function formatLatencyValue(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return '—'
+  }
+  if (!Number.isFinite(value)) {
+    return '—'
+  }
+  const numeric = Math.max(0, Math.round(value))
+  return `${numeric}ms`
+}
+
+function hasMessageMeta(message: QuickTestMessage) {
+  return Boolean(message.tokens || message.timing)
 }
 
 function findMessageById(id: number) {
@@ -753,7 +799,7 @@ function handleNewChat() {
   isSending.value = false
   chatInput.value = ''
   selectedPromptPath.value = []
-  startNewDraftSession(true)
+  startNewDraftSession(true, { preserveModelSelection: true })
 }
 
 function getActiveSession(): ChatSession | undefined {
@@ -800,7 +846,11 @@ function createDraftSession(title?: string): ChatSession {
   return session
 }
 
-function startNewDraftSession(force = false) {
+function startNewDraftSession(
+  force = false,
+  options: { preserveModelSelection?: boolean } = {}
+) {
+  const preserveModelSelection = options.preserveModelSelection === true
   if (!force) {
     const hasEmptyDraft = chatSessions.value.some(
       (session) => !session.isPersisted && !session.hasInteraction && session.messages.length === 0
@@ -812,7 +862,9 @@ function startNewDraftSession(force = false) {
 
   const session = createDraftSession()
   messages.value = session.messages
-  selectedModelPath.value = []
+  if (!preserveModelSelection) {
+    selectedModelPath.value = []
+  }
   chatInput.value = ''
   void scrollToBottom()
 }
@@ -981,6 +1033,12 @@ function convertHistoryLogToSession(log: QuickTestHistoryItem): ChatSession {
       completion_tokens: log.completion_tokens ?? undefined,
       total_tokens: log.total_tokens ?? undefined,
     })
+    if (typeof log.latency_ms === 'number' && Number.isFinite(log.latency_ms)) {
+      assistantMessage.timing = {
+        firstTokenMs: null,
+        totalMs: Math.max(0, Math.round(log.latency_ms))
+      }
+    }
     sessionMessages.push(assistantMessage)
   }
 
@@ -1004,6 +1062,32 @@ function convertHistoryLogToSession(log: QuickTestHistoryItem): ChatSession {
     modelName: log.model_name,
     promptId: log.prompt_id,
     promptVersionId: log.prompt_version_id,
+  }
+}
+
+function mergeTimingIntoSessionMessages(
+  messages: QuickTestMessage[],
+  timing: MessageTiming,
+  responseText?: string | null
+) {
+  if (!messages.length) {
+    return
+  }
+  const reversed = [...messages].reverse()
+  let target: QuickTestMessage | undefined
+  if (typeof responseText === 'string') {
+    target = reversed.find(
+      (item) => item.role === 'assistant' && item.content === responseText
+    )
+  }
+  if (!target) {
+    target = reversed.find((item) => item.role === 'assistant')
+  }
+  if (target) {
+    target.timing = {
+      firstTokenMs: timing.firstTokenMs ?? null,
+      totalMs: timing.totalMs ?? null
+    }
   }
 }
 
@@ -1045,6 +1129,13 @@ async function refreshHistory(match?: HistoryMatchCriteria): Promise<void> {
       if (matchedSession) {
         activeSessionId.value = matchedSession.id
         messages.value = matchedSession.messages
+        if (match?.timing) {
+          mergeTimingIntoSessionMessages(
+            matchedSession.messages,
+            match.timing,
+            match.responseText
+          )
+        }
         if (
           matchedSession.providerId != null &&
           matchedSession.modelName &&
@@ -1283,6 +1374,17 @@ async function handleSend() {
     persistUsage: isStreamingEnabled.value ? undefined : true
   }
 
+  const requestStart = performance.now()
+  let firstTokenLatencyMs: number | null = null
+  const markFirstTokenLatency = () => {
+    if (firstTokenLatencyMs !== null) {
+      return
+    }
+    firstTokenLatencyMs = performance.now() - requestStart
+    const timing = ensureMessageTiming(assistantMessage)
+    timing.firstTokenMs = Math.max(0, Math.round(firstTokenLatencyMs))
+  }
+
   const timeoutSeconds =
     configuredQuickTestTimeout.value ?? DEFAULT_QUICK_TEST_TIMEOUT_SECONDS
   let abortedByTimeout = false
@@ -1327,6 +1429,7 @@ async function handleSend() {
         for (const choice of choices) {
           const delta = choice?.delta
           if (delta && typeof delta.content === 'string') {
+            markFirstTokenLatency()
             finalResponseText += delta.content
             enqueueStreamingContent(assistantMessage, delta.content)
             shouldScrollAfterStream = true
@@ -1335,6 +1438,7 @@ async function handleSend() {
           }
           const message = choice?.message
           if (message && typeof message.content === 'string') {
+            markFirstTokenLatency()
             finalResponseText += message.content
             enqueueStreamingContent(assistantMessage, message.content)
             shouldScrollAfterStream = true
@@ -1343,6 +1447,7 @@ async function handleSend() {
           }
           const text = choice?.text
           if (typeof text === 'string') {
+            markFirstTokenLatency()
             finalResponseText += text
             enqueueStreamingContent(assistantMessage, text)
             shouldScrollAfterStream = true
@@ -1350,6 +1455,12 @@ async function handleSend() {
           }
         }
       }
+      const totalLatency = Math.max(0, Math.round(performance.now() - requestStart))
+      const timing = ensureMessageTiming(assistantMessage)
+      if (firstTokenLatencyMs === null) {
+        timing.firstTokenMs = null
+      }
+      timing.totalMs = totalLatency
       shouldRefreshHistory = true
     } else {
       const response = await invokeQuickTest(payload, { signal: controller.signal })
@@ -1375,6 +1486,10 @@ async function handleSend() {
       }
       assistantMessage.content = combined || assistantMessage.content
       finalResponseText = combined || assistantMessage.content
+      const totalLatency = Math.max(0, Math.round(performance.now() - requestStart))
+      const timing = ensureMessageTiming(assistantMessage)
+      timing.firstTokenMs = null
+      timing.totalMs = totalLatency
       shouldScrollAfterStream = true
       shouldRefreshHistory = true
       updateActiveSessionTimestamp()
@@ -1389,6 +1504,7 @@ async function handleSend() {
       }
       clearStreamingQueue(assistantMessage.id, { flush: true, target: assistantMessage })
       assistantMessage.tokens = undefined
+      clearMessageTiming(assistantMessage)
       shouldScrollAfterStream = true
       updateActiveSessionTimestamp()
       if (abortedByTimeout) {
@@ -1408,6 +1524,7 @@ async function handleSend() {
     clearStreamingQueue(assistantMessage.id)
     assistantMessage.content = message
     assistantMessage.tokens = undefined
+    clearMessageTiming(assistantMessage)
     ElMessage.error(message)
     shouldScrollAfterStream = true
     updateActiveSessionTimestamp()
@@ -1432,6 +1549,9 @@ async function handleSend() {
     }
     if (shouldRefreshHistory) {
       matchCriteria.responseText = finalResponseText || assistantMessage.content
+      if (assistantMessage.timing) {
+        matchCriteria.timing = { ...assistantMessage.timing }
+      }
       await refreshHistory(matchCriteria)
     }
   }
