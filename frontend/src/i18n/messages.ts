@@ -211,6 +211,10 @@ export const messages = {
           output: '输出 Token',
           total: '总计'
         },
+        latency: {
+          firstToken: '首字耗时',
+          total: '总耗时'
+        },
         avatar: {
           user: '用户',
           self: '我',
@@ -1200,6 +1204,10 @@ export const messages = {
           input: 'Input Tokens',
           output: 'Output Tokens',
           total: 'Total'
+        },
+        latency: {
+          firstToken: 'First Token Latency',
+          total: 'Total Latency'
         },
         avatar: {
           user: 'User',
