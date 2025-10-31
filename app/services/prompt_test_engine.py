@@ -21,10 +21,13 @@ from app.models.prompt_test import (
 )
 from app.models.usage import LLMUsageLog
 from app.services.test_run import (
-    DEFAULT_TEST_TIMEOUT,
     REQUEST_SLEEP_RANGE,
     _format_error_detail,
     _try_parse_json,
+)
+from app.services.system_settings import (
+    DEFAULT_TEST_TASK_TIMEOUT,
+    get_testing_timeout_config,
 )
 
 logger = logging.getLogger("promptworks.prompt_test_engine")
@@ -86,6 +89,11 @@ def execute_prompt_test_experiment(
     experiment.error = None
     db.flush()
 
+    timeout_config = get_testing_timeout_config(db)
+    request_timeout = float(
+        timeout_config.test_task_timeout or DEFAULT_TEST_TASK_TIMEOUT
+    )
+
     run_records: list[dict[str, Any]] = []
     latencies: list[int] = []
     token_totals: list[int] = []
@@ -105,6 +113,7 @@ def execute_prompt_test_experiment(
                 base_parameters=parameters,
                 context_template=context_template,
                 run_index=run_index,
+                request_timeout=request_timeout,
             )
         except PromptTestExecutionError as exc:
             experiment.status = PromptTestExperimentStatus.FAILED
@@ -234,6 +243,7 @@ def _execute_single_round(
     base_parameters: Mapping[str, Any],
     context_template: Mapping[str, Any] | Sequence[Any],
     run_index: int,
+    request_timeout: float,
 ) -> dict[str, Any]:
     context = _resolve_context(context_template, run_index)
     messages = _build_messages(unit, prompt_snapshot, context, run_index)
@@ -268,7 +278,7 @@ def _execute_single_round(
             f"{base_url}/chat/completions",
             headers=headers,
             json=payload,
-            timeout=DEFAULT_TEST_TIMEOUT,
+            timeout=request_timeout,
         )
     except httpx.HTTPError as exc:  # pragma: no cover - 网络异常兜底
         raise PromptTestExecutionError(f"调用外部 LLM 失败: {exc}") from exc

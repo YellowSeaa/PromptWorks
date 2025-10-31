@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     test_prompt,
     usage,
     prompt_test_tasks,
+    settings,
 )
 
 
@@ -25,3 +26,4 @@ api_router.include_router(
 )
 api_router.include_router(usage.router, prefix="/usage", tags=["usage"])
 api_router.include_router(prompt_test_tasks.router)
+api_router.include_router(settings.router)

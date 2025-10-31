@@ -14,9 +14,11 @@ from app.models.prompt_test import (
     PromptTestTask,
     PromptTestUnit,
 )
+from app.models.system_setting import SystemSetting
 from app.models.usage import LLMUsageLog
 from app.services import prompt_test_engine
 from app.services.prompt_test_engine import execute_prompt_test_experiment
+from app.services.system_settings import DEFAULT_TEST_TASK_TIMEOUT
 
 
 class DummyResponse:
@@ -110,6 +112,7 @@ def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatc
 
     def fake_post(*_, **kwargs):
         payload = kwargs.get("json") or {}
+        assert kwargs["timeout"] == DEFAULT_TEST_TASK_TIMEOUT
         messages = payload.get("messages") or []
         user_text = messages[-1]["content"] if messages else ""
         if "你好" in user_text:
@@ -164,6 +167,54 @@ def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatc
     assert latest_log.prompt_tokens is not None or latest_log.total_tokens is not None
 
 
+def test_prompt_test_engine_uses_custom_timeout(db_session, monkeypatch):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    provider = model.provider
+
+    custom_timeout = 90
+    db_session.add(
+        SystemSetting(
+            key="testing_timeout",
+            value={"quick_test_timeout": 45, "test_task_timeout": custom_timeout},
+        )
+    )
+    db_session.commit()
+
+    task = PromptTestTask(name="自定义超时任务", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="翻译单句",
+        model_name=model.name,
+        llm_provider_id=provider.id,
+        rounds=1,
+        prompt_template="翻译：{text}",
+        variables={"cases": [{"text": "你好"}]},
+        parameters={"max_tokens": 8},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    def fake_post(*_, **kwargs):
+        assert kwargs["timeout"] == custom_timeout
+        response = {
+            "choices": [{"message": {"content": "Hello"}}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 4},
+        }
+        return DummyResponse(response, elapsed_ms=12)
+
+    monkeypatch.setattr("app.services.prompt_test_engine.httpx.post", fake_post)
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+
+
 def test_prompt_test_api_creates_and_executes_experiment(
     client, db_session, monkeypatch
 ):
@@ -172,6 +223,7 @@ def test_prompt_test_api_creates_and_executes_experiment(
     provider = model.provider
 
     def fake_post(*_, **kwargs):
+        assert kwargs["timeout"] == DEFAULT_TEST_TASK_TIMEOUT
         response = {
             "choices": [{"message": {"content": "Hello World"}}],
             "usage": {"prompt_tokens": 4, "completion_tokens": 5},

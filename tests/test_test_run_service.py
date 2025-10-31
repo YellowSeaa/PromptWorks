@@ -9,9 +9,11 @@ from sqlalchemy import select
 
 from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.prompt import Prompt, PromptClass, PromptVersion
+from app.models.system_setting import SystemSetting
 from app.models.test_run import TestRun, TestRunStatus
 from app.models.usage import LLMUsageLog
 from app.services import test_run as test_run_service
+from app.services.system_settings import DEFAULT_TEST_TASK_TIMEOUT
 
 
 def _create_prompt_version(db_session) -> PromptVersion:
@@ -83,6 +85,7 @@ def test_execute_test_run_generates_results_and_usage(
     }
 
     def fake_post(*_, **kwargs):  # noqa: ANN002 - 接口保持与 httpx 一致
+        assert kwargs["timeout"] == DEFAULT_TEST_TASK_TIMEOUT
         payload = kwargs.get("json") or {}
         messages = payload.get("messages") or []
         user_content = ""
@@ -181,6 +184,67 @@ def test_execute_test_run_requires_prompt_version(db_session, provider_model):
     assert test_run.prompt_version is None
     with pytest.raises(test_run_service.TestRunExecutionError):
         test_run_service.execute_test_run(db_session, test_run)
+
+
+def test_execute_test_run_respects_custom_timeout(
+    db_session, prompt_version, provider_model, monkeypatch
+):
+    provider = provider_model.provider
+    custom_timeout = 120
+    db_session.add(
+        SystemSetting(
+            key="testing_timeout",
+            value={
+                "quick_test_timeout": 20,
+                "test_task_timeout": custom_timeout,
+            },
+        )
+    )
+    db_session.commit()
+
+    timeout_values: list[float] = []
+
+    class DummyResponse:
+        status_code = 200
+
+        def __init__(self) -> None:
+            self.elapsed = timedelta(milliseconds=5)
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": []}
+
+        @property
+        def text(self) -> str:
+            return ""
+
+    def fake_post(*_, **kwargs):
+        timeout_values.append(kwargs["timeout"])
+        return DummyResponse()
+
+    monkeypatch.setattr("app.services.test_run.httpx.post", fake_post)
+
+    test_run = TestRun(
+        prompt_version_id=prompt_version.id,
+        model_name=provider_model.name,
+        repetitions=1,
+        schema={
+            "llm_provider_id": provider.id,
+            "llm_model_id": provider_model.id,
+            "conversation": [
+                {"role": "system", "content": "保持专业"},
+                {"role": "user", "content": "请测试"},
+            ],
+        },
+    )
+    test_run.prompt_version = prompt_version
+    db_session.add(test_run)
+    db_session.commit()
+
+    result = test_run_service.execute_test_run(db_session, test_run)
+    db_session.commit()
+
+    assert result.status == TestRunStatus.COMPLETED
+    assert timeout_values and timeout_values[0] == custom_timeout
 
 
 def test_resolve_provider_with_string_ids(db_session, prompt_version, provider_model):
