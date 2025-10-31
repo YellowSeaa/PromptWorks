@@ -10,7 +10,9 @@ from fastapi import HTTPException
 from app.api.v1.endpoints import llms as llms_api
 from app.api.v1.endpoints.llms import ChatMessage, LLMStreamInvocationRequest
 from app.models.llm_provider import LLMModel, LLMProvider
+from app.models.system_setting import SystemSetting
 from app.models.usage import LLMUsageLog
+from app.services.system_settings import DEFAULT_QUICK_TEST_TIMEOUT
 
 
 API_PREFIX = "/api/v1/llm-providers"
@@ -204,7 +206,66 @@ def test_invoke_llm_uses_request_parameters_only(client, monkeypatch):
     # 模型不再存储附加参数，仅沿用请求中提供的参数
     assert "temperature" not in captured["json"]
     assert captured["json"]["max_tokens"] == 128
-    assert captured["timeout"] == 30.0
+    assert captured["timeout"] == DEFAULT_QUICK_TEST_TIMEOUT
+
+
+def test_invoke_llm_respects_custom_timeout(client, db_session, monkeypatch):
+    provider = create_provider(
+        client,
+        {
+            "provider_name": "TimeoutCustom",
+            "api_key": "timeout-key",
+            "is_custom": True,
+            "base_url": "https://timeout.llm/api",
+        },
+    )
+    model = create_model(
+        client,
+        provider["id"],
+        {"name": "chat-timeout"},
+    )
+
+    custom_timeout = 45
+    db_session.add(
+        SystemSetting(
+            key="testing_timeout",
+            value={"quick_test_timeout": custom_timeout, "test_task_timeout": 60},
+        )
+    )
+    db_session.commit()
+
+    captured: dict[str, Any] = {}
+
+    class DummyResponse:
+        status_code = 200
+
+        def __init__(self) -> None:
+            self.elapsed = timedelta(milliseconds=10)
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": []}
+
+        @property
+        def text(self) -> str:
+            return ""
+
+    def fake_post(
+        url: str, headers: dict[str, str], json: dict[str, Any], timeout: float
+    ) -> DummyResponse:
+        captured.update(
+            {"url": url, "headers": headers, "json": json, "timeout": timeout}
+        )
+        return DummyResponse()
+
+    monkeypatch.setattr("app.api.v1.endpoints.llms.httpx.post", fake_post)
+
+    body = {
+        "model_id": model["id"],
+        "messages": [{"role": "user", "content": "Hello"}],
+    }
+    response = client.post(f"{API_PREFIX}/{provider['id']}/invoke", json=body)
+    assert response.status_code == 200
+    assert captured["timeout"] == custom_timeout
 
 
 def test_invoke_llm_without_models_requires_model_argument(client):
@@ -610,6 +671,96 @@ def test_stream_invoke_llm_persists_usage(client, db_session, monkeypatch):
     assert captured["json"]["stream"] is True
     assert captured["json"]["temperature"] == 0.6
     assert captured["json"]["messages"][0]["content"] == "请问你好"
+    assert captured["timeout"] == DEFAULT_QUICK_TEST_TIMEOUT
+
+
+def test_stream_invoke_llm_respects_custom_timeout(client, db_session, monkeypatch):
+    provider = create_provider(
+        client,
+        {
+            "provider_name": "StreamTimeout",
+            "api_key": "stream-timeout",
+            "is_custom": True,
+            "base_url": "https://stream.timeout/api",
+        },
+    )
+    model = create_model(client, provider["id"], {"name": "stream-timeout-model"})
+
+    custom_timeout = 75
+    db_session.add(
+        SystemSetting(
+            key="testing_timeout",
+            value={"quick_test_timeout": custom_timeout, "test_task_timeout": 60},
+        )
+    )
+    db_session.commit()
+
+    captured: dict[str, Any] = {}
+
+    class DummyAsyncStream:
+        status_code = 200
+
+        async def __aenter__(self) -> "DummyAsyncStream":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> Literal[False]:
+            return False
+
+        async def aiter_lines(self):
+            yield 'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"hi"}}]}'
+            yield ""
+            yield "data: [DONE]"
+            yield ""
+
+        async def aread(self) -> bytes:
+            return b""
+
+    class DummyAsyncClient:
+        def __init__(self, timeout: float | httpx.Timeout | None = None, **kwargs):
+            captured["timeout"] = timeout
+            self.kwargs = kwargs
+
+        async def __aenter__(self) -> "DummyAsyncClient":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: TracebackType | None,
+        ) -> Literal[False]:
+            return False
+
+        def stream(self, method, url, headers=None, json=None):
+            captured["method"] = method
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return DummyAsyncStream()
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.llms.httpx.AsyncClient",
+        DummyAsyncClient,
+    )
+
+    body = {
+        "model_id": model["id"],
+        "messages": [{"role": "user", "content": "hello"}],
+        "parameters": {"max_tokens": 16},
+    }
+
+    with client.stream(
+        "POST", f"{API_PREFIX}/{provider['id']}/invoke/stream", json=body
+    ) as response:
+        assert response.status_code == 200
+        list(response.iter_text())
+
+    assert captured["timeout"] == custom_timeout
 
 
 def test_quick_test_history_endpoint_returns_logs(client, db_session):

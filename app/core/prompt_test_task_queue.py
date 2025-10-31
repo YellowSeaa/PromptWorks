@@ -134,15 +134,26 @@ def _count_variable_cases(value: Any) -> int:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return len(value) or 1
     if isinstance(value, Mapping):
+        cases = value.get("cases")
+        if isinstance(cases, Sequence) and not isinstance(cases, (str, bytes, bytearray)):
+            return len(cases) or 1
         rows = value.get("rows")
         if isinstance(rows, Sequence) and not isinstance(rows, (str, bytes, bytearray)):
             return len(rows) or 1
-        length = value.get("length") or value.get("count")
+        for key in ("data", "values"):
+            data = value.get(key)
+            if isinstance(data, Sequence) and not isinstance(
+                data, (str, bytes, bytearray)
+            ):
+                return len(data) or 1
+        length = (
+            value.get("length")
+            or value.get("count")
+            or value.get("size")
+            or value.get("total")
+        )
         if isinstance(length, (int, float)) and length > 0:
             return int(length)
-        data = value.get("data")
-        if isinstance(data, Sequence) and not isinstance(data, (str, bytes, bytearray)):
-            return len(data) or 1
     return 1
 
 

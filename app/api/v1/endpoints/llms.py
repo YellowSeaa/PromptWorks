@@ -33,11 +33,15 @@ from app.schemas.llm_provider import (
     LLMUsageMessage,
 )
 from app.services.llm_usage import list_quick_test_usage_logs
+from app.services.system_settings import (
+    DEFAULT_QUICK_TEST_TIMEOUT,
+    get_testing_timeout_config,
+)
 
 router = APIRouter()
 
 logger = get_logger("promptworks.api.llms")
-DEFAULT_INVOKE_TIMEOUT = 30.0
+DEFAULT_INVOKE_TIMEOUT = DEFAULT_QUICK_TEST_TIMEOUT
 
 
 class ChatMessage(BaseModel):
@@ -612,13 +616,16 @@ def invoke_llm(
     logger.info("调用外部 LLM 接口: provider_id=%s url=%s", provider.id, url)
     logger.debug("LLM 请求参数: %s", request_payload)
 
+    timeout_config = get_testing_timeout_config(db)
+    invoke_timeout = float(timeout_config.quick_test_timeout or DEFAULT_INVOKE_TIMEOUT)
+
     start_time = time.perf_counter()
     try:
         response = httpx.post(
             url,
             headers=headers,
             json=request_payload,
-            timeout=DEFAULT_INVOKE_TIMEOUT,
+            timeout=invoke_timeout,
         )
     except httpx.HTTPError as exc:
         logger.error(
@@ -972,10 +979,13 @@ async def stream_invoke_llm(
                 model_name,
             )
 
+    timeout_config = get_testing_timeout_config(db)
+    invoke_timeout = float(timeout_config.quick_test_timeout or DEFAULT_INVOKE_TIMEOUT)
+
     async def _event_stream() -> AsyncIterator[bytes]:
         nonlocal should_persist
         event_lines: list[str] = []
-        async with httpx.AsyncClient(timeout=DEFAULT_INVOKE_TIMEOUT) as async_client:
+        async with httpx.AsyncClient(timeout=invoke_timeout) as async_client:
             try:
                 async with async_client.stream(
                     "POST",

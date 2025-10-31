@@ -17,7 +17,19 @@ export const messages = {
       settings: '设置',
       languageCn: '中文',
       languageEn: 'English',
-      themeDark: '深色模式'
+      themeDark: '深色模式',
+      settingsDialogTitle: '运行超时设置',
+      settingsQuickTestTimeoutLabel: '快速测试超时时间（秒）',
+      settingsTestTaskTimeoutLabel: '测试任务超时时间（秒）',
+      settingsTimeoutHint: '范围 {min}-{max} 秒，建议根据模型平均响应时长调整。',
+      settingsTimeoutRequired: '请输入超时时间',
+      settingsTimeoutRange: '超时时间需在 {min} ~ {max} 秒之间',
+      settingsSaveSuccess: '超时时间设置已保存',
+      settingsSaveFailed: '保存超时时间失败，请稍后重试',
+      settingsLoadFailed: '加载设置失败，请稍后重试',
+      settingsSecondsUnit: '秒',
+      settingsNeverUpdated: '尚未设置超时时间',
+      settingsLastUpdated: '上次更新时间：{time}'
     },
     menu: {
       prompt: 'Prompt 管理',
@@ -251,6 +263,7 @@ export const messages = {
         extraFixRequired: '额外参数格式有误，请修正后再发送',
         inputRequired: '请输入要测试的内容',
         requestCancelled: '本次请求已取消',
+        requestTimeout: '请求超时（{seconds} 秒），请调整超时时间或稍后重试',
         invokeFailed: '调用模型失败，请稍后再试',
         saveNoContent: '请输入内容后再保存为 Prompt',
         contentRequired: '内容不能为空',
@@ -959,7 +972,20 @@ export const messages = {
         noSelection: '未选择单元',
         noOutputs: '暂无输出结果',
         analysis: '分析报告功能建设中',
-        noUnitsFiltered: '暂无符合筛选条件的最小测试单元'
+        noUnitsFiltered: '暂无符合筛选条件的最小测试单元',
+        reasons: {
+          partialTitle: '仅生成 {count} 条输出，本轮暂无数据',
+          failedTitle: '执行失败，未生成输出',
+          failedDescription: '模型未返回错误详情，请检查日志或稍后重试。',
+          cancelledTitle: '实验已取消，未生成输出',
+          runningTitle: '实验仍在执行，稍后查看结果。',
+          pendingTitle: '实验排队中，尚未开始执行。',
+          completedTitle: '模型执行完成，但未返回输出',
+          completedWithReasonTitle: '模型执行完成，但解析结果为空',
+          completedDescription: '可尝试查看原始响应或调整解析逻辑。',
+          unknownTitle: '暂无输出',
+          unknownDescription: '可能因为模型响应为空或尚未开始执行。'
+        }
       }
     }
   },
@@ -981,7 +1007,19 @@ export const messages = {
       settings: 'Settings',
       languageCn: 'Chinese',
       languageEn: 'English',
-      themeDark: 'Dark Mode'
+      themeDark: 'Dark Mode',
+      settingsDialogTitle: 'Timeout Settings',
+      settingsQuickTestTimeoutLabel: 'Quick Test Timeout (seconds)',
+      settingsTestTaskTimeoutLabel: 'Test Task Timeout (seconds)',
+      settingsTimeoutHint: 'Range {min}-{max} seconds. Adjust based on typical model latency.',
+      settingsTimeoutRequired: 'Timeout is required',
+      settingsTimeoutRange: 'Timeout must be between {min} and {max} seconds',
+      settingsSaveSuccess: 'Timeout settings saved',
+      settingsSaveFailed: 'Failed to save timeout settings. Please try again later.',
+      settingsLoadFailed: 'Failed to load settings. Please try again later.',
+      settingsSecondsUnit: 's',
+      settingsNeverUpdated: 'Timeout not configured yet',
+      settingsLastUpdated: 'Last updated at: {time}'
     },
     menu: {
       prompt: 'Prompt Management',
@@ -1215,6 +1253,7 @@ export const messages = {
         extraFixRequired: 'Fix extra parameters before sending.',
         inputRequired: 'Enter content to test.',
         requestCancelled: 'Request cancelled.',
+        requestTimeout: 'Request timed out after {seconds} seconds. Adjust the timeout or try again later.',
         invokeFailed: 'Model invocation failed. Try again later.',
         saveNoContent: 'Enter content before saving as a prompt.',
         contentRequired: 'Content cannot be empty.',
@@ -1925,7 +1964,20 @@ export const messages = {
         noSelection: 'No unit selected',
         noOutputs: 'No output data available',
         analysis: 'Analysis report coming soon',
-        noUnitsFiltered: 'No test units match the current filters'
+        noUnitsFiltered: 'No test units match the current filters',
+        reasons: {
+          partialTitle: 'Only {count} outputs were generated; no data for this run.',
+          failedTitle: 'Execution failed and no output was produced',
+          failedDescription: 'The model did not provide detailed error information. Please check the logs and retry.',
+          cancelledTitle: 'The experiment was cancelled and no output is available.',
+          runningTitle: 'The experiment is still running. Please refresh later.',
+          pendingTitle: 'The experiment is queued and has not started yet.',
+          completedTitle: 'Execution finished but no output was returned.',
+          completedWithReasonTitle: 'Execution finished but parsing produced an empty result.',
+          completedDescription: 'Review the raw response or adjust the parsing logic.',
+          unknownTitle: 'No output available',
+          unknownDescription: 'The model may have returned an empty response or execution has not started yet.'
+        }
       }
     }
   }

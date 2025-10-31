@@ -359,6 +359,7 @@ import type { ChatMessagePayload } from '../types/llm'
 import type { Prompt } from '../types/prompt'
 import { listPromptTags, type PromptTagStats } from '../api/promptTag'
 import { useI18n } from 'vue-i18n'
+import { useTestingSettings, DEFAULT_TIMEOUT_SECONDS } from '../composables/useTestingSettings'
 
 interface CascaderOptionNode {
   value: number | string
@@ -424,6 +425,12 @@ const promptCascaderProps = reactive({
 const { t } = useI18n()
 
 const PROMPT_FETCH_LIMIT = 200
+const DEFAULT_QUICK_TEST_TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS
+
+const {
+  quickTestTimeout: configuredQuickTestTimeout,
+  fetchTimeouts: fetchTestingTimeouts
+} = useTestingSettings()
 
 const isModelLoading = ref(false)
 const isPromptLoading = ref(false)
@@ -673,6 +680,9 @@ watch(
 )
 
 onMounted(() => {
+  if (configuredQuickTestTimeout.value == null) {
+    void fetchTestingTimeouts()
+  }
   void fetchLLMProviders()
   void fetchPromptOptions()
   void fetchPromptTags()
@@ -1273,6 +1283,17 @@ async function handleSend() {
     persistUsage: isStreamingEnabled.value ? undefined : true
   }
 
+  const timeoutSeconds =
+    configuredQuickTestTimeout.value ?? DEFAULT_QUICK_TEST_TIMEOUT_SECONDS
+  let abortedByTimeout = false
+  let abortTimer: ReturnType<typeof window.setTimeout> | null = null
+  if (timeoutSeconds > 0 && Number.isFinite(timeoutSeconds)) {
+    abortTimer = window.setTimeout(() => {
+      abortedByTimeout = true
+      controller.abort()
+    }, timeoutSeconds * 1000)
+  }
+
   let finalResponseText = ''
   let shouldScrollAfterStream = false
   let shouldRefreshHistory = false
@@ -1360,13 +1381,19 @@ async function handleSend() {
     }
   } catch (error: any) {
     if (error?.name === 'AbortError') {
+      const message = abortedByTimeout
+        ? t('quickTest.messages.requestTimeout', { seconds: timeoutSeconds })
+        : t('quickTest.messages.requestCancelled')
       if (!assistantMessage.content) {
-        assistantMessage.content = t('quickTest.messages.requestCancelled')
+        assistantMessage.content = message
       }
       clearStreamingQueue(assistantMessage.id, { flush: true, target: assistantMessage })
       assistantMessage.tokens = undefined
       shouldScrollAfterStream = true
       updateActiveSessionTimestamp()
+      if (abortedByTimeout) {
+        ElMessage.warning(message)
+      }
       return
     }
     let message = t('quickTest.messages.invokeFailed')
@@ -1385,6 +1412,9 @@ async function handleSend() {
     shouldScrollAfterStream = true
     updateActiveSessionTimestamp()
   } finally {
+    if (abortTimer !== null) {
+      clearTimeout(abortTimer)
+    }
     assistantMessage.isStreaming = false
     isSending.value = false
     if (activeStreamController === controller) {

@@ -25,6 +25,7 @@ from app.schemas.prompt import (
 from app.schemas.result import ResultCreate, ResultRead
 from app.schemas.test_run import TestRunCreate, TestRunRead, TestRunUpdate
 from app.schemas.usage import UsageModelSummary, UsageOverview, UsageTimeseriesPoint
+from app.schemas.settings import TestingTimeoutsRead, TestingTimeoutsUpdate
 
 __all__ = [
     "PromptClassRead",
@@ -56,4 +57,6 @@ __all__ = [
     "UsageOverview",
     "UsageModelSummary",
     "UsageTimeseriesPoint",
+    "TestingTimeoutsRead",
+    "TestingTimeoutsUpdate",
 ]
