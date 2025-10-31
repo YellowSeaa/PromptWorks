@@ -18,8 +18,12 @@ from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.result import Result
 from app.models.test_run import TestRun, TestRunStatus
 from app.models.usage import LLMUsageLog
+from app.services.system_settings import (
+    DEFAULT_TEST_TASK_TIMEOUT,
+    get_testing_timeout_config,
+)
 
-DEFAULT_TEST_TIMEOUT = 30.0
+DEFAULT_TEST_TIMEOUT = DEFAULT_TEST_TASK_TIMEOUT
 DEFAULT_CONCURRENCY_LIMIT = 5
 REQUEST_SLEEP_RANGE = (0.05, 0.2)
 
@@ -49,6 +53,7 @@ class RunRequestContext:
     model_name: str
     prompt_id: int | None
     prompt_version_id: int | None
+    timeout_seconds: float
 
 
 class TestRunExecutionError(Exception):
@@ -96,11 +101,15 @@ def execute_test_run(db: Session, test_run: TestRun) -> TestRun:
     test_run.status = TestRunStatus.RUNNING
     db.flush()
 
+    timeout_config = get_testing_timeout_config(db)
+    request_timeout = float(timeout_config.test_task_timeout or DEFAULT_TEST_TIMEOUT)
+
     context = RunRequestContext(
         test_run_id=test_run.id,
         model_name=test_run.model_name,
         prompt_id=prompt_version.prompt_id,
         prompt_version_id=test_run.prompt_version_id,
+        timeout_seconds=request_timeout,
     )
 
     concurrency_limit = DEFAULT_CONCURRENCY_LIMIT
@@ -355,8 +364,9 @@ def _invoke_llm_once(
         pass
 
     try:
+        timeout_value = getattr(context, "timeout_seconds", DEFAULT_TEST_TIMEOUT)
         response = httpx.post(
-            url, headers=dict(headers), json=payload, timeout=DEFAULT_TEST_TIMEOUT
+            url, headers=dict(headers), json=payload, timeout=timeout_value
         )
     except httpx.HTTPError as exc:  # pragma: no cover - 网络异常场景
         raise TestRunExecutionError(

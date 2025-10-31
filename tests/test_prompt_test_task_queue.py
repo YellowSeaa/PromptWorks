@@ -136,24 +136,26 @@ def test_prompt_test_task_execution_succeeds(db_session, monkeypatch):
     assert experiments and experiments[0].status == PromptTestExperimentStatus.COMPLETED
 
 
-def test_prompt_test_task_progress_tracks_total_runs(db_session, monkeypatch):
+@pytest.mark.parametrize("variables_key", ["rows", "cases"])
+def test_prompt_test_task_progress_tracks_total_runs(db_session, monkeypatch, variables_key):
     task = PromptTestTask(
         name="进度统计任务",
         status=PromptTestTaskStatus.READY,
         config=None,
     )
+    samples = [{"text": "A"}, {"text": "B"}, {"text": "C"}]
     unit = PromptTestUnit(
         task=task,
         name="含变量单元",
         model_name="gpt-4o-mini",
         rounds=2,
         temperature=0.5,
-        variables={"rows": [{"text": "A"}, {"text": "B"}, {"text": "C"}]},
+        variables={variables_key: samples},
     )
     db_session.add_all([task, unit])
     db_session.commit()
 
-    expected_total = 6
+    expected_total = unit.rounds * len(samples)
 
     def execute_with_progress(session, experiment, progress_callback=None):
         if progress_callback:

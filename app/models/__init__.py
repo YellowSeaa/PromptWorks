@@ -12,6 +12,7 @@ from app.models.prompt_test import (
     PromptTestExperiment,
     PromptTestExperimentStatus,
 )
+from app.models.system_setting import SystemSetting
 
 __all__ = [
     "Base",
@@ -31,4 +32,5 @@ __all__ = [
     "PromptTestUnit",
     "PromptTestExperiment",
     "PromptTestExperimentStatus",
+    "SystemSetting",
 ]

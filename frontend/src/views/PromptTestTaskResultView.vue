@@ -127,53 +127,84 @@
                 <div
                   v-for="(cell, cellIndex) in row.cells"
                   :key="cellIndex"
-                class="grid-cell"
-              >
-                <div class="output-badge">#{{ row.index }}</div>
-                <div v-if="shouldShowWarning(cell)" class="output-warning">
-                  <el-alert
-                    type="warning"
-                    show-icon
-                    :closable="false"
-                    :title="t('promptTestResult.warnings.missingOutputTitle')"
-                  >
-                    <template #default>
-                      <span>{{ t('promptTestResult.warnings.missingOutputDescription') }}</span>
-                      <el-link
-                        type="primary"
-                        :underline="false"
-                        class="raw-response-link"
-                        @click="openRawResponseDialog(selectedUnits[idx]?.name, row.index, cell?.rawResponse ?? null)"
+                  class="grid-cell"
+                >
+                  <div class="output-badge">#{{ row.index }}</div>
+                  <template v-if="cell">
+                    <div v-if="shouldShowWarning(cell)" class="output-warning">
+                      <el-alert
+                        type="warning"
+                        show-icon
+                        :closable="false"
+                        :title="t('promptTestResult.warnings.missingOutputTitle')"
                       >
-                        {{ t('promptTestResult.warnings.viewRawResponse') }}
-                      </el-link>
-                    </template>
-                  </el-alert>
-                </div>
-                <template v-else>
-                  <div
-                    v-if="!resultMarkdownEnabled"
-                    class="output-content output-content--plain"
-                  >
-                    {{ resolveCellContent(cell) || placeholderText }}
-                  </div>
-                  <div
-                    v-else
-                    class="output-content output-content--markdown"
-                    v-html="renderMarkdown(resolveCellContent(cell) || placeholderText)"
-                  />
-                </template>
-                <div class="output-meta">{{ cell?.meta ?? '' }}</div>
-                <div v-if="cell?.variables && Object.keys(cell.variables).length" class="output-variables">
-                  <div
-                    v-for="(value, key) in cell.variables"
-                    :key="key"
-                      class="variable-item"
-                    >
-                      <span class="variable-key">{{ key }}:</span>
-                      <span class="variable-value">{{ value }}</span>
+                        <template #default>
+                          <span>{{ t('promptTestResult.warnings.missingOutputDescription') }}</span>
+                          <el-link
+                            type="primary"
+                            :underline="false"
+                            class="raw-response-link"
+                            @click="openRawResponseDialog(selectedUnits[cellIndex]?.name, row.index, cell?.rawResponse ?? null)"
+                          >
+                            {{ t('promptTestResult.warnings.viewRawResponse') }}
+                          </el-link>
+                        </template>
+                      </el-alert>
                     </div>
-                  </div>
+                    <template v-else>
+                      <div
+                        v-if="!resultMarkdownEnabled"
+                        class="output-content output-content--plain"
+                      >
+                        {{ resolveCellContent(cell) || placeholderText }}
+                      </div>
+                      <div
+                        v-else
+                        class="output-content output-content--markdown"
+                        v-html="renderMarkdown(resolveCellContent(cell) || placeholderText)"
+                      />
+                    </template>
+                    <div class="output-meta">{{ cell?.meta ?? '' }}</div>
+                    <div v-if="cell?.variables && Object.keys(cell.variables).length" class="output-variables">
+                      <div
+                        v-for="(value, key) in cell.variables"
+                        :key="key"
+                        class="variable-item"
+                      >
+                        <span class="variable-key">{{ key }}:</span>
+                        <span class="variable-value">{{ value }}</span>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div
+                      v-if="getMissingOutputInfo(row.index, cellIndex)"
+                      class="output-warning"
+                    >
+                      <el-alert
+                        :type="getMissingOutputInfo(row.index, cellIndex)?.type ?? 'info'"
+                        show-icon
+                        :closable="false"
+                        :title="getMissingOutputInfo(row.index, cellIndex)?.title ?? ''"
+                      >
+                        <template v-if="getMissingOutputInfo(row.index, cellIndex)?.description" #default>
+                          <span>{{ getMissingOutputInfo(row.index, cellIndex)?.description }}</span>
+                        </template>
+                      </el-alert>
+                    </div>
+                    <div
+                      v-else-if="!resultMarkdownEnabled"
+                      class="output-content output-content--plain"
+                    >
+                      {{ placeholderText }}
+                    </div>
+                    <div
+                      v-else
+                      class="output-content output-content--markdown"
+                      v-html="renderMarkdown(placeholderText)"
+                    />
+                    <div class="output-meta"></div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -290,7 +321,7 @@ import { ElMessage } from 'element-plus'
 import { getPromptTestTask, listPromptTestUnits, listPromptTestExperiments } from '../api/promptTest'
 import type { PromptTestTask } from '../types/promptTest'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
-import { buildPromptTestResultUnit } from '../utils/promptTestResult'
+import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
@@ -303,6 +334,12 @@ interface UnitColumnConfig {
 interface AlignedRow {
   index: number
   cells: Array<UnitOutput | null>
+}
+
+interface MissingOutputInfo {
+  type: 'info' | 'warning' | 'error'
+  title: string
+  description?: string
 }
 
 const router = useRouter()
@@ -496,6 +533,76 @@ const selectedUnits = computed(() =>
     (config) => units.value.find((unit) => unit.id === config.unitId) ?? null
   )
 )
+
+function resolveMissingOutputInfo(
+  unit: PromptTestResultUnit | null,
+  rowIndex: number
+): MissingOutputInfo | null {
+  const context = detectMissingOutput(unit, rowIndex)
+  if (!context) {
+    return null
+  }
+  const produced = context.produced
+  const errorMessage = context.error?.trim() ?? ''
+  switch (context.reason) {
+    case 'partial':
+      if (context.status === 'failed') {
+        return {
+          type: 'error',
+          title: t('promptTestResult.empty.reasons.failedTitle'),
+          description: errorMessage || t('promptTestResult.empty.reasons.failedDescription')
+        }
+      }
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.partialTitle', {
+          count: produced
+        })
+      }
+    case 'failed':
+      return {
+        type: 'error',
+        title: t('promptTestResult.empty.reasons.failedTitle'),
+        description: errorMessage || t('promptTestResult.empty.reasons.failedDescription')
+      }
+    case 'cancelled':
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.cancelledTitle')
+      }
+    case 'running':
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.runningTitle')
+      }
+    case 'pending':
+      return {
+        type: 'info',
+        title: t('promptTestResult.empty.reasons.pendingTitle')
+      }
+    case 'completed':
+      return {
+        type: errorMessage ? 'warning' : 'info',
+        title: errorMessage
+          ? t('promptTestResult.empty.reasons.completedWithReasonTitle')
+          : t('promptTestResult.empty.reasons.completedTitle'),
+        description:
+          errorMessage || t('promptTestResult.empty.reasons.completedDescription')
+      }
+    default:
+      return {
+        type: errorMessage ? 'warning' : 'info',
+        title: t('promptTestResult.empty.reasons.unknownTitle'),
+        description:
+          errorMessage || t('promptTestResult.empty.reasons.unknownDescription')
+      }
+  }
+}
+
+function getMissingOutputInfo(rowIndex: number, columnIndex: number): MissingOutputInfo | null {
+  const unit = selectedUnits.value[columnIndex] ?? null
+  return resolveMissingOutputInfo(unit, rowIndex)
+}
 
 const columnCount = computed(() => Math.max(columnConfigs.value.length, 1))
 const gridTemplateColumnsValue = computed(
