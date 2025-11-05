@@ -217,6 +217,39 @@
         <el-divider />
 
         <section class="form-section">
+          <h4 class="section-title">{{ t('promptTestCreate.form.sections.analysis') }}</h4>
+          <el-form-item :label="t('promptTestCreate.form.fields.analysisModules')">
+            <el-select
+              v-model="taskForm.analysisModules"
+              multiple
+              filterable
+              collapse-tags
+              :loading="analysisModuleLoading"
+              :placeholder="t('promptTestCreate.form.placeholders.analysisModules')"
+            >
+              <el-option
+                v-for="module in analysisModuleOptions"
+                :key="module.module_id"
+                :label="module.name"
+                :value="module.module_id"
+              >
+                <div class="analysis-option">
+                  <span class="analysis-option__title">{{ module.name }}</span>
+                  <span v-if="module.description" class="analysis-option__desc">
+                    {{ module.description }}
+                  </span>
+                </div>
+              </el-option>
+            </el-select>
+            <p class="form-tip">
+              {{ t('promptTestCreate.form.tips.analysisModules') }}
+            </p>
+          </el-form-item>
+        </section>
+
+        <el-divider />
+
+        <section class="form-section">
           <div class="section-title-row">
             <h4 class="section-title">{{ t('promptTestCreate.form.sections.dataset') }}</h4>
             <el-tooltip :content="datasetTooltip" placement="top">
@@ -323,8 +356,10 @@ import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { listPrompts, getPrompt } from '../api/prompt'
 import { listLLMProviders } from '../api/llmProvider'
+import { listAnalysisModules } from '../api/analysis'
 import { createPromptTestTask } from '../api/promptTest'
 import type { Prompt } from '../types/prompt'
+import type { AnalysisModuleDefinition } from '../types/analysis'
 import type { LLMProvider } from '../types/llm'
 
 const route = useRoute()
@@ -392,7 +427,8 @@ const taskForm = reactive({
   description: '',
   promptId: null as number | null,
   promptVersionIds: [] as number[],
-  autoExecute: true
+  autoExecute: true,
+  analysisModules: [] as string[]
 })
 
 const unitForm = reactive({
@@ -416,6 +452,8 @@ const providers = ref<LLMProvider[]>([])
 const csvInputRef = ref<HTMLInputElement | null>(null)
 const routePromptId = ref<number | null>(null)
 const routeVersionIds = ref<number[]>([])
+const analysisModuleOptions = ref<AnalysisModuleDefinition[]>([])
+const analysisModuleLoading = ref(false)
 
 let parameterSetUid = 1
 const parameterSets = ref<ParameterSet[]>([createParameterSet()])
@@ -591,6 +629,19 @@ watch(
 )
 
 watch(
+  analysisModuleOptions,
+  (modules) => {
+    const validIds = new Set(modules.map((module) => module.module_id))
+    if (taskForm.analysisModules.some((id) => !validIds.has(id))) {
+      taskForm.analysisModules = taskForm.analysisModules.filter((id) =>
+        validIds.has(id)
+      )
+    }
+  },
+  { deep: true }
+)
+
+watch(
   providers,
   () => {
     const validKeys = new Set(modelOptionGroups.value.flatMap((group) =>
@@ -748,6 +799,18 @@ async function fetchProviders() {
     ElMessage.error(t('promptTestCreate.messages.loadProviderFailed'))
   } finally {
     providerLoading.value = false
+  }
+}
+
+async function fetchAnalysisModules() {
+  analysisModuleLoading.value = true
+  try {
+    analysisModuleOptions.value = await listAnalysisModules()
+  } catch (error) {
+    console.error('加载分析模块失败', error)
+    ElMessage.error(t('promptTestCreate.messages.loadAnalysisModuleFailed'))
+  } finally {
+    analysisModuleLoading.value = false
   }
 }
 
@@ -1048,7 +1111,8 @@ async function handleSubmit() {
           parameters: set.parameters ?? {}
         })),
         variable_headers: unitForm.variableHeaders,
-        variable_source: unitForm.variableInputMode
+        variable_source: unitForm.variableInputMode,
+        analysis_modules: taskForm.analysisModules
       },
       auto_execute: taskForm.autoExecute,
       units: unitsPayload.map((unit) => ({
@@ -1083,7 +1147,7 @@ async function handleSubmit() {
 }
 
 onMounted(() => {
-  void Promise.all([fetchPrompts(), fetchProviders()])
+  void Promise.all([fetchPrompts(), fetchProviders(), fetchAnalysisModules()])
 })
 </script>
 
@@ -1217,6 +1281,22 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+}
+
+.analysis-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analysis-option__title {
+  font-weight: 600;
+}
+
+.analysis-option__desc {
+  font-size: 12px;
+  color: var(--text-weak-color);
+  white-space: normal;
 }
 
 .add-parameter-set {

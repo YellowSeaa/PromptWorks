@@ -137,7 +137,9 @@ def test_prompt_test_task_execution_succeeds(db_session, monkeypatch):
 
 
 @pytest.mark.parametrize("variables_key", ["rows", "cases"])
-def test_prompt_test_task_progress_tracks_total_runs(db_session, monkeypatch, variables_key):
+def test_prompt_test_task_progress_tracks_total_runs(
+    db_session, monkeypatch, variables_key
+):
     task = PromptTestTask(
         name="进度统计任务",
         status=PromptTestTaskStatus.READY,

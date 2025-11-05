@@ -17,7 +17,9 @@ from app.schemas.analysis_module import (
     ModuleExecutionRequest,
 )
 
-AnalysisCallable = Callable[[pd.DataFrame, dict[str, Any], AnalysisContext], AnalysisResult]
+AnalysisCallable = Callable[
+    [pd.DataFrame, dict[str, Any], AnalysisContext], AnalysisResult
+]
 DataFrameLoader = Callable[[], pd.DataFrame]
 
 
@@ -123,7 +125,9 @@ class AnalysisModuleRegistry:
         if not definition.required_columns:
             return
         missing = [
-            column for column in definition.required_columns if column not in data_frame.columns
+            column
+            for column in definition.required_columns
+            if column not in data_frame.columns
         ]
         if missing:
             formatted = ", ".join(missing)
@@ -138,10 +142,14 @@ class AnalysisModuleRegistry:
                 try:
                     return float(value)
                 except ValueError as exc:  # pragma: no cover - 防御性
-                    raise ParameterValidationError(f"参数 {spec.key} 需要数字类型。") from exc
+                    raise ParameterValidationError(
+                        f"参数 {spec.key} 需要数字类型。"
+                    ) from exc
             raise ParameterValidationError(f"参数 {spec.key} 需要数字类型。")
         if spec.type == AnalysisParameterType.REGEX and not isinstance(value, str):
-            raise ParameterValidationError(f"参数 {spec.key} 需要提供正则表达式字符串。")
+            raise ParameterValidationError(
+                f"参数 {spec.key} 需要提供正则表达式字符串。"
+            )
         if spec.type == AnalysisParameterType.SELECT and spec.options:
             if value not in spec.options:
                 raise ParameterValidationError(

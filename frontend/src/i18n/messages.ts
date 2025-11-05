@@ -823,6 +823,7 @@ export const messages = {
           task: '任务信息',
           unit: '测试单元配置',
           parameterSets: '参数组合',
+          analysis: '分析配置',
           dataset: '测试样本'
         },
         fields: {
@@ -837,7 +838,8 @@ export const messages = {
           topP: 'Top P',
           rounds: '执行轮次',
           extraParameters: '附加参数（JSON）',
-          inputSamples: '输入样本'
+          inputSamples: '输入样本',
+          analysisModules: '分析模块'
         },
         placeholders: {
           taskName: '请输入任务名称',
@@ -848,7 +850,8 @@ export const messages = {
           models: '请选择模型提供者与模型（可多选）',
           parameterSetName: '参数集 {index}',
           extraParameters: '如需覆盖 max_tokens、stop 等参数，请输入 JSON 对象',
-          inputSamples: '每行一个样本，例如：\n你好\n请介绍 PromptWorks'
+          inputSamples: '每行一个样本，例如：\n你好\n请介绍 PromptWorks',
+          analysisModules: '请选择需要自动执行的分析模块'
         },
         tips: {
           noVersions: '该 Prompt 暂无版本，请先在 Prompt 详情中创建版本。',
@@ -861,7 +864,8 @@ export const messages = {
           variableCount: '当前已解析 {count} 条变量样本。',
           datasetTooltip:
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
-          combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。'
+          combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
+          analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。'
         },
         actions: {
           addParameterSet: '新增参数组合',
@@ -881,6 +885,7 @@ export const messages = {
       messages: {
         loadPromptFailed: '加载 Prompt 数据失败，请稍后重试',
         loadProviderFailed: '加载模型数据失败，请稍后重试',
+        loadAnalysisModuleFailed: '加载分析模块失败，请稍后重试',
         taskNameRequired: '请填写任务名称',
         promptRequired: '请选择 Prompt 及版本',
         modelRequired: '请选择要调用的模型',
@@ -933,6 +938,41 @@ export const messages = {
         columnCount: '当前列数：{count}',
         exportCsv: '导出 CSV'
       },
+      analysis: {
+        selectPlaceholder: '请选择分析模块',
+        selectHint: '选择要展示的分析模块后，可执行分析以查看结果',
+        actions: {
+          runSelected: '执行选中模块',
+          run: '执行分析',
+          rerun: '重新执行'
+        },
+        status: {
+          idle: '待运行',
+          running: '执行中',
+          success: '已完成',
+          error: '执行失败'
+        },
+        messages: {
+          loadFailed: '加载分析模块失败，请稍后重试',
+          runSuccess: '分析执行完成',
+          runFailed: '分析执行失败，请稍后重试',
+          paramRequired: '请输入「{field}」',
+          paramRequiredSimple: '请输入必填参数',
+          paramInvalid: '参数填写有误，请检查后重试',
+          numberInvalid: '「{field}」需为数值',
+          numberInvalidSimple: '数值参数无效',
+          selectInvalid: '「{field}」的取值不在可选范围内',
+          selectInvalidSimple: '所选值无效'
+        },
+        chartTypes: {
+          bar: '柱状图',
+          line: '折线图',
+          pie: '饼图'
+        },
+        emptyData: '暂无分析数据',
+        emptyCard: '尚未执行分析，点击右上角按钮开始。',
+        missingModule: '分析模块信息缺失'
+      },
       markdown: {
         label: 'Markdown 渲染',
         on: '开',
@@ -975,7 +1015,7 @@ export const messages = {
         placeholder: '暂无输出',
         noSelection: '未选择单元',
         noOutputs: '暂无输出结果',
-        analysis: '分析报告功能建设中',
+        analysis: '请选择分析模块后执行分析以查看结果',
         noUnitsFiltered: '暂无符合筛选条件的最小测试单元',
         reasons: {
           partialTitle: '仅生成 {count} 条输出，本轮暂无数据',
@@ -1819,6 +1859,7 @@ export const messages = {
           task: 'Task Details',
           unit: 'Test Unit Settings',
           parameterSets: 'Parameter Sets',
+          analysis: 'Analysis',
           dataset: 'Sample Inputs'
         },
         fields: {
@@ -1833,7 +1874,8 @@ export const messages = {
           topP: 'Top P',
           rounds: 'Rounds',
           extraParameters: 'Extra Parameters (JSON)',
-          inputSamples: 'Input Samples'
+          inputSamples: 'Input Samples',
+          analysisModules: 'Analysis Modules'
         },
         placeholders: {
           taskName: 'Enter a friendly name for this task',
@@ -1844,7 +1886,8 @@ export const messages = {
           models: 'Pick one or more provider models',
           parameterSetName: 'Parameter Set {index}',
           extraParameters: 'Override max_tokens, stop, etc. using a JSON object',
-          inputSamples: 'One sample per line, e.g.\nHello\nWhat is PromptWorks?'
+          inputSamples: 'One sample per line, e.g.\nHello\nWhat is PromptWorks?',
+          analysisModules: 'Select analysis modules to auto-run after completion'
         },
         tips: {
           noVersions: 'No versions available. Create a prompt version first.',
@@ -1857,7 +1900,8 @@ export const messages = {
           variableCount: '{count} variable samples parsed.',
           datasetTooltip:
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
-          combinationCount: '{count} minimal test units will be generated.'
+          combinationCount: '{count} minimal test units will be generated.',
+          analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.'
         },
         actions: {
           addParameterSet: 'Add Parameter Set',
@@ -1877,6 +1921,7 @@ export const messages = {
       messages: {
         loadPromptFailed: 'Failed to load prompt data. Please try again later.',
         loadProviderFailed: 'Failed to load model data. Please try again later.',
+        loadAnalysisModuleFailed: 'Failed to load analysis modules. Please try again later.',
         taskNameRequired: 'Task name is required.',
         promptRequired: 'Please select a prompt and version.',
         modelRequired: 'Please select a model.',
@@ -1929,6 +1974,41 @@ export const messages = {
         columnCount: 'Columns: {count}',
         exportCsv: 'Export CSV'
       },
+      analysis: {
+        selectPlaceholder: 'Select analysis modules',
+        selectHint: 'Choose modules to display and run them to view the report.',
+        actions: {
+          runSelected: 'Run Selected',
+          run: 'Run Analysis',
+          rerun: 'Run Again'
+        },
+        status: {
+          idle: 'Idle',
+          running: 'Running',
+          success: 'Completed',
+          error: 'Failed'
+        },
+        messages: {
+          loadFailed: 'Failed to load analysis modules. Please try again later.',
+          runSuccess: 'Analysis completed successfully.',
+          runFailed: 'Failed to run analysis. Please retry later.',
+          paramRequired: 'Please enter {field}.',
+          paramRequiredSimple: 'Please fill in the required parameter.',
+          paramInvalid: 'Parameter values are invalid. Please review and retry.',
+          numberInvalid: '{field} must be a valid number.',
+          numberInvalidSimple: 'Numeric value is invalid.',
+          selectInvalid: '{field} is not within the available options.',
+          selectInvalidSimple: 'Selected value is invalid.'
+        },
+        chartTypes: {
+          bar: 'Bar',
+          line: 'Line',
+          pie: 'Pie'
+        },
+        emptyData: 'No analysis data available.',
+        emptyCard: 'The analysis has not been executed yet. Use the action button above to start.',
+        missingModule: 'Analysis module information is unavailable.'
+      },
       markdown: {
         label: 'Markdown',
         on: 'On',
@@ -1971,7 +2051,7 @@ export const messages = {
         placeholder: 'No output',
         noSelection: 'No unit selected',
         noOutputs: 'No output data available',
-        analysis: 'Analysis report coming soon',
+        analysis: 'Select modules and run the analysis to view the report.',
         noUnitsFiltered: 'No test units match the current filters',
         reasons: {
           partialTitle: 'Only {count} outputs were generated; no data for this run.',

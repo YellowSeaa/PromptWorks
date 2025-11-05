@@ -54,9 +54,7 @@ def _build_summary(data_frame: pd.DataFrame) -> pd.DataFrame:
     """计算耗时与 tokens 相关指标。"""
 
     working_df = data_frame.copy()
-    working_df["_latency_ms"] = pd.to_numeric(
-        working_df["latency_ms"], errors="coerce"
-    )
+    working_df["_latency_ms"] = pd.to_numeric(working_df["latency_ms"], errors="coerce")
     working_df["_tokens_used"] = pd.to_numeric(
         working_df["tokens_used"], errors="coerce"
     )
@@ -103,9 +101,7 @@ def _build_summary(data_frame: pd.DataFrame) -> pd.DataFrame:
         tokens_total = tokens_avg = tokens_p95 = tokens_max = None
     else:
         tokens_total_raw = tokens_series.sum()
-        tokens_total = (
-            int(tokens_total_raw) if pd.notna(tokens_total_raw) else None
-        )
+        tokens_total = int(tokens_total_raw) if pd.notna(tokens_total_raw) else None
         tokens_avg = _round(tokens_series.mean())
         tokens_p95 = _round(_percentile(tokens_series, 0.95))
         tokens_max_raw = tokens_series.max()

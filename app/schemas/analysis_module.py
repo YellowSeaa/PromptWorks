@@ -107,7 +107,9 @@ class AnalysisModuleDefinition(BaseModel):
 
     __test__ = False
 
-    module_id: str = Field(..., pattern=r"^[a-zA-Z0-9_\-]+$", description="模块唯一 ID。")
+    module_id: str = Field(
+        ..., pattern=r"^[a-zA-Z0-9_\-]+$", description="模块唯一 ID。"
+    )
     name: str = Field(..., description="模块名称。")
     description: str | None = Field(default=None, description="模块说明。")
     parameters: list[AnalysisParameterSpec] = Field(
@@ -136,3 +138,26 @@ class ModuleExecutionRequest(BaseModel):
         default_factory=dict, description="用户填写的参数内容。"
     )
 
+
+class AnalysisResultPayload(BaseModel):
+    """面向 API 响应的分析结果负载。"""
+
+    __test__ = False
+
+    module_id: str = Field(..., description="执行的模块标识。")
+    data: list[dict[str, Any]] = Field(
+        default_factory=list, description="分析结果数据记录，按行展开。"
+    )
+    columns_meta: list[AnalysisColumnMeta] = Field(
+        default_factory=list, description="列的展示配置列表。"
+    )
+    insights: list[str] = Field(
+        default_factory=list, description="分析洞察或提示信息。"
+    )
+    llm_usage: dict[str, Any] | None = Field(
+        default=None, description="LLM 调用资源消耗信息。"
+    )
+    protocol_version: str = Field(default="v1", description="分析协议版本号。")
+    extra: dict[str, Any] | None = Field(
+        default=None, description="模块自定义的扩展字段。"
+    )

@@ -47,6 +47,7 @@
 ### 2.5 模块定义与执行请求
 - `AnalysisModuleDefinition`：注册模块时提交的元数据，包含 `module_id`、`name`、`description`、`parameters`、`required_columns`、`tags`、`protocol_version`、`allow_llm`。
 - `ModuleExecutionRequest`：用户发起执行时的请求载体，包含 `module_id`、`task_id`、`parameters`。
+- `AnalysisResultPayload`：API 层返回给前端的结构化结果，字段包括 `module_id`、`data`（列表化的数据记录）、`columns_meta`、`insights`、`llm_usage`、`protocol_version` 与 `extra`。
 
 ## 3. 注册与执行骨架
 
@@ -86,11 +87,23 @@
   4. 返回 `AnalysisResult`。
 - 目前已内置 `latency_tokens_summary` 模块，提供耗时与 tokens 汇总分析，可作为实现自定义模块的参考。
 
-## 4. 后续工作指引
-1. 在 FastAPI 层封装注册与执行接口，提供 REST API 给前端调用。
-2. 结合真实数据源实现 `data_loader`，可在调度前统一处理 CSV → DataFrame 的转换与缓存。
-3. 编写示例模块，覆盖无 LLM 与带 LLM 两种场景，验证上下文与返回结构。
-4. 集成日志记录与指标采集，监控执行耗时与失败率。
-5. 为用户文档准备模块开发指南（含模板、参数声明示例、LLM 使用注意事项）。
+### 3.4 `analysis_runner`
+- 职责：负责解析任务 ID、加载测试结果 `DataFrame`、构造 `AnalysisContext` 并调用执行服务。
+- 核心方法：
+  - `execute_module_for_test_run(db, request, user_id=None)`：面向测试任务的统一入口，返回 `AnalysisResult`。
+  - `serialize_analysis_result(module_id, result)`：将内部结果转换为 `AnalysisResultPayload`，处理空值与类型。
+- 错误类型：
+  - `AnalysisTaskNotFoundError`：指定任务不存在。
+  - `AnalysisDataLoadError`：任务 ID 无效或结果数据缺失。
 
-文档版本：2025-11-05
+## 4. FastAPI 接口
+- `GET /api/v1/analysis/modules`：列出 `AnalysisModuleDefinition` 列表，供前端渲染模块目录。
+- `POST /api/v1/analysis/modules/execute`：接收 `ModuleExecutionRequest`，返回 `AnalysisResultPayload`；统一处理参数错误、字段缺失、任务不存在等异常并转换为 HTTP 状态码。
+
+## 5. 后续工作指引
+1. 扩展更多内置模块（例如成功率、响应分类等），丰富模块目录。
+2. 将 LLM 客户端注入 `AnalysisContext`，并提供调用限额与日志记录。
+3. 引入任务级缓存/异步调度，优化大型数据集的分析性能。
+4. 细化用户文档与示例仓库，指导自定义模块的编写与调试。
+
+文档版本：2025-11-06

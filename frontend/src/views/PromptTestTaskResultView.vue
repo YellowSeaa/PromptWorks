@@ -298,7 +298,218 @@
         <el-empty v-else :description="t('promptTestResult.empty.noUnitsFiltered')" />
       </div>
       <div v-else class="analysis-panel">
-        <el-empty :description="t('promptTestResult.empty.analysis')" />
+        <div class="analysis-toolbar">
+          <el-select
+            v-model="selectedAnalysisModules"
+            multiple
+            collapse-tags
+            filterable
+            size="small"
+            class="analysis-toolbar__selector"
+            :placeholder="t('promptTestResult.analysis.selectPlaceholder')"
+            :loading="analysisModulesLoading"
+            clearable
+          >
+            <el-option
+              v-for="module in analysisModules"
+              :key="module.module_id"
+              :label="module.name"
+              :value="module.module_id"
+            >
+              <div class="analysis-option">
+                <span class="analysis-option__title">{{ module.name }}</span>
+                <span v-if="module.description" class="analysis-option__desc">
+                  {{ module.description }}
+                </span>
+              </div>
+            </el-option>
+          </el-select>
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="!selectedAnalysisModules.length"
+            :loading="runningSelected"
+            @click="runSelectedModules"
+          >
+            {{ t('promptTestResult.analysis.actions.runSelected') }}
+          </el-button>
+        </div>
+        <div v-if="!selectedAnalysisModules.length" class="analysis-empty">
+          <el-empty :description="t('promptTestResult.analysis.selectHint')" />
+        </div>
+        <div v-else class="analysis-modules-grid">
+          <el-card
+            v-for="moduleId in selectedAnalysisModules"
+            :key="moduleId"
+            class="analysis-module-card"
+            shadow="hover"
+          >
+            <template #header>
+              <div class="analysis-module-card__header">
+                <div class="analysis-module-card__title">
+                  <h4>{{ moduleStates[moduleId]?.definition.name || moduleId }}</h4>
+                  <p
+                    v-if="moduleStates[moduleId]?.definition.description"
+                    class="analysis-module-card__desc"
+                  >
+                    {{ moduleStates[moduleId]?.definition.description }}
+                  </p>
+                </div>
+                <div class="analysis-module-card__actions" v-if="moduleStates[moduleId]">
+                  <el-tag
+                    size="small"
+                    :type="moduleStates[moduleId].status === 'error' ? 'danger' : 'info'"
+                  >
+                    {{ t(`promptTestResult.analysis.status.${moduleStates[moduleId].status}`) }}
+                  </el-tag>
+                  <el-button
+                    size="small"
+                    text
+                    :loading="moduleStates[moduleId].status === 'running'"
+                    @click.stop="runAnalysisModule(moduleId)"
+                  >
+                    {{
+                      moduleStates[moduleId].result
+                        ? t('promptTestResult.analysis.actions.rerun')
+                        : t('promptTestResult.analysis.actions.run')
+                    }}
+                  </el-button>
+                </div>
+              </div>
+            </template>
+            <div v-if="moduleStates[moduleId]" class="analysis-module-card__body">
+              <div
+                v-if="moduleStates[moduleId].definition.parameters.length"
+                class="analysis-params"
+              >
+                <el-form label-position="top" size="small" class="analysis-params__form">
+                  <el-form-item
+                    v-for="param in moduleStates[moduleId].definition.parameters"
+                    :key="param.key"
+                    :label="param.label"
+                    :required="param.required"
+                    class="analysis-param-item"
+                  >
+                    <template v-if="param.type === 'select'">
+                      <el-select
+                        v-model="moduleStates[moduleId].form[param.key]"
+                        size="small"
+                        class="analysis-param-input"
+                        clearable
+                      >
+                        <el-option
+                          v-for="(option, optionIndex) in (param.options || [])"
+                          :key="`${param.key}-${optionIndex}`"
+                          :label="String(option)"
+                          :value="option"
+                        />
+                      </el-select>
+                    </template>
+                    <template v-else-if="param.type === 'number'">
+                      <el-input-number
+                        v-model="moduleStates[moduleId].form[param.key]"
+                        :controls="false"
+                        class="analysis-param-input"
+                        :placeholder="param.help_text || ''"
+                      />
+                    </template>
+                    <template v-else>
+                      <el-input
+                        v-model="moduleStates[moduleId].form[param.key]"
+                        size="small"
+                        class="analysis-param-input"
+                        :placeholder="param.help_text || ''"
+                      />
+                    </template>
+                    <p v-if="param.help_text" class="analysis-param-tip">{{ param.help_text }}</p>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <el-alert
+                v-if="moduleStates[moduleId].errorMessage"
+                type="error"
+                :title="moduleStates[moduleId].errorMessage"
+                show-icon
+                class="analysis-alert"
+              />
+              <div v-if="moduleStates[moduleId].status === 'running'" class="analysis-loading">
+                <el-skeleton animated :rows="3" />
+              </div>
+              <template v-else-if="moduleStates[moduleId].result">
+                <el-alert
+                  v-if="moduleStates[moduleId].result.insights.length"
+                  type="info"
+                  show-icon
+                  class="analysis-alert"
+                >
+                  <ul class="analysis-insight-list">
+                    <li
+                      v-for="(insight, insightIndex) in moduleStates[moduleId].result.insights"
+                      :key="insightIndex"
+                    >
+                      {{ insight }}
+                    </li>
+                  </ul>
+                </el-alert>
+                <el-table
+                  :data="moduleStates[moduleId].result.data"
+                  size="small"
+                  border
+                  stripe
+                  :empty-text="t('promptTestResult.analysis.emptyData')"
+                >
+                  <el-table-column
+                    v-for="meta in moduleStates[moduleId].result.columns_meta"
+                    :key="meta.name"
+                    :prop="meta.name"
+                    :label="meta.label"
+                  >
+                    <template #default="{ row }">
+                      {{ formatAnalysisCell(row[meta.name]) }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div v-if="getChartableColumns(moduleId).length" class="analysis-chart-block">
+                  <div class="analysis-chart-toolbar">
+                    <el-select
+                      v-model="moduleStates[moduleId].chartColumn"
+                      size="small"
+                      class="analysis-chart-toolbar__select"
+                      @change="handleChartConfigChange(moduleId)"
+                    >
+                      <el-option
+                        v-for="meta in getChartableColumns(moduleId)"
+                        :key="`${moduleId}-${meta.name}`"
+                        :label="meta.label"
+                        :value="meta.name"
+                      />
+                    </el-select>
+                    <el-select
+                      v-model="moduleStates[moduleId].chartType"
+                      size="small"
+                      class="analysis-chart-toolbar__select"
+                      @change="handleChartConfigChange(moduleId)"
+                    >
+                      <el-option
+                        v-for="type in getChartTypeOptions(moduleId)"
+                        :key="`${moduleId}-${type}`"
+                        :label="t(`promptTestResult.analysis.chartTypes.${type}`)"
+                        :value="type"
+                      />
+                    </el-select>
+                  </div>
+                  <div class="analysis-chart" :ref="(el) => handleChartRef(moduleId, el)"></div>
+                </div>
+              </template>
+              <el-empty
+                v-else
+                :description="t('promptTestResult.analysis.emptyCard')"
+                class="analysis-empty-card"
+              />
+            </div>
+            <el-empty v-else :description="t('promptTestResult.analysis.missingModule')" />
+          </el-card>
+        </div>
       </div>
     </el-card>
     <el-dialog
@@ -314,7 +525,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -323,6 +534,14 @@ import type { PromptTestTask } from '../types/promptTest'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
+import * as echarts from 'echarts'
+import { listAnalysisModules, executeAnalysisModule } from '../api/analysis'
+import type {
+  AnalysisModuleDefinition,
+  AnalysisResultPayload,
+  AnalysisColumnMeta,
+  AnalysisParameterSpec
+} from '../types/analysis'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
 
@@ -342,6 +561,20 @@ interface MissingOutputInfo {
   description?: string
 }
 
+type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
+
+interface AnalysisModuleState {
+  definition: AnalysisModuleDefinition
+  form: Record<string, unknown>
+  status: AnalysisRunStatus
+  result: AnalysisResultPayload | null
+  errorMessage: string | null
+  chartColumn: string | null
+  chartType: string | null
+  chartInstance: echarts.ECharts | null
+  autoTriggered: boolean
+}
+
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -356,6 +589,76 @@ const rawResponseDialog = reactive({
   title: '',
   content: ''
 })
+
+const analysisModules = ref<AnalysisModuleDefinition[]>([])
+const analysisModulesLoading = ref(false)
+const selectedAnalysisModules = ref<string[]>([])
+const moduleStates = reactive<Record<string, AnalysisModuleState>>({})
+const autoSelectedModuleIds = ref<string[]>([])
+const chartRefs = new Map<string, HTMLElement | null>()
+let analysisSelectionInitialized = false
+
+function buildDefaultAnalysisForm(definition: AnalysisModuleDefinition): Record<string, unknown> {
+  const form: Record<string, unknown> = {}
+  definition.parameters.forEach((param) => {
+    if (param.default !== undefined && param.default !== null) {
+      form[param.key] = param.default
+    } else if (param.type === 'select' && Array.isArray(param.options) && param.options.length) {
+      form[param.key] = param.options[0]
+    } else if (param.type === 'number') {
+      form[param.key] = null
+    } else {
+      form[param.key] = ''
+    }
+  })
+  return form
+}
+
+function ensureModuleState(definition: AnalysisModuleDefinition) {
+  const existing = moduleStates[definition.module_id]
+  if (existing) {
+    existing.definition = definition
+    const defaults = buildDefaultAnalysisForm(definition)
+    const validKeys = new Set(definition.parameters.map((param) => param.key))
+    Object.keys(existing.form).forEach((key) => {
+      if (!validKeys.has(key)) {
+        delete existing.form[key]
+      }
+    })
+    definition.parameters.forEach((param) => {
+      if (!(param.key in existing.form)) {
+        existing.form[param.key] = defaults[param.key]
+      }
+    })
+    return
+  }
+  moduleStates[definition.module_id] = {
+    definition,
+    form: buildDefaultAnalysisForm(definition),
+    status: 'idle',
+    result: null,
+    errorMessage: null,
+    chartColumn: null,
+    chartType: null,
+    chartInstance: null,
+    autoTriggered: false
+  }
+}
+
+function getModuleState(moduleId: string): AnalysisModuleState | null {
+  return moduleStates[moduleId] ?? null
+}
+
+function extractConfiguredAnalysisModules(
+  config: Record<string, unknown> | null | undefined
+): string[] {
+  if (!config || typeof config !== 'object') return []
+  const modules = (config as Record<string, unknown>).analysis_modules
+  if (!Array.isArray(modules)) return []
+  return modules
+    .map((item) => (typeof item === 'string' && item.trim() ? item.trim() : null))
+    .filter((item): item is string => Boolean(item))
+}
 
 const tabList = ['units', 'results', 'analysis'] as const
 type TabKey = (typeof tabList)[number]
@@ -528,6 +831,10 @@ const filteredUnits = computed(() =>
   })
 )
 
+const configuredModuleIds = computed(() =>
+  extractConfiguredAnalysisModules(task.value?.config as Record<string, unknown> | null)
+)
+
 const selectedUnits = computed(() =>
   columnConfigs.value.map(
     (config) => units.value.find((unit) => unit.id === config.unitId) ?? null
@@ -669,6 +976,74 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => task.value?.id,
+  () => {
+    analysisSelectionInitialized = false
+    selectedAnalysisModules.value = []
+    Object.keys(moduleStates).forEach((moduleId) => {
+      const state = moduleStates[moduleId]
+      state.status = 'idle'
+      state.result = null
+      state.errorMessage = null
+      state.chartColumn = null
+      state.chartType = null
+      state.autoTriggered = false
+      disposeModuleChart(moduleId)
+    })
+  }
+)
+
+watch(
+  [analysisModules, configuredModuleIds],
+  ([modules, configured]) => {
+    const validIds = new Set<string>()
+    modules.forEach((module) => {
+      ensureModuleState(module)
+      validIds.add(module.module_id)
+    })
+    autoSelectedModuleIds.value = configured.filter((id) => validIds.has(id))
+    if (selectedAnalysisModules.value.some((id) => !validIds.has(id))) {
+      selectedAnalysisModules.value = selectedAnalysisModules.value.filter((id) =>
+        validIds.has(id)
+      )
+    }
+    if (!analysisSelectionInitialized && modules.length) {
+      const defaults = selectedAnalysisModules.value.length
+        ? selectedAnalysisModules.value
+        : autoSelectedModuleIds.value.length
+        ? [...autoSelectedModuleIds.value]
+        : [modules[0].module_id]
+      selectedAnalysisModules.value = defaults
+      analysisSelectionInitialized = true
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  selectedAnalysisModules,
+  (ids, previous) => {
+    ids.forEach((id) => {
+      const state = getModuleState(id)
+      if (!state) return
+      if (
+        autoSelectedModuleIds.value.includes(id) &&
+        state.status === 'idle' &&
+        !state.autoTriggered
+      ) {
+        state.autoTriggered = true
+        void runAnalysisModule(id)
+      }
+    })
+    previous.forEach((id) => {
+      if (!ids.includes(id)) {
+        disposeModuleChart(id)
+      }
+    })
+  }
+)
+
 function formatUnitOption(unit: PromptTestResultUnit) {
   const displayParts: string[] = []
   const seenSegments = new Set<string>()
@@ -714,6 +1089,290 @@ function formatUnitOption(unit: PromptTestResultUnit) {
     return String(unit.id)
   }
   return displayParts.join(' | ')
+}
+
+function getChartableColumns(moduleId: string): AnalysisColumnMeta[] {
+  const state = getModuleState(moduleId)
+  if (!state?.result) return []
+  return state.result.columns_meta.filter(
+    (meta) => Array.isArray(meta.visualizable) && meta.visualizable.length > 0
+  )
+}
+
+function disposeModuleChart(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (state?.chartInstance) {
+    state.chartInstance.dispose()
+    state.chartInstance = null
+  }
+  chartRefs.delete(moduleId)
+}
+
+function resolveDimensionColumn(state: AnalysisModuleState): AnalysisColumnMeta | null {
+  if (!state.result || !state.result.columns_meta.length) {
+    return null
+  }
+  const primary = state.result.columns_meta[0]
+  if (primary.name === state.chartColumn && state.result.columns_meta.length > 1) {
+    return state.result.columns_meta[1]
+  }
+  return primary
+}
+
+function renderModuleChart(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state?.result) {
+    disposeModuleChart(moduleId)
+    return
+  }
+  const chartable = getChartableColumns(moduleId)
+  if (!chartable.length) {
+    disposeModuleChart(moduleId)
+    return
+  }
+
+  if (!state.chartColumn || !chartable.some((meta) => meta.name === state.chartColumn)) {
+    state.chartColumn = chartable[0].name
+  }
+  const currentColumn = state.chartColumn
+  const columnMeta = chartable.find((meta) => meta.name === currentColumn)
+  const chartTypes = columnMeta?.visualizable ?? []
+  if (!state.chartType || !chartTypes.includes(state.chartType)) {
+    state.chartType = chartTypes[0] ?? 'bar'
+  }
+  const chartType = state.chartType
+  const container = chartRefs.get(moduleId)
+  if (!container) {
+    return
+  }
+  if (!state.chartInstance) {
+    state.chartInstance = echarts.init(container)
+  }
+
+  const dimensionMeta = resolveDimensionColumn(state)
+  const dimensionKey = dimensionMeta?.name ?? currentColumn
+
+  const categories: string[] = []
+  const values: number[] = []
+
+  state.result.data.forEach((row) => {
+    const rawCategory = row[dimensionKey]
+    const rawValue = row[currentColumn]
+    const category = rawCategory === null || rawCategory === undefined ? '' : String(rawCategory)
+    const numeric = typeof rawValue === 'number' ? rawValue : Number(rawValue)
+    if (!category || Number.isNaN(numeric) || !Number.isFinite(numeric)) {
+      return
+    }
+    categories.push(category)
+    values.push(numeric)
+  })
+
+  if (!categories.length) {
+    state.chartInstance.clear()
+    return
+  }
+
+  let option: echarts.EChartsOption
+  if (chartType === 'pie') {
+    option = {
+      tooltip: { trigger: 'item' },
+      legend: { orient: 'horizontal', top: 0 },
+      series: [
+        {
+          type: 'pie',
+          radius: '65%',
+          center: ['50%', '60%'],
+          data: categories.map((name, index) => ({ name, value: values[index] })),
+          label: { formatter: '{b}: {c}' }
+        }
+      ]
+    }
+  } else {
+    option = {
+      tooltip: { trigger: 'axis' },
+      xAxis: {
+        type: 'category',
+        data: categories,
+        axisLabel: { interval: 0 }
+      },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          type: chartType === 'line' ? 'line' : 'bar',
+          data: values,
+          smooth: chartType === 'line',
+          name: columnMeta?.label ?? currentColumn,
+          areaStyle: chartType === 'line' ? {} : undefined
+        }
+      ]
+    }
+  }
+
+  state.chartInstance.setOption(option)
+  state.chartInstance.resize()
+}
+
+function handleChartRef(moduleId: string, el: HTMLElement | null) {
+  if (!el) {
+    disposeModuleChart(moduleId)
+    return
+  }
+  chartRefs.set(moduleId, el)
+  void nextTick(() => renderModuleChart(moduleId))
+}
+
+function handleChartConfigChange(moduleId: string) {
+  void nextTick(() => renderModuleChart(moduleId))
+}
+
+function getChartTypeOptions(moduleId: string): string[] {
+  const state = getModuleState(moduleId)
+  if (!state?.result) return []
+  const column = state.chartColumn
+  if (column) {
+    const meta = state.result.columns_meta.find((item) => item.name === column)
+    if (meta && Array.isArray(meta.visualizable) && meta.visualizable.length) {
+      return meta.visualizable
+    }
+  }
+  const chartable = getChartableColumns(moduleId)
+  if (!chartable.length) {
+    return []
+  }
+  return chartable[0].visualizable ?? []
+}
+
+function mapParameterValue(spec: AnalysisParameterSpec, value: unknown): unknown {
+  if (spec.type === 'number') {
+    if (typeof value === 'number') {
+      return value
+    }
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) {
+      throw new Error(
+        spec.label
+          ? t('promptTestResult.analysis.messages.numberInvalid', { field: spec.label })
+          : t('promptTestResult.analysis.messages.numberInvalidSimple')
+      )
+    }
+    return numeric
+  }
+  if (spec.type === 'select' && Array.isArray(spec.options) && spec.options.length) {
+    if (!spec.options.includes(value)) {
+      throw new Error(
+        spec.label
+          ? t('promptTestResult.analysis.messages.selectInvalid', { field: spec.label })
+          : t('promptTestResult.analysis.messages.selectInvalidSimple')
+      )
+    }
+    return value
+  }
+  if (value === undefined || value === null) {
+    return ''
+  }
+  return value
+}
+
+function prepareModuleParameters(moduleId: string): Record<string, unknown> | null {
+  const state = getModuleState(moduleId)
+  if (!state) return null
+  const params: Record<string, unknown> = {}
+  for (const spec of state.definition.parameters) {
+    const rawValue = state.form[spec.key]
+    if (rawValue === undefined || rawValue === null || rawValue === '') {
+      if (spec.required) {
+        ElMessage.warning(
+          spec.label
+            ? t('promptTestResult.analysis.messages.paramRequired', { field: spec.label })
+            : t('promptTestResult.analysis.messages.paramRequiredSimple')
+        )
+        return null
+      }
+      continue
+    }
+    try {
+      params[spec.key] = mapParameterValue(spec, rawValue)
+    } catch (error: any) {
+      ElMessage.warning(error?.message ?? t('promptTestResult.analysis.messages.paramInvalid'))
+      return null
+    }
+  }
+  return params
+}
+
+async function runAnalysisModule(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state || !task.value) return
+  if (state.status === 'running') return
+  const parameters = prepareModuleParameters(moduleId)
+  if (parameters === null) {
+    return
+  }
+  state.status = 'running'
+  state.errorMessage = null
+  try {
+    const result = await executeAnalysisModule({
+      module_id: moduleId,
+      task_id: String(task.value.id),
+      parameters
+    })
+    state.result = result
+    state.status = 'success'
+    state.autoTriggered = true
+    state.errorMessage = null
+    if (!state.chartColumn) {
+      const chartable = getChartableColumns(moduleId)
+      if (chartable.length) {
+        state.chartColumn = chartable[0].name
+        state.chartType = chartable[0].visualizable[0] ?? 'bar'
+      }
+    }
+    await nextTick()
+    renderModuleChart(moduleId)
+    ElMessage.success(t('promptTestResult.analysis.messages.runSuccess'))
+  } catch (error: any) {
+    state.status = 'error'
+    state.errorMessage =
+      error?.message ?? t('promptTestResult.analysis.messages.runFailed')
+    state.result = null
+    disposeModuleChart(moduleId)
+    ElMessage.error(state.errorMessage)
+  }
+}
+
+const runningSelected = ref(false)
+
+async function runSelectedModules() {
+  if (!selectedAnalysisModules.value.length) return
+  runningSelected.value = true
+  try {
+    for (const moduleId of selectedAnalysisModules.value) {
+      await runAnalysisModule(moduleId)
+    }
+  } finally {
+    runningSelected.value = false
+  }
+}
+
+function formatAnalysisCell(value: unknown): string {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value.toString() : '-'
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch (error) {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+function handleWindowResize() {
+  Object.values(moduleStates).forEach((state) => {
+    state.chartInstance?.resize()
+  })
 }
 
 function addColumn() {
@@ -808,6 +1467,18 @@ function extractTaskId(value: unknown): number | null {
   return null
 }
 
+async function fetchAnalysisModulesList() {
+  analysisModulesLoading.value = true
+  try {
+    analysisModules.value = await listAnalysisModules()
+  } catch (error) {
+    console.error('加载分析模块失败', error)
+    ElMessage.error(t('promptTestResult.analysis.messages.loadFailed'))
+  } finally {
+    analysisModulesLoading.value = false
+  }
+}
+
 async function loadTaskResult(taskId: number) {
   loading.value = true
   errorMessage.value = null
@@ -865,7 +1536,13 @@ async function refreshTask() {
 }
 
 onMounted(() => {
-  void refreshTask()
+  window.addEventListener('resize', handleWindowResize)
+  void Promise.all([refreshTask(), fetchAnalysisModulesList()])
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleWindowResize)
+  Object.keys(moduleStates).forEach((moduleId) => disposeModuleChart(moduleId))
 })
 
 watch(
@@ -1127,7 +1804,156 @@ watch(
 }
 
 .analysis-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.analysis-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.analysis-toolbar__selector {
+  flex: 1;
+  min-width: 260px;
+}
+
+.analysis-empty {
   padding: 40px 0;
+}
+
+.analysis-modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.analysis-module-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.analysis-module-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.analysis-module-card__title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-module-card__title h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.analysis-module-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-weak-color);
+}
+
+.analysis-module-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysis-module-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.analysis-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analysis-option__title {
+  font-weight: 600;
+}
+
+.analysis-option__desc {
+  font-size: 12px;
+  color: var(--text-weak-color);
+  white-space: normal;
+}
+
+.analysis-params__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.analysis-param-item {
+  margin-bottom: 0;
+}
+
+.analysis-param-input {
+  width: 100%;
+}
+
+.analysis-param-tip {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-weak-color);
+}
+
+.analysis-alert {
+  margin-bottom: 8px;
+}
+
+.analysis-insight-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.analysis-insight-list li {
+  margin-bottom: 4px;
+}
+
+.analysis-loading {
+  padding: 16px 0;
+}
+
+.analysis-empty-card {
+  padding: 24px 0;
+}
+
+.analysis-chart-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analysis-chart-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.analysis-chart-toolbar__select {
+  min-width: 180px;
+}
+
+.analysis-chart {
+  width: 100%;
+  height: 280px;
+}
+
+.analysis-empty-card :deep(.el-empty__description) {
+  font-size: 13px;
 }
 
 .units-panel {

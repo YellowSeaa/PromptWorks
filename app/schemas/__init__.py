@@ -1,3 +1,13 @@
+from app.schemas.analysis_module import (
+    AnalysisColumnMeta,
+    AnalysisContext,
+    AnalysisModuleDefinition,
+    AnalysisParameterSpec,
+    AnalysisParameterType,
+    AnalysisResult,
+    AnalysisResultPayload,
+    ModuleExecutionRequest,
+)
 from app.schemas.llm_provider import (
     LLMProviderCreate,
     LLMProviderRead,
@@ -42,6 +52,14 @@ __all__ = [
     "PromptTagListResponse",
     "PromptVersionCreate",
     "PromptVersionRead",
+    "AnalysisParameterType",
+    "AnalysisParameterSpec",
+    "AnalysisColumnMeta",
+    "AnalysisContext",
+    "AnalysisResult",
+    "AnalysisResultPayload",
+    "AnalysisModuleDefinition",
+    "ModuleExecutionRequest",
     "TestRunCreate",
     "TestRunUpdate",
     "TestRunRead",
