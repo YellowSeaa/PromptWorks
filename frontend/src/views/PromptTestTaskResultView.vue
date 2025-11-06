@@ -298,7 +298,300 @@
         <el-empty v-else :description="t('promptTestResult.empty.noUnitsFiltered')" />
       </div>
       <div v-else class="analysis-panel">
-        <el-empty :description="t('promptTestResult.empty.analysis')" />
+        <div class="analysis-toolbar">
+          <el-select
+            v-model="selectedAnalysisModules"
+            multiple
+            collapse-tags
+            filterable
+            size="small"
+            class="analysis-toolbar__selector"
+            :placeholder="t('promptTestResult.analysis.selectPlaceholder')"
+            :loading="analysisModulesLoading"
+            clearable
+          >
+            <el-option
+              v-for="module in analysisModules"
+              :key="module.module_id"
+              :label="module.name"
+              :value="module.module_id"
+            >
+              <div class="analysis-option">
+                <span class="analysis-option__title">{{ module.name }}</span>
+                <span v-if="module.description" class="analysis-option__desc">
+                  {{ module.description }}
+                </span>
+              </div>
+            </el-option>
+          </el-select>
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="!selectedAnalysisModules.length"
+            :loading="runningSelected"
+            @click="runSelectedModules"
+          >
+            {{ t('promptTestResult.analysis.actions.runSelected') }}
+          </el-button>
+        </div>
+        <div v-if="!selectedAnalysisModules.length" class="analysis-empty">
+          <el-empty :description="t('promptTestResult.analysis.selectHint')" />
+        </div>
+        <div v-else class="analysis-modules-grid">
+          <el-card
+            v-for="moduleId in selectedAnalysisModules"
+            :key="moduleId"
+            class="analysis-module-card"
+            shadow="hover"
+          >
+            <template #header>
+              <div class="analysis-module-card__header">
+                <div class="analysis-module-card__title">
+                  <h4>{{ moduleStates[moduleId]?.definition.name || moduleId }}</h4>
+                  <p
+                    v-if="moduleStates[moduleId]?.definition.description"
+                    class="analysis-module-card__desc"
+                  >
+                    {{ moduleStates[moduleId]?.definition.description }}
+                  </p>
+                </div>
+                <div class="analysis-module-card__actions" v-if="moduleStates[moduleId]">
+                  <el-tag
+                    size="small"
+                    :type="moduleStates[moduleId].status === 'error' ? 'danger' : 'info'"
+                  >
+                    {{ t(`promptTestResult.analysis.status.${moduleStates[moduleId].status}`) }}
+                  </el-tag>
+                  <el-button
+                    size="small"
+                    text
+                    :loading="moduleStates[moduleId].status === 'running'"
+                    @click.stop="runAnalysisModule(moduleId)"
+                  >
+                    {{
+                      moduleStates[moduleId].result
+                        ? t('promptTestResult.analysis.actions.rerun')
+                        : t('promptTestResult.analysis.actions.run')
+                    }}
+                  </el-button>
+                </div>
+              </div>
+            </template>
+            <div v-if="moduleStates[moduleId]" class="analysis-module-card__body">
+              <div
+                v-if="moduleStates[moduleId].definition.parameters.length"
+                class="analysis-params"
+              >
+                <el-form label-position="top" size="small" class="analysis-params__form">
+                  <el-form-item
+                    v-for="param in moduleStates[moduleId].definition.parameters"
+                    :key="param.key"
+                    :label="param.label"
+                    :required="param.required"
+                    class="analysis-param-item"
+                  >
+                    <template v-if="param.type === 'select'">
+                      <el-select
+                        v-model="moduleStates[moduleId].form[param.key]"
+                        size="small"
+                        class="analysis-param-input"
+                        clearable
+                      >
+                        <el-option
+                          v-for="(option, optionIndex) in (param.options || [])"
+                          :key="`${param.key}-${optionIndex}`"
+                          :label="String(option)"
+                          :value="option"
+                        />
+                      </el-select>
+                    </template>
+                    <template v-else-if="param.type === 'number'">
+                      <el-input-number
+                        v-model="moduleStates[moduleId].form[param.key]"
+                        :controls="false"
+                        class="analysis-param-input"
+                        :placeholder="param.help_text || ''"
+                      />
+                    </template>
+                    <template v-else>
+                      <el-input
+                        v-model="moduleStates[moduleId].form[param.key]"
+                        size="small"
+                        class="analysis-param-input"
+                        :placeholder="param.help_text || ''"
+                      />
+                    </template>
+                    <p v-if="param.help_text" class="analysis-param-tip">{{ param.help_text }}</p>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <el-alert
+                v-if="moduleStates[moduleId].errorMessage"
+                type="error"
+                :title="moduleStates[moduleId].errorMessage"
+                show-icon
+                class="analysis-alert"
+              />
+              <div v-if="moduleStates[moduleId].status === 'running'" class="analysis-loading">
+                <el-skeleton animated :rows="3" />
+              </div>
+              <template v-else-if="moduleStates[moduleId].result">
+                <el-alert
+                  v-if="moduleStates[moduleId].result"
+                  type="info"
+                  show-icon
+                  class="analysis-alert"
+                >
+                  <ul class="analysis-insight-list">
+                    <template v-if="moduleStates[moduleId].insightDetails.length">
+                      <li
+                        v-for="(detail, insightIndex) in moduleStates[moduleId].insightDetails"
+                        :key="`detail-${insightIndex}`"
+                      >
+                        <template v-if="detail.type === 'latency_comparison'">
+                          {{ t('promptTestResult.analysis.text.latencyFastest') }}
+                          <el-tooltip :content="detail.fast.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.fast.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.fast) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.fast.value) }}{{ detail.fast.unit }}；
+                          {{ t('promptTestResult.analysis.text.latencySlowest') }}
+                          <el-tooltip :content="detail.slow.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.slow.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.slow) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.slow.value) }}{{ detail.slow.unit }}。
+                        </template>
+                        <template v-else-if="detail.type === 'tokens_peak'">
+                          {{ t('promptTestResult.analysis.text.tokensPeak') }}
+                          <el-tooltip :content="detail.unit.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.unit.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.unit) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.unit.value) }}{{ detail.unit.unit }}。
+                        </template>
+                        <template v-else-if="detail.type === 'throughput_peak'">
+                          {{ t('promptTestResult.analysis.text.throughputPeak') }}
+                          <el-tooltip :content="detail.unit.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.unit.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.unit) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.unit.value) }}{{ detail.unit.unit }}。
+                        </template>
+                        <template v-else>
+                          {{ moduleStates[moduleId].result?.insights[insightIndex] || '' }}
+                        </template>
+                      </li>
+                    </template>
+                    <template v-else>
+                      <li
+                        v-for="(insight, insightIndex) in moduleStates[moduleId].result?.insights || []"
+                        :key="`plain-${insightIndex}`"
+                      >
+                        {{ insight }}
+                      </li>
+                    </template>
+                  </ul>
+                </el-alert>
+                <el-table
+                  :data="moduleStates[moduleId].result.data"
+                  size="small"
+                  border
+                  stripe
+                  :empty-text="t('promptTestResult.analysis.emptyData')"
+                >
+                  <el-table-column
+                    v-for="meta in moduleStates[moduleId].result.columns_meta"
+                    :key="meta.name"
+                    :prop="meta.name"
+                    :label="meta.label"
+                  >
+                    <template #default="{ row }">
+                      {{ formatAnalysisCell(row[meta.name]) }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div v-if="getPrebuiltCharts(moduleId).length" class="analysis-prebuilt-charts">
+                  <div
+                    v-for="chart in getPrebuiltCharts(moduleId)"
+                    :key="`${moduleId}-${chart.id}`"
+                    class="analysis-prebuilt-chart"
+                  >
+                    <div class="analysis-prebuilt-chart__header">
+                      <h5>{{ chart.title }}</h5>
+                      <p v-if="chart.description" class="analysis-prebuilt-chart__desc">
+                        {{ chart.description }}
+                      </p>
+                    </div>
+                    <div
+                      class="analysis-chart"
+                      :ref="(el) => handlePrebuiltChartRef(moduleId, chart, el)"
+                    ></div>
+                  </div>
+                </div>
+                <template v-else-if="getChartableColumns(moduleId).length">
+                  <div class="analysis-chart-block">
+                    <div class="analysis-chart-toolbar">
+                      <el-select
+                        v-model="moduleStates[moduleId].chartColumn"
+                        size="small"
+                        class="analysis-chart-toolbar__select"
+                        @change="handleChartConfigChange(moduleId)"
+                      >
+                        <el-option
+                          v-for="meta in getChartableColumns(moduleId)"
+                          :key="`${moduleId}-${meta.name}`"
+                        :label="meta.label"
+                        :value="meta.name"
+                      />
+                    </el-select>
+                    <el-select
+                      v-model="moduleStates[moduleId].chartType"
+                      size="small"
+                      class="analysis-chart-toolbar__select"
+                      @change="handleChartConfigChange(moduleId)"
+                    >
+                      <el-option
+                        v-for="type in getChartTypeOptions(moduleId)"
+                        :key="`${moduleId}-${type}`"
+                        :label="t(`promptTestResult.analysis.chartTypes.${type}`)"
+                        :value="type"
+                      />
+                    </el-select>
+                  </div>
+                  <div class="analysis-chart" :ref="(el) => handleChartRef(moduleId, el)"></div>
+                  </div>
+                </template>
+              </template>
+              <el-empty
+                v-else
+                :description="t('promptTestResult.analysis.emptyCard')"
+                class="analysis-empty-card"
+              />
+            </div>
+            <el-empty v-else :description="t('promptTestResult.analysis.missingModule')" />
+          </el-card>
+        </div>
       </div>
     </el-card>
     <el-dialog
@@ -314,7 +607,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -323,6 +616,18 @@ import type { PromptTestTask } from '../types/promptTest'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
+import * as echarts from 'echarts'
+import { listAnalysisModules, executeAnalysisModule } from '../api/analysis'
+import type {
+  AnalysisModuleDefinition,
+  AnalysisResultPayload,
+  AnalysisColumnMeta,
+  AnalysisParameterSpec,
+  AnalysisChartConfig,
+  AnalysisUnitLink,
+  AnalysisInsightDetail,
+  AnalysisInsightUnitRef
+} from '../types/analysis'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
 
@@ -342,6 +647,48 @@ interface MissingOutputInfo {
   description?: string
 }
 
+type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
+
+interface AnalysisModuleState {
+  definition: AnalysisModuleDefinition
+  form: Record<string, unknown>
+  status: AnalysisRunStatus
+  result: AnalysisResultPayload | null
+  errorMessage: string | null
+  chartColumn: string | null
+  chartType: string | null
+  chartInstance: echarts.ECharts | null
+  charts: AnalysisChartConfig[]
+  unitLinks: AnalysisUnitLink[]
+  unitLinkMapById: Map<string, AnalysisUnitLink>
+  unitLinkMapByLabel: Map<string, AnalysisUnitLink>
+  insightDetails: AnalysisInsightDetail[]
+  autoTriggered: boolean
+}
+
+interface CachedAnalysisModuleState {
+  version: number
+  taskId: number
+  taskUpdatedAt: string | null
+  storedAt: number
+  status: AnalysisRunStatus
+  result: AnalysisResultPayload | null
+  charts: AnalysisChartConfig[]
+  chartColumn: string | null
+  chartType: string | null
+  form: Record<string, unknown>
+  unitLinks: AnalysisUnitLink[]
+  insightDetails: AnalysisInsightDetail[]
+}
+
+interface CachedAnalysisSelection {
+  version: number
+  taskId: number
+  taskUpdatedAt: string | null
+  storedAt: number
+  moduleIds: string[]
+}
+
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -356,6 +703,309 @@ const rawResponseDialog = reactive({
   title: '',
   content: ''
 })
+
+const analysisModules = ref<AnalysisModuleDefinition[]>([])
+const analysisModulesLoading = ref(false)
+const selectedAnalysisModules = ref<string[]>([])
+const moduleStates = reactive<Record<string, AnalysisModuleState>>({})
+const autoSelectedModuleIds = ref<string[]>([])
+const chartRefs = new Map<string, HTMLElement | null>()
+const prebuiltChartInstances = new Map<string, Map<string, echarts.ECharts>>()
+const chartRenderRetryCount = new Map<string, number>()
+const restoredModuleIds = new Set<string>()
+const MAX_CHART_RENDER_RETRY = 5
+const ANALYSIS_CACHE_VERSION = 1
+const ANALYSIS_CACHE_PREFIX = 'prompt-test-analysis'
+const ANALYSIS_SELECTION_PREFIX = 'prompt-test-analysis-selection'
+let analysisSelectionInitialized = false
+let selectionCacheRestored = false
+
+function getSafeStorage(): Storage | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  try {
+    return window.localStorage
+  } catch (error) {
+    void error
+    return null
+  }
+}
+
+function makeModuleCacheKey(taskId: number, moduleId: string): string {
+  return `${ANALYSIS_CACHE_PREFIX}:${ANALYSIS_CACHE_VERSION}:${taskId}:${moduleId}`
+}
+
+function makeSelectionCacheKey(taskId: number): string {
+  return `${ANALYSIS_SELECTION_PREFIX}:${ANALYSIS_CACHE_VERSION}:${taskId}`
+}
+
+function loadCachedModuleState(
+  taskId: number,
+  moduleId: string
+): CachedAnalysisModuleState | null {
+  const storage = getSafeStorage()
+  if (!storage) return null
+  const key = makeModuleCacheKey(taskId, moduleId)
+  const raw = storage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as CachedAnalysisModuleState
+    if (parsed.version !== ANALYSIS_CACHE_VERSION || parsed.taskId !== taskId) {
+      storage.removeItem(key)
+      return null
+    }
+    return parsed
+  } catch (error) {
+    void error
+    storage.removeItem(key)
+    return null
+  }
+}
+
+function removeModuleCache(taskId: number, moduleId: string) {
+  const storage = getSafeStorage()
+  if (!storage) return
+  storage.removeItem(makeModuleCacheKey(taskId, moduleId))
+}
+
+function loadSelectionCache(taskId: number): CachedAnalysisSelection | null {
+  const storage = getSafeStorage()
+  if (!storage) return null
+  const key = makeSelectionCacheKey(taskId)
+  const raw = storage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as CachedAnalysisSelection
+    if (parsed.version !== ANALYSIS_CACHE_VERSION || parsed.taskId !== taskId) {
+      storage.removeItem(key)
+      return null
+    }
+    return parsed
+  } catch (error) {
+    void error
+    storage.removeItem(key)
+    return null
+  }
+}
+
+function saveSelectionCache(taskId: number, moduleIds: string[], taskUpdatedAt: string | null) {
+  const storage = getSafeStorage()
+  if (!storage) return
+  const payload: CachedAnalysisSelection = {
+    version: ANALYSIS_CACHE_VERSION,
+    taskId,
+    taskUpdatedAt: taskUpdatedAt ?? null,
+    storedAt: Date.now(),
+    moduleIds
+  }
+  try {
+    storage.setItem(makeSelectionCacheKey(taskId), JSON.stringify(payload))
+  } catch (error) {
+    void error
+  }
+}
+
+function removeSelectionCache(taskId: number) {
+  const storage = getSafeStorage()
+  if (!storage) return
+  storage.removeItem(makeSelectionCacheKey(taskId))
+}
+
+function restoreSelectionFromCache(validIds: Set<string>): string[] | null {
+  const currentTask = task.value
+  if (!currentTask) return null
+  if (selectionCacheRestored) return null
+  const cached = loadSelectionCache(currentTask.id)
+  selectionCacheRestored = true
+  if (!cached) return null
+  if (
+    cached.taskUpdatedAt &&
+    currentTask.updated_at &&
+    cached.taskUpdatedAt !== currentTask.updated_at
+  ) {
+    removeSelectionCache(currentTask.id)
+    return null
+  }
+  const moduleIds = Array.isArray(cached.moduleIds) ? cached.moduleIds : []
+  return moduleIds.filter((id) => validIds.has(id))
+}
+
+function restoreModuleStateFromCache(moduleId: string) {
+  const currentTask = task.value
+  if (!currentTask) return
+  if (restoredModuleIds.has(moduleId)) return
+  const state = getModuleState(moduleId)
+  if (!state) return
+  restoredModuleIds.add(moduleId)
+  const cached = loadCachedModuleState(currentTask.id, moduleId)
+  if (!cached) return
+  if (
+    cached.taskUpdatedAt &&
+    currentTask.updated_at &&
+    cached.taskUpdatedAt !== currentTask.updated_at
+  ) {
+    removeModuleCache(currentTask.id, moduleId)
+    return
+  }
+  if (!cached.result) {
+    removeModuleCache(currentTask.id, moduleId)
+    return
+  }
+  state.result = cached.result
+  state.status = cached.status ?? 'success'
+  state.errorMessage = null
+  state.charts = Array.isArray(cached.charts) ? cached.charts : []
+  state.chartColumn = cached.chartColumn ?? null
+  state.chartType = cached.chartType ?? null
+  const formCache = cached.form ?? {}
+  state.definition.parameters.forEach((param) => {
+    if (Object.prototype.hasOwnProperty.call(formCache, param.key)) {
+      state.form[param.key] = formCache[param.key]
+    }
+  })
+  state.unitLinks = Array.isArray(cached.unitLinks) ? cached.unitLinks : []
+  state.unitLinkMapById.clear()
+  state.unitLinkMapByLabel.clear()
+  state.unitLinks.forEach((link) => {
+    state.unitLinkMapByLabel.set(link.label, link)
+    if (link.unit_id !== null && link.unit_id !== undefined) {
+      state.unitLinkMapById.set(String(link.unit_id), link)
+    }
+  })
+  state.insightDetails = Array.isArray(cached.insightDetails) ? cached.insightDetails : []
+  state.autoTriggered = true
+  void nextTick(() => {
+    if (state.charts.length === 0) {
+      renderModuleChart(moduleId)
+    }
+  })
+}
+
+function saveModuleStateToCache(moduleId: string) {
+  const currentTask = task.value
+  if (!currentTask) return
+  const state = getModuleState(moduleId)
+  if (!state) return
+  const storage = getSafeStorage()
+  if (!storage) return
+  if (state.status !== 'success' || !state.result) {
+    removeModuleCache(currentTask.id, moduleId)
+    return
+  }
+  const clonedResult = JSON.parse(JSON.stringify(state.result)) as AnalysisResultPayload
+  const clonedCharts = JSON.parse(JSON.stringify(state.charts ?? [])) as AnalysisChartConfig[]
+  const clonedForm = JSON.parse(JSON.stringify(state.form)) as Record<string, unknown>
+  const clonedUnitLinks = JSON.parse(JSON.stringify(state.unitLinks ?? [])) as AnalysisUnitLink[]
+  const clonedInsights = JSON.parse(
+    JSON.stringify(state.insightDetails ?? [])
+  ) as AnalysisInsightDetail[]
+  const payload: CachedAnalysisModuleState = {
+    version: ANALYSIS_CACHE_VERSION,
+    taskId: currentTask.id,
+    taskUpdatedAt: currentTask.updated_at ?? null,
+    storedAt: Date.now(),
+    status: state.status,
+    result: clonedResult,
+    charts: clonedCharts,
+    chartColumn: state.chartColumn ?? null,
+    chartType: state.chartType ?? null,
+    form: clonedForm,
+    unitLinks: clonedUnitLinks,
+    insightDetails: clonedInsights
+  }
+  try {
+    storage.setItem(makeModuleCacheKey(currentTask.id, moduleId), JSON.stringify(payload))
+  } catch (error) {
+    void error
+  }
+}
+
+function buildDefaultAnalysisForm(definition: AnalysisModuleDefinition): Record<string, unknown> {
+  const form: Record<string, unknown> = {}
+  definition.parameters.forEach((param) => {
+    if (param.default !== undefined && param.default !== null) {
+      form[param.key] = param.default
+    } else if (param.type === 'select' && Array.isArray(param.options) && param.options.length) {
+      form[param.key] = param.options[0]
+    } else if (param.type === 'number') {
+      form[param.key] = null
+    } else {
+      form[param.key] = ''
+    }
+  })
+  return form
+}
+
+function ensureModuleState(definition: AnalysisModuleDefinition) {
+  const existing = moduleStates[definition.module_id]
+  if (existing) {
+    existing.definition = definition
+    const defaults = buildDefaultAnalysisForm(definition)
+    const validKeys = new Set(definition.parameters.map((param) => param.key))
+    Object.keys(existing.form).forEach((key) => {
+      if (!validKeys.has(key)) {
+        delete existing.form[key]
+      }
+    })
+    definition.parameters.forEach((param) => {
+      if (!(param.key in existing.form)) {
+        existing.form[param.key] = defaults[param.key]
+      }
+    })
+    if (!Array.isArray(existing.charts)) {
+      existing.charts = []
+    }
+    if (!Array.isArray(existing.unitLinks)) {
+      existing.unitLinks = []
+    }
+    if (!(existing.unitLinkMapById instanceof Map)) {
+      existing.unitLinkMapById = new Map()
+    } else {
+      existing.unitLinkMapById.clear()
+    }
+    if (!(existing.unitLinkMapByLabel instanceof Map)) {
+      existing.unitLinkMapByLabel = new Map()
+    } else {
+      existing.unitLinkMapByLabel.clear()
+    }
+    if (!Array.isArray(existing.insightDetails)) {
+      existing.insightDetails = []
+    }
+    return
+  }
+  moduleStates[definition.module_id] = {
+    definition,
+    form: buildDefaultAnalysisForm(definition),
+    status: 'idle',
+    result: null,
+    errorMessage: null,
+    chartColumn: null,
+    chartType: null,
+    chartInstance: null,
+    charts: [],
+    unitLinks: [],
+    unitLinkMapById: new Map(),
+    unitLinkMapByLabel: new Map(),
+    insightDetails: [],
+    autoTriggered: false
+  }
+}
+
+function getModuleState(moduleId: string): AnalysisModuleState | null {
+  return moduleStates[moduleId] ?? null
+}
+
+function extractConfiguredAnalysisModules(
+  config: Record<string, unknown> | null | undefined
+): string[] {
+  if (!config || typeof config !== 'object') return []
+  const modules = (config as Record<string, unknown>).analysis_modules
+  if (!Array.isArray(modules)) return []
+  return modules
+    .map((item) => (typeof item === 'string' && item.trim() ? item.trim() : null))
+    .filter((item): item is string => Boolean(item))
+}
 
 const tabList = ['units', 'results', 'analysis'] as const
 type TabKey = (typeof tabList)[number]
@@ -528,6 +1178,10 @@ const filteredUnits = computed(() =>
   })
 )
 
+const configuredModuleIds = computed(() =>
+  extractConfiguredAnalysisModules(task.value?.config as Record<string, unknown> | null)
+)
+
 const selectedUnits = computed(() =>
   columnConfigs.value.map(
     (config) => units.value.find((unit) => unit.id === config.unitId) ?? null
@@ -669,6 +1323,92 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => task.value?.id,
+  () => {
+    selectionCacheRestored = false
+    restoredModuleIds.clear()
+    chartRenderRetryCount.clear()
+    analysisSelectionInitialized = false
+    selectedAnalysisModules.value = []
+    Object.keys(moduleStates).forEach((moduleId) => {
+      const state = moduleStates[moduleId]
+      state.status = 'idle'
+      state.result = null
+      state.errorMessage = null
+      state.chartColumn = null
+      state.chartType = null
+      state.charts = []
+      state.unitLinks = []
+      state.unitLinkMapById.clear()
+      state.unitLinkMapByLabel.clear()
+      state.insightDetails = []
+      state.autoTriggered = false
+      disposeModuleChart(moduleId)
+    })
+  }
+)
+
+watch(
+  [analysisModules, configuredModuleIds],
+  ([modules, configured]) => {
+    const validIds = new Set<string>()
+    modules.forEach((module) => {
+      ensureModuleState(module)
+      validIds.add(module.module_id)
+      restoreModuleStateFromCache(module.module_id)
+    })
+    autoSelectedModuleIds.value = configured.filter((id) => validIds.has(id))
+    if (selectedAnalysisModules.value.some((id) => !validIds.has(id))) {
+      selectedAnalysisModules.value = selectedAnalysisModules.value.filter((id) =>
+        validIds.has(id)
+      )
+    }
+    if (!analysisSelectionInitialized && modules.length) {
+      const cachedSelection = restoreSelectionFromCache(validIds)
+      const defaults =
+        cachedSelection !== null
+          ? cachedSelection
+          : selectedAnalysisModules.value.length
+          ? selectedAnalysisModules.value
+          : autoSelectedModuleIds.value.length
+          ? [...autoSelectedModuleIds.value]
+          : [modules[0].module_id]
+      selectedAnalysisModules.value = defaults
+      analysisSelectionInitialized = true
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  selectedAnalysisModules,
+  (ids, previous) => {
+    if (task.value && analysisSelectionInitialized) {
+      const validIds = new Set(analysisModules.value.map((module) => module.module_id))
+      const normalized = ids.filter((id) => validIds.has(id))
+      saveSelectionCache(task.value.id, normalized, task.value.updated_at ?? null)
+    }
+    ids.forEach((id) => {
+      const state = getModuleState(id)
+      if (!state) return
+      if (
+        autoSelectedModuleIds.value.includes(id) &&
+        state.status === 'idle' &&
+        !state.autoTriggered
+      ) {
+        state.autoTriggered = true
+        void runAnalysisModule(id)
+      }
+    })
+    previous.forEach((id) => {
+      if (!ids.includes(id)) {
+        disposeModuleChart(id)
+      }
+    })
+  }
+)
+
 function formatUnitOption(unit: PromptTestResultUnit) {
   const displayParts: string[] = []
   const seenSegments = new Set<string>()
@@ -714,6 +1454,495 @@ function formatUnitOption(unit: PromptTestResultUnit) {
     return String(unit.id)
   }
   return displayParts.join(' | ')
+}
+
+function getChartableColumns(moduleId: string): AnalysisColumnMeta[] {
+  const state = getModuleState(moduleId)
+  if (!state?.result) return []
+  return state.result.columns_meta.filter(
+    (meta) => Array.isArray(meta.visualizable) && meta.visualizable.length > 0
+  )
+}
+
+function getPrebuiltCharts(moduleId: string): AnalysisChartConfig[] {
+  const state = getModuleState(moduleId)
+  if (!state || !Array.isArray(state.charts)) {
+    return []
+  }
+  return state.charts
+}
+
+function getModuleRetryKey(moduleId: string): string {
+  return `module:${moduleId}`
+}
+
+function getPrebuiltRetryPrefix(moduleId: string): string {
+  return `prebuilt:${moduleId}:`
+}
+
+function getPrebuiltRetryKey(moduleId: string, chartId: string): string {
+  return `${getPrebuiltRetryPrefix(moduleId)}${chartId}`
+}
+
+function scheduleChartRetry(key: string, callback: () => void) {
+  if (typeof window === 'undefined') return
+  const attempts = chartRenderRetryCount.get(key) ?? 0
+  if (attempts >= MAX_CHART_RENDER_RETRY) {
+    chartRenderRetryCount.delete(key)
+    return
+  }
+  chartRenderRetryCount.set(key, attempts + 1)
+  window.requestAnimationFrame(() => {
+    callback()
+  })
+}
+
+function disposeModuleChart(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state) return
+  if (state.chartInstance) {
+    state.chartInstance.dispose()
+    state.chartInstance = null
+  }
+  const chartMap = prebuiltChartInstances.get(moduleId)
+  if (chartMap) {
+    chartMap.forEach((instance) => {
+      instance.dispose()
+    })
+    prebuiltChartInstances.delete(moduleId)
+  }
+  chartRefs.delete(moduleId)
+  chartRenderRetryCount.delete(getModuleRetryKey(moduleId))
+  const prefix = getPrebuiltRetryPrefix(moduleId)
+  Array.from(chartRenderRetryCount.keys()).forEach((key) => {
+    if (key.startsWith(prefix)) {
+      chartRenderRetryCount.delete(key)
+    }
+  })
+}
+
+function resolveDimensionColumn(state: AnalysisModuleState): AnalysisColumnMeta | null {
+  if (!state.result || !state.result.columns_meta.length) {
+    return null
+  }
+  const primary = state.result.columns_meta[0]
+  if (primary.name === state.chartColumn && state.result.columns_meta.length > 1) {
+    return state.result.columns_meta[1]
+  }
+  return primary
+}
+
+function renderModuleChart(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state?.result) {
+    disposeModuleChart(moduleId)
+    return
+  }
+  if (state.charts.length) {
+    return
+  }
+  const chartable = getChartableColumns(moduleId)
+  if (!chartable.length) {
+    disposeModuleChart(moduleId)
+    return
+  }
+
+  if (!state.chartColumn || !chartable.some((meta) => meta.name === state.chartColumn)) {
+    state.chartColumn = chartable[0].name
+  }
+  const currentColumn = state.chartColumn
+  const columnMeta = chartable.find((meta) => meta.name === currentColumn)
+  const chartTypes = columnMeta?.visualizable ?? []
+  if (!state.chartType || !chartTypes.includes(state.chartType)) {
+    state.chartType = chartTypes[0] ?? 'bar'
+  }
+  const chartType = state.chartType
+  const container = chartRefs.get(moduleId)
+  const retryKey = getModuleRetryKey(moduleId)
+  if (!container) {
+    chartRenderRetryCount.delete(retryKey)
+    return
+  }
+  if (typeof window === 'undefined') {
+    return
+  }
+  const rect = container.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    scheduleChartRetry(retryKey, () => renderModuleChart(moduleId))
+    return
+  }
+  chartRenderRetryCount.delete(retryKey)
+  if (!state.chartInstance) {
+    state.chartInstance = echarts.init(container)
+  }
+
+  const dimensionMeta = resolveDimensionColumn(state)
+  const dimensionKey = dimensionMeta?.name ?? currentColumn
+
+  const categories: string[] = []
+  const values: number[] = []
+
+  state.result.data.forEach((row) => {
+    const rawCategory = row[dimensionKey]
+    const rawValue = row[currentColumn]
+    const category = rawCategory === null || rawCategory === undefined ? '' : String(rawCategory)
+    const numeric = typeof rawValue === 'number' ? rawValue : Number(rawValue)
+    if (!category || Number.isNaN(numeric) || !Number.isFinite(numeric)) {
+      return
+    }
+    categories.push(category)
+    values.push(numeric)
+  })
+
+  if (!categories.length) {
+    state.chartInstance.clear()
+    return
+  }
+
+  let option: echarts.EChartsOption
+  if (chartType === 'pie') {
+    option = {
+      tooltip: { trigger: 'item' },
+      legend: { orient: 'horizontal', top: 0 },
+      series: [
+        {
+          type: 'pie',
+          radius: '65%',
+          center: ['50%', '60%'],
+          data: categories.map((name, index) => ({ name, value: values[index] })),
+          label: { formatter: '{b}: {c}' }
+        }
+      ]
+    }
+  } else {
+    option = {
+      tooltip: { trigger: 'axis' },
+      xAxis: {
+        type: 'category',
+        data: categories,
+        axisLabel: { interval: 0 }
+      },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          type: chartType === 'line' ? 'line' : 'bar',
+          data: values,
+          smooth: chartType === 'line',
+          name: columnMeta?.label ?? currentColumn,
+          areaStyle: chartType === 'line' ? {} : undefined
+        }
+      ]
+    }
+  }
+
+  state.chartInstance.setOption(option)
+  state.chartInstance.resize()
+}
+
+function getUnitDisplayLabel(moduleId: string, unit: AnalysisInsightUnitRef): string {
+  const state = getModuleState(moduleId)
+  if (!state) return unit.label || unit.unit_name
+  return (
+    state.unitLinkMapByLabel.get(unit.label)?.label ||
+    (unit.unit_id != null ? state.unitLinkMapById.get(String(unit.unit_id))?.label : undefined) ||
+    unit.label ||
+    unit.unit_name
+  )
+}
+
+function handleUnitChipClick(unitId: number | string | null) {
+  if (unitId === null || unitId === undefined) return
+  const numeric = Number(unitId)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    openUnitDetail(numeric)
+  }
+}
+
+function formatMetricValue(value: unknown): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '-'
+  const absValue = Math.abs(numeric)
+  const fractionDigits = absValue >= 100 ? 0 : absValue >= 10 ? 1 : 2
+  return numeric.toLocaleString(locale.value, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits
+  })
+}
+
+function handlePrebuiltChartRef(
+  moduleId: string,
+  chart: AnalysisChartConfig,
+  el: HTMLElement | null
+) {
+  const chartId = chart.id
+  const retryKey = getPrebuiltRetryKey(moduleId, chartId)
+  if (!el) {
+    const chartMap = prebuiltChartInstances.get(moduleId)
+    if (chartMap) {
+      const instance = chartMap.get(chartId)
+      if (instance) {
+        instance.dispose()
+      }
+      chartMap.delete(chartId)
+      if (chartMap.size === 0) {
+        prebuiltChartInstances.delete(moduleId)
+      }
+    }
+    chartRenderRetryCount.delete(retryKey)
+    return
+  }
+  if (typeof window === 'undefined') {
+    return
+  }
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    scheduleChartRetry(retryKey, () => handlePrebuiltChartRef(moduleId, chart, el))
+    return
+  }
+  chartRenderRetryCount.delete(retryKey)
+
+  let chartMap = prebuiltChartInstances.get(moduleId)
+  if (!chartMap) {
+    chartMap = new Map<string, echarts.ECharts>()
+    prebuiltChartInstances.set(moduleId, chartMap)
+  }
+
+  let instance = chartMap.get(chartId)
+  if (!instance) {
+    instance = echarts.init(el)
+    chartMap.set(chartId, instance)
+  }
+
+  const finalOption = JSON.parse(JSON.stringify(chart.option ?? {}))
+  const state = getModuleState(moduleId)
+  if (state) {
+    finalOption.tooltip = finalOption.tooltip || {}
+    const originalFormatter = finalOption.tooltip.formatter
+    finalOption.tooltip.axisPointer = finalOption.tooltip.axisPointer || { type: 'shadow' }
+    finalOption.tooltip.formatter = (params: any) => {
+      if (typeof originalFormatter === 'function') {
+        const formatted = originalFormatter(params)
+        if (formatted !== undefined) return formatted
+      }
+      const items = Array.isArray(params) ? params : [params]
+      if (!items.length) return ''
+      const axisLabel = String(items[0]?.axisValue ?? items[0]?.name ?? '')
+      const link = state.unitLinkMapByLabel.get(axisLabel) || state.unitLinkMapById.get(axisLabel)
+      const header = link ? `${link.label} · ${link.unit_name}` : axisLabel
+      const lines = items.map((item: any) => {
+        const seriesName = item.seriesName ? `${item.seriesName}: ` : ''
+        const value = Array.isArray(item.value) ? item.value[0] : item.value
+        return `${item.marker}${seriesName}${formatMetricValue(value)}`
+      })
+      return [header, ...lines].join('<br/>')
+    }
+  }
+
+  instance.setOption(finalOption as echarts.EChartsOption, true)
+  instance.resize()
+}
+
+function handleChartRef(moduleId: string, el: HTMLElement | null) {
+  if (!el) {
+    disposeModuleChart(moduleId)
+    return
+  }
+  chartRefs.set(moduleId, el)
+  void nextTick(() => renderModuleChart(moduleId))
+}
+
+function handleChartConfigChange(moduleId: string) {
+  void nextTick(() => renderModuleChart(moduleId))
+}
+
+function getChartTypeOptions(moduleId: string): string[] {
+  const state = getModuleState(moduleId)
+  if (!state?.result || state.charts.length) return []
+  const column = state.chartColumn
+  if (column) {
+    const meta = state.result.columns_meta.find((item) => item.name === column)
+    if (meta && Array.isArray(meta.visualizable) && meta.visualizable.length) {
+      return meta.visualizable
+    }
+  }
+  const chartable = getChartableColumns(moduleId)
+  if (!chartable.length) {
+    return []
+  }
+  return chartable[0].visualizable ?? []
+}
+
+function mapParameterValue(spec: AnalysisParameterSpec, value: unknown): unknown {
+  if (spec.type === 'number') {
+    if (typeof value === 'number') {
+      return value
+    }
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) {
+      throw new Error(
+        spec.label
+          ? t('promptTestResult.analysis.messages.numberInvalid', { field: spec.label })
+          : t('promptTestResult.analysis.messages.numberInvalidSimple')
+      )
+    }
+    return numeric
+  }
+  if (spec.type === 'select' && Array.isArray(spec.options) && spec.options.length) {
+    if (!spec.options.includes(value)) {
+      throw new Error(
+        spec.label
+          ? t('promptTestResult.analysis.messages.selectInvalid', { field: spec.label })
+          : t('promptTestResult.analysis.messages.selectInvalidSimple')
+      )
+    }
+    return value
+  }
+  if (value === undefined || value === null) {
+    return ''
+  }
+  return value
+}
+
+function prepareModuleParameters(moduleId: string): Record<string, unknown> | null {
+  const state = getModuleState(moduleId)
+  if (!state) return null
+  const params: Record<string, unknown> = {}
+  for (const spec of state.definition.parameters) {
+    const rawValue = state.form[spec.key]
+    if (rawValue === undefined || rawValue === null || rawValue === '') {
+      if (spec.required) {
+        ElMessage.warning(
+          spec.label
+            ? t('promptTestResult.analysis.messages.paramRequired', { field: spec.label })
+            : t('promptTestResult.analysis.messages.paramRequiredSimple')
+        )
+        return null
+      }
+      continue
+    }
+    try {
+      params[spec.key] = mapParameterValue(spec, rawValue)
+    } catch (error: any) {
+      ElMessage.warning(error?.message ?? t('promptTestResult.analysis.messages.paramInvalid'))
+      return null
+    }
+  }
+  return params
+}
+
+async function runAnalysisModule(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state || !task.value) return
+  if (state.status === 'running') return
+  const parameters = prepareModuleParameters(moduleId)
+  if (parameters === null) {
+    return
+  }
+  state.status = 'running'
+  state.errorMessage = null
+  try {
+    disposeModuleChart(moduleId)
+    const result = await executeAnalysisModule({
+      module_id: moduleId,
+      task_id: String(task.value.id),
+      target_type: 'prompt_test_task',
+      parameters
+    })
+    state.result = result
+    state.status = 'success'
+    state.autoTriggered = true
+    state.errorMessage = null
+    const chartsRaw = Array.isArray(result.extra?.charts)
+      ? (result.extra?.charts as AnalysisChartConfig[])
+      : []
+    state.charts = chartsRaw.map((chart, index) => ({
+      id: chart.id || `chart-${index}`,
+      title: chart.title ?? '',
+      description: chart.description ?? '',
+      option: JSON.parse(JSON.stringify(chart.option ?? {})),
+      meta: chart.meta ? JSON.parse(JSON.stringify(chart.meta)) : undefined
+    })) as AnalysisChartConfig[]
+
+    const unitLinksRaw = Array.isArray(result.extra?.unit_links)
+      ? (result.extra?.unit_links as AnalysisUnitLink[])
+      : []
+    state.unitLinks = unitLinksRaw
+    state.unitLinkMapById.clear()
+    state.unitLinkMapByLabel.clear()
+    unitLinksRaw.forEach((link) => {
+      state.unitLinkMapByLabel.set(link.label, link)
+      if (link.unit_id !== null && link.unit_id !== undefined) {
+        state.unitLinkMapById.set(String(link.unit_id), link)
+      }
+    })
+
+    state.insightDetails = Array.isArray(result.extra?.insight_details)
+      ? (result.extra?.insight_details as AnalysisInsightDetail[])
+      : []
+
+    if (state.charts.length === 0) {
+      state.chartColumn = null
+      state.chartType = null
+      const chartable = getChartableColumns(moduleId)
+      if (chartable.length) {
+        state.chartColumn = chartable[0].name
+        state.chartType = chartable[0].visualizable[0] ?? 'bar'
+      }
+    }
+
+    saveModuleStateToCache(moduleId)
+    await nextTick()
+    if (state.charts.length === 0) {
+      renderModuleChart(moduleId)
+    }
+    ElMessage.success(t('promptTestResult.analysis.messages.runSuccess'))
+  } catch (error: any) {
+    state.status = 'error'
+    state.errorMessage =
+      error?.message ?? t('promptTestResult.analysis.messages.runFailed')
+    state.result = null
+    disposeModuleChart(moduleId)
+    saveModuleStateToCache(moduleId)
+    ElMessage.error(state.errorMessage)
+  }
+}
+
+const runningSelected = ref(false)
+
+async function runSelectedModules() {
+  if (!selectedAnalysisModules.value.length) return
+  runningSelected.value = true
+  try {
+    for (const moduleId of selectedAnalysisModules.value) {
+      await runAnalysisModule(moduleId)
+    }
+  } finally {
+    runningSelected.value = false
+  }
+}
+
+function formatAnalysisCell(value: unknown): string {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value.toString() : '-'
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch (error) {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+function handleWindowResize() {
+  Object.values(moduleStates).forEach((state) => {
+    state.chartInstance?.resize()
+  })
+  prebuiltChartInstances.forEach((chartMap) => {
+    chartMap.forEach((instance) => instance.resize())
+  })
 }
 
 function addColumn() {
@@ -808,6 +2037,18 @@ function extractTaskId(value: unknown): number | null {
   return null
 }
 
+async function fetchAnalysisModulesList() {
+  analysisModulesLoading.value = true
+  try {
+    analysisModules.value = await listAnalysisModules()
+  } catch (error) {
+    console.error('加载分析模块失败', error)
+    ElMessage.error(t('promptTestResult.analysis.messages.loadFailed'))
+  } finally {
+    analysisModulesLoading.value = false
+  }
+}
+
 async function loadTaskResult(taskId: number) {
   loading.value = true
   errorMessage.value = null
@@ -865,7 +2106,13 @@ async function refreshTask() {
 }
 
 onMounted(() => {
-  void refreshTask()
+  window.addEventListener('resize', handleWindowResize)
+  void Promise.all([refreshTask(), fetchAnalysisModulesList()])
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleWindowResize)
+  Object.keys(moduleStates).forEach((moduleId) => disposeModuleChart(moduleId))
 })
 
 watch(
@@ -1127,7 +2374,202 @@ watch(
 }
 
 .analysis-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.analysis-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.analysis-toolbar__selector {
+  flex: 1;
+  min-width: 260px;
+}
+
+.analysis-empty {
   padding: 40px 0;
+}
+
+.analysis-modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.analysis-module-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.analysis-module-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.analysis-module-card__title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-module-card__title h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.analysis-module-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-weak-color);
+}
+
+.analysis-module-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysis-module-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.analysis-prebuilt-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.analysis-prebuilt-chart__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-prebuilt-chart__header h5 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.analysis-prebuilt-chart__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-weak-color);
+}
+
+.analysis-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analysis-option__title {
+  font-weight: 600;
+}
+
+.analysis-option__desc {
+  font-size: 12px;
+  color: var(--text-weak-color);
+  white-space: normal;
+}
+
+.analysis-params__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.analysis-param-item {
+  margin-bottom: 0;
+}
+
+.analysis-param-input {
+  width: 100%;
+}
+
+.analysis-param-tip {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-weak-color);
+}
+
+.analysis-alert {
+  margin-bottom: 8px;
+}
+
+.analysis-insight-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.analysis-insight-list li {
+  margin-bottom: 4px;
+}
+
+.analysis-unit-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 22px;
+  border-radius: 12px;
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--el-color-primary-light-7);
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.analysis-unit-chip:hover {
+  background-color: var(--el-color-primary-light-7);
+  border-color: var(--el-color-primary-light-5);
+  color: var(--el-color-primary-dark-2);
+}
+
+.analysis-loading {
+  padding: 16px 0;
+}
+
+.analysis-empty-card {
+  padding: 24px 0;
+}
+
+.analysis-chart-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analysis-chart-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.analysis-chart-toolbar__select {
+  min-width: 180px;
+}
+
+.analysis-chart {
+  width: 100%;
+  height: 280px;
+}
+
+.analysis-empty-card :deep(.el-empty__description) {
+  font-size: 13px;
 }
 
 .units-panel {

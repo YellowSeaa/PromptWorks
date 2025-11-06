@@ -135,7 +135,9 @@ def _count_variable_cases(value: Any) -> int:
         return len(value) or 1
     if isinstance(value, Mapping):
         cases = value.get("cases")
-        if isinstance(cases, Sequence) and not isinstance(cases, (str, bytes, bytearray)):
+        if isinstance(cases, Sequence) and not isinstance(
+            cases, (str, bytes, bytearray)
+        ):
             return len(cases) or 1
         rows = value.get("rows")
         if isinstance(rows, Sequence) and not isinstance(rows, (str, bytes, bytearray)):
