@@ -666,6 +666,29 @@ interface AnalysisModuleState {
   autoTriggered: boolean
 }
 
+interface CachedAnalysisModuleState {
+  version: number
+  taskId: number
+  taskUpdatedAt: string | null
+  storedAt: number
+  status: AnalysisRunStatus
+  result: AnalysisResultPayload | null
+  charts: AnalysisChartConfig[]
+  chartColumn: string | null
+  chartType: string | null
+  form: Record<string, unknown>
+  unitLinks: AnalysisUnitLink[]
+  insightDetails: AnalysisInsightDetail[]
+}
+
+interface CachedAnalysisSelection {
+  version: number
+  taskId: number
+  taskUpdatedAt: string | null
+  storedAt: number
+  moduleIds: string[]
+}
+
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -688,7 +711,215 @@ const moduleStates = reactive<Record<string, AnalysisModuleState>>({})
 const autoSelectedModuleIds = ref<string[]>([])
 const chartRefs = new Map<string, HTMLElement | null>()
 const prebuiltChartInstances = new Map<string, Map<string, echarts.ECharts>>()
+const chartRenderRetryCount = new Map<string, number>()
+const restoredModuleIds = new Set<string>()
+const MAX_CHART_RENDER_RETRY = 5
+const ANALYSIS_CACHE_VERSION = 1
+const ANALYSIS_CACHE_PREFIX = 'prompt-test-analysis'
+const ANALYSIS_SELECTION_PREFIX = 'prompt-test-analysis-selection'
 let analysisSelectionInitialized = false
+let selectionCacheRestored = false
+
+function getSafeStorage(): Storage | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  try {
+    return window.localStorage
+  } catch (error) {
+    void error
+    return null
+  }
+}
+
+function makeModuleCacheKey(taskId: number, moduleId: string): string {
+  return `${ANALYSIS_CACHE_PREFIX}:${ANALYSIS_CACHE_VERSION}:${taskId}:${moduleId}`
+}
+
+function makeSelectionCacheKey(taskId: number): string {
+  return `${ANALYSIS_SELECTION_PREFIX}:${ANALYSIS_CACHE_VERSION}:${taskId}`
+}
+
+function loadCachedModuleState(
+  taskId: number,
+  moduleId: string
+): CachedAnalysisModuleState | null {
+  const storage = getSafeStorage()
+  if (!storage) return null
+  const key = makeModuleCacheKey(taskId, moduleId)
+  const raw = storage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as CachedAnalysisModuleState
+    if (parsed.version !== ANALYSIS_CACHE_VERSION || parsed.taskId !== taskId) {
+      storage.removeItem(key)
+      return null
+    }
+    return parsed
+  } catch (error) {
+    void error
+    storage.removeItem(key)
+    return null
+  }
+}
+
+function removeModuleCache(taskId: number, moduleId: string) {
+  const storage = getSafeStorage()
+  if (!storage) return
+  storage.removeItem(makeModuleCacheKey(taskId, moduleId))
+}
+
+function loadSelectionCache(taskId: number): CachedAnalysisSelection | null {
+  const storage = getSafeStorage()
+  if (!storage) return null
+  const key = makeSelectionCacheKey(taskId)
+  const raw = storage.getItem(key)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as CachedAnalysisSelection
+    if (parsed.version !== ANALYSIS_CACHE_VERSION || parsed.taskId !== taskId) {
+      storage.removeItem(key)
+      return null
+    }
+    return parsed
+  } catch (error) {
+    void error
+    storage.removeItem(key)
+    return null
+  }
+}
+
+function saveSelectionCache(taskId: number, moduleIds: string[], taskUpdatedAt: string | null) {
+  const storage = getSafeStorage()
+  if (!storage) return
+  const payload: CachedAnalysisSelection = {
+    version: ANALYSIS_CACHE_VERSION,
+    taskId,
+    taskUpdatedAt: taskUpdatedAt ?? null,
+    storedAt: Date.now(),
+    moduleIds
+  }
+  try {
+    storage.setItem(makeSelectionCacheKey(taskId), JSON.stringify(payload))
+  } catch (error) {
+    void error
+  }
+}
+
+function removeSelectionCache(taskId: number) {
+  const storage = getSafeStorage()
+  if (!storage) return
+  storage.removeItem(makeSelectionCacheKey(taskId))
+}
+
+function restoreSelectionFromCache(validIds: Set<string>): string[] | null {
+  const currentTask = task.value
+  if (!currentTask) return null
+  if (selectionCacheRestored) return null
+  const cached = loadSelectionCache(currentTask.id)
+  selectionCacheRestored = true
+  if (!cached) return null
+  if (
+    cached.taskUpdatedAt &&
+    currentTask.updated_at &&
+    cached.taskUpdatedAt !== currentTask.updated_at
+  ) {
+    removeSelectionCache(currentTask.id)
+    return null
+  }
+  const moduleIds = Array.isArray(cached.moduleIds) ? cached.moduleIds : []
+  return moduleIds.filter((id) => validIds.has(id))
+}
+
+function restoreModuleStateFromCache(moduleId: string) {
+  const currentTask = task.value
+  if (!currentTask) return
+  if (restoredModuleIds.has(moduleId)) return
+  const state = getModuleState(moduleId)
+  if (!state) return
+  restoredModuleIds.add(moduleId)
+  const cached = loadCachedModuleState(currentTask.id, moduleId)
+  if (!cached) return
+  if (
+    cached.taskUpdatedAt &&
+    currentTask.updated_at &&
+    cached.taskUpdatedAt !== currentTask.updated_at
+  ) {
+    removeModuleCache(currentTask.id, moduleId)
+    return
+  }
+  if (!cached.result) {
+    removeModuleCache(currentTask.id, moduleId)
+    return
+  }
+  state.result = cached.result
+  state.status = cached.status ?? 'success'
+  state.errorMessage = null
+  state.charts = Array.isArray(cached.charts) ? cached.charts : []
+  state.chartColumn = cached.chartColumn ?? null
+  state.chartType = cached.chartType ?? null
+  const formCache = cached.form ?? {}
+  state.definition.parameters.forEach((param) => {
+    if (Object.prototype.hasOwnProperty.call(formCache, param.key)) {
+      state.form[param.key] = formCache[param.key]
+    }
+  })
+  state.unitLinks = Array.isArray(cached.unitLinks) ? cached.unitLinks : []
+  state.unitLinkMapById.clear()
+  state.unitLinkMapByLabel.clear()
+  state.unitLinks.forEach((link) => {
+    state.unitLinkMapByLabel.set(link.label, link)
+    if (link.unit_id !== null && link.unit_id !== undefined) {
+      state.unitLinkMapById.set(String(link.unit_id), link)
+    }
+  })
+  state.insightDetails = Array.isArray(cached.insightDetails) ? cached.insightDetails : []
+  state.autoTriggered = true
+  void nextTick(() => {
+    if (state.charts.length === 0) {
+      renderModuleChart(moduleId)
+    }
+  })
+}
+
+function saveModuleStateToCache(moduleId: string) {
+  const currentTask = task.value
+  if (!currentTask) return
+  const state = getModuleState(moduleId)
+  if (!state) return
+  const storage = getSafeStorage()
+  if (!storage) return
+  if (state.status !== 'success' || !state.result) {
+    removeModuleCache(currentTask.id, moduleId)
+    return
+  }
+  const clonedResult = JSON.parse(JSON.stringify(state.result)) as AnalysisResultPayload
+  const clonedCharts = JSON.parse(JSON.stringify(state.charts ?? [])) as AnalysisChartConfig[]
+  const clonedForm = JSON.parse(JSON.stringify(state.form)) as Record<string, unknown>
+  const clonedUnitLinks = JSON.parse(JSON.stringify(state.unitLinks ?? [])) as AnalysisUnitLink[]
+  const clonedInsights = JSON.parse(
+    JSON.stringify(state.insightDetails ?? [])
+  ) as AnalysisInsightDetail[]
+  const payload: CachedAnalysisModuleState = {
+    version: ANALYSIS_CACHE_VERSION,
+    taskId: currentTask.id,
+    taskUpdatedAt: currentTask.updated_at ?? null,
+    storedAt: Date.now(),
+    status: state.status,
+    result: clonedResult,
+    charts: clonedCharts,
+    chartColumn: state.chartColumn ?? null,
+    chartType: state.chartType ?? null,
+    form: clonedForm,
+    unitLinks: clonedUnitLinks,
+    insightDetails: clonedInsights
+  }
+  try {
+    storage.setItem(makeModuleCacheKey(currentTask.id, moduleId), JSON.stringify(payload))
+  } catch (error) {
+    void error
+  }
+}
 
 function buildDefaultAnalysisForm(definition: AnalysisModuleDefinition): Record<string, unknown> {
   const form: Record<string, unknown> = {}
@@ -1095,6 +1326,9 @@ watch(
 watch(
   () => task.value?.id,
   () => {
+    selectionCacheRestored = false
+    restoredModuleIds.clear()
+    chartRenderRetryCount.clear()
     analysisSelectionInitialized = false
     selectedAnalysisModules.value = []
     Object.keys(moduleStates).forEach((moduleId) => {
@@ -1122,6 +1356,7 @@ watch(
     modules.forEach((module) => {
       ensureModuleState(module)
       validIds.add(module.module_id)
+      restoreModuleStateFromCache(module.module_id)
     })
     autoSelectedModuleIds.value = configured.filter((id) => validIds.has(id))
     if (selectedAnalysisModules.value.some((id) => !validIds.has(id))) {
@@ -1130,11 +1365,15 @@ watch(
       )
     }
     if (!analysisSelectionInitialized && modules.length) {
-      const defaults = selectedAnalysisModules.value.length
-        ? selectedAnalysisModules.value
-        : autoSelectedModuleIds.value.length
-        ? [...autoSelectedModuleIds.value]
-        : [modules[0].module_id]
+      const cachedSelection = restoreSelectionFromCache(validIds)
+      const defaults =
+        cachedSelection !== null
+          ? cachedSelection
+          : selectedAnalysisModules.value.length
+          ? selectedAnalysisModules.value
+          : autoSelectedModuleIds.value.length
+          ? [...autoSelectedModuleIds.value]
+          : [modules[0].module_id]
       selectedAnalysisModules.value = defaults
       analysisSelectionInitialized = true
     }
@@ -1145,6 +1384,11 @@ watch(
 watch(
   selectedAnalysisModules,
   (ids, previous) => {
+    if (task.value && analysisSelectionInitialized) {
+      const validIds = new Set(analysisModules.value.map((module) => module.module_id))
+      const normalized = ids.filter((id) => validIds.has(id))
+      saveSelectionCache(task.value.id, normalized, task.value.updated_at ?? null)
+    }
     ids.forEach((id) => {
       const state = getModuleState(id)
       if (!state) return
@@ -1228,6 +1472,31 @@ function getPrebuiltCharts(moduleId: string): AnalysisChartConfig[] {
   return state.charts
 }
 
+function getModuleRetryKey(moduleId: string): string {
+  return `module:${moduleId}`
+}
+
+function getPrebuiltRetryPrefix(moduleId: string): string {
+  return `prebuilt:${moduleId}:`
+}
+
+function getPrebuiltRetryKey(moduleId: string, chartId: string): string {
+  return `${getPrebuiltRetryPrefix(moduleId)}${chartId}`
+}
+
+function scheduleChartRetry(key: string, callback: () => void) {
+  if (typeof window === 'undefined') return
+  const attempts = chartRenderRetryCount.get(key) ?? 0
+  if (attempts >= MAX_CHART_RENDER_RETRY) {
+    chartRenderRetryCount.delete(key)
+    return
+  }
+  chartRenderRetryCount.set(key, attempts + 1)
+  window.requestAnimationFrame(() => {
+    callback()
+  })
+}
+
 function disposeModuleChart(moduleId: string) {
   const state = getModuleState(moduleId)
   if (!state) return
@@ -1243,6 +1512,13 @@ function disposeModuleChart(moduleId: string) {
     prebuiltChartInstances.delete(moduleId)
   }
   chartRefs.delete(moduleId)
+  chartRenderRetryCount.delete(getModuleRetryKey(moduleId))
+  const prefix = getPrebuiltRetryPrefix(moduleId)
+  Array.from(chartRenderRetryCount.keys()).forEach((key) => {
+    if (key.startsWith(prefix)) {
+      chartRenderRetryCount.delete(key)
+    }
+  })
 }
 
 function resolveDimensionColumn(state: AnalysisModuleState): AnalysisColumnMeta | null {
@@ -1282,9 +1558,20 @@ function renderModuleChart(moduleId: string) {
   }
   const chartType = state.chartType
   const container = chartRefs.get(moduleId)
+  const retryKey = getModuleRetryKey(moduleId)
   if (!container) {
+    chartRenderRetryCount.delete(retryKey)
     return
   }
+  if (typeof window === 'undefined') {
+    return
+  }
+  const rect = container.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    scheduleChartRetry(retryKey, () => renderModuleChart(moduleId))
+    return
+  }
+  chartRenderRetryCount.delete(retryKey)
   if (!state.chartInstance) {
     state.chartInstance = echarts.init(container)
   }
@@ -1388,6 +1675,7 @@ function handlePrebuiltChartRef(
   el: HTMLElement | null
 ) {
   const chartId = chart.id
+  const retryKey = getPrebuiltRetryKey(moduleId, chartId)
   if (!el) {
     const chartMap = prebuiltChartInstances.get(moduleId)
     if (chartMap) {
@@ -1400,8 +1688,18 @@ function handlePrebuiltChartRef(
         prebuiltChartInstances.delete(moduleId)
       }
     }
+    chartRenderRetryCount.delete(retryKey)
     return
   }
+  if (typeof window === 'undefined') {
+    return
+  }
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    scheduleChartRetry(retryKey, () => handlePrebuiltChartRef(moduleId, chart, el))
+    return
+  }
+  chartRenderRetryCount.delete(retryKey)
 
   let chartMap = prebuiltChartInstances.get(moduleId)
   if (!chartMap) {
@@ -1592,6 +1890,7 @@ async function runAnalysisModule(moduleId: string) {
       }
     }
 
+    saveModuleStateToCache(moduleId)
     await nextTick()
     if (state.charts.length === 0) {
       renderModuleChart(moduleId)
@@ -1603,6 +1902,7 @@ async function runAnalysisModule(moduleId: string) {
       error?.message ?? t('promptTestResult.analysis.messages.runFailed')
     state.result = null
     disposeModuleChart(moduleId)
+    saveModuleStateToCache(moduleId)
     ElMessage.error(state.errorMessage)
   }
 }
