@@ -19,12 +19,49 @@ export interface AnalysisColumnMeta {
   extra?: Record<string, unknown> | null
 }
 
+export interface AnalysisChartMeta {
+  unit_labels?: string[]
+  unit_ids?: Array<number | string>
+  unit_names?: string[]
+}
+
 export interface AnalysisChartConfig {
   id: string
   title: string
   description?: string | null
   option: Record<string, unknown>
+  meta?: AnalysisChartMeta
 }
+
+export interface AnalysisUnitLink {
+  unit_id: number | string | null
+  unit_name: string
+  label: string
+}
+
+export interface AnalysisInsightUnitRef {
+  unit_id: number | string | null
+  unit_name: string
+  label: string
+  value: number | null
+  unit: string
+}
+
+export type AnalysisInsightDetail =
+  | {
+      type: 'latency_comparison'
+      fast: AnalysisInsightUnitRef
+      slow: AnalysisInsightUnitRef
+    }
+  | {
+      type: 'tokens_peak'
+      unit: AnalysisInsightUnitRef
+    }
+  | {
+      type: 'throughput_peak'
+      unit: AnalysisInsightUnitRef
+    }
+  | Record<string, unknown>
 
 export interface AnalysisModuleDefinition {
   module_id: string
@@ -44,7 +81,11 @@ export interface AnalysisResultPayload {
   insights: string[]
   llm_usage?: Record<string, unknown> | null
   protocol_version: string
-  extra?: { charts?: AnalysisChartConfig[] | null } & Record<string, unknown>
+  extra?: {
+    charts?: AnalysisChartConfig[] | null
+    unit_links?: AnalysisUnitLink[] | null
+    insight_details?: AnalysisInsightDetail[] | null
+  } & Record<string, unknown>
 }
 
 export interface AnalysisModuleExecutionRequest {

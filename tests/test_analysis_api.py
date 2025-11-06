@@ -119,15 +119,35 @@ def test_execute_latency_tokens_module(client, db_session: Session):
     assert payload["protocol_version"] == "v1"
     assert payload["insights"]
 
-    data_rows = payload["data"]
-    assert len(data_rows) >= 1
+    columns_meta = payload["columns_meta"]
+    assert any(meta["name"] == "unit_label" for meta in columns_meta)
+    latency_meta = next(
+        meta for meta in columns_meta if meta["name"] == "avg_latency_ms"
+    )
+    assert "bar" in latency_meta["visualizable"]
 
-    metrics = {row["metric"]: row for row in data_rows}
-    assert metrics["样本数"]["value"] == 2
-    assert metrics["平均耗时"]["value"] == pytest.approx(150.0)
-    assert metrics["P95 耗时"]["value"] == pytest.approx(195.0)
-    assert metrics["平均 tokens"]["value"] == pytest.approx(55.0)
-    assert metrics["平均吞吐量"]["value"] == pytest.approx(400.0)
+    data_rows = payload["data"]
+    assert len(data_rows) == 1
+
+    row = data_rows[0]
+    assert row["unit_label"] == "单元1"
+    assert row["unit_name"] == "总体"
+    assert row["sample_count"] == 2
+    assert row["avg_latency_ms"] == pytest.approx(150.0)
+    assert row["p95_latency_ms"] == pytest.approx(195.0)
+    assert row["avg_tokens"] == pytest.approx(55.0)
+    assert row["p95_tokens"] == pytest.approx(59.5)
+    assert row["avg_throughput_tokens_per_s"] == pytest.approx(400.0)
+
+    extra = payload["extra"]
+    assert extra is not None
+    charts = extra.get("charts") or []
+    assert charts
+    assert charts[0]["meta"]["unit_labels"][0] == "单元1"
+    unit_links = extra.get("unit_links") or []
+    assert unit_links and unit_links[0]["label"] == "单元1"
+    insight_details = extra.get("insight_details") or []
+    assert any(detail["type"] == "latency_comparison" for detail in insight_details)
 
 
 def test_execute_with_unknown_module_returns_404(client, db_session: Session):
@@ -158,4 +178,20 @@ def test_execute_prompt_test_task_analysis(client, db_session: Session):
     assert response.status_code == 200
     payload = response.json()
     assert payload["module_id"] == "latency_tokens_summary"
-    assert payload["data"]
+    assert len(payload["data"]) == 1
+    row = payload["data"][0]
+    assert row["unit_label"] == "单元1"
+    assert row["sample_count"] == 2
+    assert row["avg_latency_ms"] == pytest.approx(150.0)
+    assert row["avg_tokens"] == pytest.approx(90.0)
+    assert row["avg_throughput_tokens_per_s"] == pytest.approx(611.11, rel=1e-3)
+
+    extra = payload["extra"]
+    assert extra is not None
+    charts = extra.get("charts") or []
+    assert charts
+    assert charts[0]["meta"]["unit_labels"][0] == "单元1"
+    unit_links = extra.get("unit_links") or []
+    assert unit_links and unit_links[0]["label"] == "单元1"
+    insight_details = extra.get("insight_details") or []
+    assert insight_details

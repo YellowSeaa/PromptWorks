@@ -437,18 +437,80 @@
               </div>
               <template v-else-if="moduleStates[moduleId].result">
                 <el-alert
-                  v-if="moduleStates[moduleId].result.insights.length"
+                  v-if="moduleStates[moduleId].result"
                   type="info"
                   show-icon
                   class="analysis-alert"
                 >
                   <ul class="analysis-insight-list">
-                    <li
-                      v-for="(insight, insightIndex) in moduleStates[moduleId].result.insights"
-                      :key="insightIndex"
-                    >
-                      {{ insight }}
-                    </li>
+                    <template v-if="moduleStates[moduleId].insightDetails.length">
+                      <li
+                        v-for="(detail, insightIndex) in moduleStates[moduleId].insightDetails"
+                        :key="`detail-${insightIndex}`"
+                      >
+                        <template v-if="detail.type === 'latency_comparison'">
+                          {{ t('promptTestResult.analysis.text.latencyFastest') }}
+                          <el-tooltip :content="detail.fast.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.fast.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.fast) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.fast.value) }}{{ detail.fast.unit }}；
+                          {{ t('promptTestResult.analysis.text.latencySlowest') }}
+                          <el-tooltip :content="detail.slow.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.slow.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.slow) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.slow.value) }}{{ detail.slow.unit }}。
+                        </template>
+                        <template v-else-if="detail.type === 'tokens_peak'">
+                          {{ t('promptTestResult.analysis.text.tokensPeak') }}
+                          <el-tooltip :content="detail.unit.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.unit.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.unit) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.unit.value) }}{{ detail.unit.unit }}。
+                        </template>
+                        <template v-else-if="detail.type === 'throughput_peak'">
+                          {{ t('promptTestResult.analysis.text.throughputPeak') }}
+                          <el-tooltip :content="detail.unit.unit_name">
+                            <span
+                              class="analysis-unit-chip"
+                              @click="handleUnitChipClick(detail.unit.unit_id)"
+                            >
+                              {{ getUnitDisplayLabel(moduleId, detail.unit) }}
+                            </span>
+                          </el-tooltip>
+                          ，{{ t('promptTestResult.analysis.text.approx') }}
+                          {{ formatMetricValue(detail.unit.value) }}{{ detail.unit.unit }}。
+                        </template>
+                        <template v-else>
+                          {{ moduleStates[moduleId].result?.insights[insightIndex] || '' }}
+                        </template>
+                      </li>
+                    </template>
+                    <template v-else>
+                      <li
+                        v-for="(insight, insightIndex) in moduleStates[moduleId].result?.insights || []"
+                        :key="`plain-${insightIndex}`"
+                      >
+                        {{ insight }}
+                      </li>
+                    </template>
                   </ul>
                 </el-alert>
                 <el-table
@@ -483,7 +545,7 @@
                     </div>
                     <div
                       class="analysis-chart"
-                      :ref="(el) => handlePrebuiltChartRef(moduleId, chart.id, chart.option, el)"
+                      :ref="(el) => handlePrebuiltChartRef(moduleId, chart, el)"
                     ></div>
                   </div>
                 </div>
@@ -561,7 +623,10 @@ import type {
   AnalysisResultPayload,
   AnalysisColumnMeta,
   AnalysisParameterSpec,
-  AnalysisChartConfig
+  AnalysisChartConfig,
+  AnalysisUnitLink,
+  AnalysisInsightDetail,
+  AnalysisInsightUnitRef
 } from '../types/analysis'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
@@ -594,6 +659,10 @@ interface AnalysisModuleState {
   chartType: string | null
   chartInstance: echarts.ECharts | null
   charts: AnalysisChartConfig[]
+  unitLinks: AnalysisUnitLink[]
+  unitLinkMapById: Map<string, AnalysisUnitLink>
+  unitLinkMapByLabel: Map<string, AnalysisUnitLink>
+  insightDetails: AnalysisInsightDetail[]
   autoTriggered: boolean
 }
 
@@ -656,6 +725,22 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     if (!Array.isArray(existing.charts)) {
       existing.charts = []
     }
+    if (!Array.isArray(existing.unitLinks)) {
+      existing.unitLinks = []
+    }
+    if (!(existing.unitLinkMapById instanceof Map)) {
+      existing.unitLinkMapById = new Map()
+    } else {
+      existing.unitLinkMapById.clear()
+    }
+    if (!(existing.unitLinkMapByLabel instanceof Map)) {
+      existing.unitLinkMapByLabel = new Map()
+    } else {
+      existing.unitLinkMapByLabel.clear()
+    }
+    if (!Array.isArray(existing.insightDetails)) {
+      existing.insightDetails = []
+    }
     return
   }
   moduleStates[definition.module_id] = {
@@ -668,6 +753,10 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     chartType: null,
     chartInstance: null,
     charts: [],
+    unitLinks: [],
+    unitLinkMapById: new Map(),
+    unitLinkMapByLabel: new Map(),
+    insightDetails: [],
     autoTriggered: false
   }
 }
@@ -1016,6 +1105,10 @@ watch(
       state.chartColumn = null
       state.chartType = null
       state.charts = []
+      state.unitLinks = []
+      state.unitLinkMapById.clear()
+      state.unitLinkMapByLabel.clear()
+      state.insightDetails = []
       state.autoTriggered = false
       disposeModuleChart(moduleId)
     })
@@ -1259,12 +1352,42 @@ function renderModuleChart(moduleId: string) {
   state.chartInstance.resize()
 }
 
+function getUnitDisplayLabel(moduleId: string, unit: AnalysisInsightUnitRef): string {
+  const state = getModuleState(moduleId)
+  if (!state) return unit.label || unit.unit_name
+  return (
+    state.unitLinkMapByLabel.get(unit.label)?.label ||
+    (unit.unit_id != null ? state.unitLinkMapById.get(String(unit.unit_id))?.label : undefined) ||
+    unit.label ||
+    unit.unit_name
+  )
+}
+
+function handleUnitChipClick(unitId: number | string | null) {
+  if (unitId === null || unitId === undefined) return
+  const numeric = Number(unitId)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    openUnitDetail(numeric)
+  }
+}
+
+function formatMetricValue(value: unknown): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '-'
+  const absValue = Math.abs(numeric)
+  const fractionDigits = absValue >= 100 ? 0 : absValue >= 10 ? 1 : 2
+  return numeric.toLocaleString(locale.value, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits
+  })
+}
+
 function handlePrebuiltChartRef(
   moduleId: string,
-  chartId: string,
-  option: Record<string, unknown>,
+  chart: AnalysisChartConfig,
   el: HTMLElement | null
 ) {
+  const chartId = chart.id
   if (!el) {
     const chartMap = prebuiltChartInstances.get(moduleId)
     if (chartMap) {
@@ -1291,8 +1414,34 @@ function handlePrebuiltChartRef(
     instance = echarts.init(el)
     chartMap.set(chartId, instance)
   }
-  const finalOption = JSON.parse(JSON.stringify(option))
+
+  const finalOption = JSON.parse(JSON.stringify(chart.option ?? {}))
+  const state = getModuleState(moduleId)
+  if (state) {
+    finalOption.tooltip = finalOption.tooltip || {}
+    const originalFormatter = finalOption.tooltip.formatter
+    finalOption.tooltip.axisPointer = finalOption.tooltip.axisPointer || { type: 'shadow' }
+    finalOption.tooltip.formatter = (params: any) => {
+      if (typeof originalFormatter === 'function') {
+        const formatted = originalFormatter(params)
+        if (formatted !== undefined) return formatted
+      }
+      const items = Array.isArray(params) ? params : [params]
+      if (!items.length) return ''
+      const axisLabel = String(items[0]?.axisValue ?? items[0]?.name ?? '')
+      const link = state.unitLinkMapByLabel.get(axisLabel) || state.unitLinkMapById.get(axisLabel)
+      const header = link ? `${link.label} · ${link.unit_name}` : axisLabel
+      const lines = items.map((item: any) => {
+        const seriesName = item.seriesName ? `${item.seriesName}: ` : ''
+        const value = Array.isArray(item.value) ? item.value[0] : item.value
+        return `${item.marker}${seriesName}${formatMetricValue(value)}`
+      })
+      return [header, ...lines].join('<br/>')
+    }
+  }
+
   instance.setOption(finalOption as echarts.EChartsOption, true)
+  instance.resize()
 }
 
 function handleChartRef(moduleId: string, el: HTMLElement | null) {
@@ -1405,28 +1554,46 @@ async function runAnalysisModule(moduleId: string) {
     state.status = 'success'
     state.autoTriggered = true
     state.errorMessage = null
-    const charts = Array.isArray(result.extra?.charts)
+    const chartsRaw = Array.isArray(result.extra?.charts)
       ? (result.extra?.charts as AnalysisChartConfig[])
       : []
-    state.charts = charts.map((chart, index) => ({
+    state.charts = chartsRaw.map((chart, index) => ({
       id: chart.id || `chart-${index}`,
       title: chart.title ?? '',
       description: chart.description ?? '',
-      option: JSON.parse(JSON.stringify(chart.option ?? {}))
-    }))
-    if (charts.length) {
+      option: JSON.parse(JSON.stringify(chart.option ?? {})),
+      meta: chart.meta ? JSON.parse(JSON.stringify(chart.meta)) : undefined
+    })) as AnalysisChartConfig[]
+
+    const unitLinksRaw = Array.isArray(result.extra?.unit_links)
+      ? (result.extra?.unit_links as AnalysisUnitLink[])
+      : []
+    state.unitLinks = unitLinksRaw
+    state.unitLinkMapById.clear()
+    state.unitLinkMapByLabel.clear()
+    unitLinksRaw.forEach((link) => {
+      state.unitLinkMapByLabel.set(link.label, link)
+      if (link.unit_id !== null && link.unit_id !== undefined) {
+        state.unitLinkMapById.set(String(link.unit_id), link)
+      }
+    })
+
+    state.insightDetails = Array.isArray(result.extra?.insight_details)
+      ? (result.extra?.insight_details as AnalysisInsightDetail[])
+      : []
+
+    if (state.charts.length === 0) {
       state.chartColumn = null
       state.chartType = null
-    }
-    if (!state.chartColumn) {
       const chartable = getChartableColumns(moduleId)
       if (chartable.length) {
         state.chartColumn = chartable[0].name
         state.chartType = chartable[0].visualizable[0] ?? 'bar'
       }
     }
+
     await nextTick()
-    if (!state.charts.length) {
+    if (state.charts.length === 0) {
       renderModuleChart(moduleId)
     }
     ElMessage.success(t('promptTestResult.analysis.messages.runSuccess'))
@@ -2048,6 +2215,28 @@ watch(
 
 .analysis-insight-list li {
   margin-bottom: 4px;
+}
+
+.analysis-unit-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 22px;
+  border-radius: 12px;
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--el-color-primary-light-7);
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.analysis-unit-chip:hover {
+  background-color: var(--el-color-primary-light-7);
+  border-color: var(--el-color-primary-light-5);
+  color: var(--el-color-primary-dark-2);
 }
 
 .analysis-loading {

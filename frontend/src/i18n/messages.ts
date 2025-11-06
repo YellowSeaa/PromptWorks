@@ -952,6 +952,13 @@ export const messages = {
           success: '已完成',
           error: '执行失败'
         },
+        text: {
+          latencyFastest: '平均耗时最快的是',
+          latencySlowest: '最慢单元为',
+          tokensPeak: '平均 tokens 消耗最高的是',
+          throughputPeak: '平均吞吐量最高的是',
+          approx: '约'
+        },
         messages: {
           loadFailed: '加载分析模块失败，请稍后重试',
           runSuccess: '分析执行完成',
@@ -1987,6 +1994,13 @@ export const messages = {
           running: 'Running',
           success: 'Completed',
           error: 'Failed'
+        },
+        text: {
+          latencyFastest: 'Fastest average latency:',
+          latencySlowest: 'Slowest unit:',
+          tokensPeak: 'Highest average tokens:',
+          throughputPeak: 'Best throughput:',
+          approx: 'about'
         },
         messages: {
           loadFailed: 'Failed to load analysis modules. Please try again later.',
