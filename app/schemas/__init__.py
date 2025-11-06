@@ -6,6 +6,7 @@ from app.schemas.analysis_module import (
     AnalysisParameterType,
     AnalysisResult,
     AnalysisResultPayload,
+    AnalysisTargetType,
     ModuleExecutionRequest,
 )
 from app.schemas.llm_provider import (
@@ -58,6 +59,7 @@ __all__ = [
     "AnalysisContext",
     "AnalysisResult",
     "AnalysisResultPayload",
+    "AnalysisTargetType",
     "AnalysisModuleDefinition",
     "ModuleExecutionRequest",
     "TestRunCreate",

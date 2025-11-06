@@ -43,5 +43,6 @@ export interface AnalysisResultPayload {
 export interface AnalysisModuleExecutionRequest {
   module_id: string
   task_id: string
+  target_type?: 'test_run' | 'prompt_test_task'
   parameters: Record<string, unknown>
 }

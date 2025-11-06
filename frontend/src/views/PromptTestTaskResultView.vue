@@ -1314,6 +1314,7 @@ async function runAnalysisModule(moduleId: string) {
     const result = await executeAnalysisModule({
       module_id: moduleId,
       task_id: String(task.value.id),
+      target_type: 'prompt_test_task',
       parameters
     })
     state.result = result

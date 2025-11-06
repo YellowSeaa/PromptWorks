@@ -127,6 +127,13 @@ class AnalysisModuleDefinition(BaseModel):
     allow_llm: bool = Field(default=False, description="模块是否计划调用平台 LLM。")
 
 
+class AnalysisTargetType(str, Enum):
+    """分析目标类型。"""
+
+    TEST_RUN = "test_run"
+    PROMPT_TEST_TASK = "prompt_test_task"
+
+
 class ModuleExecutionRequest(BaseModel):
     """执行分析模块时提交的请求。"""
 
@@ -134,6 +141,10 @@ class ModuleExecutionRequest(BaseModel):
 
     module_id: str = Field(..., description="目标模块 ID。")
     task_id: str = Field(..., description="关联的测试任务 ID。")
+    target_type: AnalysisTargetType = Field(
+        default=AnalysisTargetType.TEST_RUN,
+        description="分析目标类型，可取 test_run 或 prompt_test_task。",
+    )
     parameters: dict[str, Any] = Field(
         default_factory=dict, description="用户填写的参数内容。"
     )

@@ -6,6 +6,13 @@ from sqlalchemy.orm import Session
 from app.models.prompt import Prompt, PromptClass, PromptVersion
 from app.models.result import Result
 from app.models.test_run import TestRun, TestRunStatus
+from app.models.prompt_test import (
+    PromptTestTask,
+    PromptTestTaskStatus,
+    PromptTestUnit,
+    PromptTestExperiment,
+    PromptTestExperimentStatus,
+)
 
 
 def _create_test_run_with_results(db_session: Session) -> TestRun:
@@ -42,6 +49,51 @@ def _create_test_run_with_results(db_session: Session) -> TestRun:
     return test_run
 
 
+def _create_prompt_test_task_with_results(db_session: Session) -> PromptTestTask:
+    prompt_class = PromptClass(name="PromptTest")
+    prompt = Prompt(name="PromptTest用例", prompt_class=prompt_class)
+    prompt_version = PromptVersion(prompt=prompt, version="v1", content="测试内容")
+
+    task = PromptTestTask(
+        name="PromptTestTask",
+        status=PromptTestTaskStatus.COMPLETED,
+        prompt_version=prompt_version,
+        config=None,
+    )
+
+    unit = PromptTestUnit(
+        task=task,
+        name="单元1",
+        model_name="gpt-mini",
+        llm_provider_id=None,
+        temperature=0.2,
+        top_p=0.9,
+        rounds=2,
+    )
+
+    experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.COMPLETED,
+        outputs=[
+            {
+                "run_index": 1,
+                "latency_ms": 120,
+                "total_tokens": 80,
+            },
+            {
+                "run_index": 2,
+                "latency_ms": 180,
+                "total_tokens": 100,
+            },
+        ],
+    )
+
+    db_session.add_all([prompt_class, prompt, prompt_version, task, unit, experiment])
+    db_session.commit()
+    return task
+
+
 def test_list_analysis_modules(client):
     response = client.get("/api/v1/analysis/modules")
     assert response.status_code == 200
@@ -55,6 +107,7 @@ def test_execute_latency_tokens_module(client, db_session: Session):
     payload = {
         "module_id": "latency_tokens_summary",
         "task_id": str(test_run.id),
+        "target_type": "test_run",
         "parameters": {},
     }
 
@@ -84,7 +137,25 @@ def test_execute_with_unknown_module_returns_404(client, db_session: Session):
         json={
             "module_id": "unknown_module",
             "task_id": str(test_run.id),
+            "target_type": "test_run",
             "parameters": {},
         },
     )
     assert response.status_code == 404
+
+
+def test_execute_prompt_test_task_analysis(client, db_session: Session):
+    task = _create_prompt_test_task_with_results(db_session)
+    response = client.post(
+        "/api/v1/analysis/modules/execute",
+        json={
+            "module_id": "latency_tokens_summary",
+            "task_id": str(task.id),
+            "target_type": "prompt_test_task",
+            "parameters": {},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["module_id"] == "latency_tokens_summary"
+    assert payload["data"]

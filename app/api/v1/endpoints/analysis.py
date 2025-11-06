@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.schemas.analysis_module import (
     AnalysisModuleDefinition,
     AnalysisResultPayload,
+    AnalysisTargetType,
     ModuleExecutionRequest,
 )
 from app.services.analysis_runner import (
@@ -15,6 +16,7 @@ from app.services.analysis_runner import (
     ParameterValidationError,
     RequirementValidationError,
     UnknownModuleError,
+    execute_module_for_prompt_test_task,
     execute_module_for_test_run,
     serialize_analysis_result,
 )
@@ -39,7 +41,10 @@ def run_analysis_module(
     """执行指定的分析模块并返回结果。"""
 
     try:
-        result = execute_module_for_test_run(db, request)
+        if request.target_type == AnalysisTargetType.PROMPT_TEST_TASK:
+            result = execute_module_for_prompt_test_task(db, request)
+        else:
+            result = execute_module_for_test_run(db, request)
     except UnknownModuleError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except AnalysisTaskNotFoundError as exc:

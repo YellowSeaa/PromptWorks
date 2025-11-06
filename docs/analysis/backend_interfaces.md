@@ -46,7 +46,7 @@
 
 ### 2.5 模块定义与执行请求
 - `AnalysisModuleDefinition`：注册模块时提交的元数据，包含 `module_id`、`name`、`description`、`parameters`、`required_columns`、`tags`、`protocol_version`、`allow_llm`。
-- `ModuleExecutionRequest`：用户发起执行时的请求载体，包含 `module_id`、`task_id`、`parameters`。
+- `ModuleExecutionRequest`：用户发起执行时的请求载体，包含 `module_id`、`task_id`、`target_type`（`test_run` 或 `prompt_test_task`）与 `parameters`。
 - `AnalysisResultPayload`：API 层返回给前端的结构化结果，字段包括 `module_id`、`data`（列表化的数据记录）、`columns_meta`、`insights`、`llm_usage`、`protocol_version` 与 `extra`。
 
 ## 3. 注册与执行骨架
@@ -91,6 +91,7 @@
 - 职责：负责解析任务 ID、加载测试结果 `DataFrame`、构造 `AnalysisContext` 并调用执行服务。
 - 核心方法：
   - `execute_module_for_test_run(db, request, user_id=None)`：面向测试任务的统一入口，返回 `AnalysisResult`。
+  - `execute_module_for_prompt_test_task(db, request, user_id=None)`：针对新版测试任务（PromptTestTask）构建 `DataFrame` 并执行分析。
   - `serialize_analysis_result(module_id, result)`：将内部结果转换为 `AnalysisResultPayload`，处理空值与类型。
 - 错误类型：
   - `AnalysisTaskNotFoundError`：指定任务不存在。
@@ -98,7 +99,7 @@
 
 ## 4. FastAPI 接口
 - `GET /api/v1/analysis/modules`：列出 `AnalysisModuleDefinition` 列表，供前端渲染模块目录。
-- `POST /api/v1/analysis/modules/execute`：接收 `ModuleExecutionRequest`，返回 `AnalysisResultPayload`；统一处理参数错误、字段缺失、任务不存在等异常并转换为 HTTP 状态码。
+- `POST /api/v1/analysis/modules/execute`：接收 `ModuleExecutionRequest`，返回 `AnalysisResultPayload`；`target_type` 控制数据加载逻辑，统一处理参数错误、字段缺失、任务不存在等异常并转换为 HTTP 状态码。
 
 ## 5. 后续工作指引
 1. 扩展更多内置模块（例如成功率、响应分类等），丰富模块目录。
