@@ -38,13 +38,14 @@ def register_latency_and_tokens_module(registry: "AnalysisModuleRegistry") -> No
     ) -> AnalysisResult:
         summary = _build_summary(data_frame)
         insights = _build_insights(summary)
+        charts = _build_chart_configs(summary)
         return AnalysisResult(
             data_frame=summary,
             columns_meta=_build_columns_meta(),
             insights=insights,
             llm_usage=None,
             protocol_version=definition.protocol_version,
-            extra={"module_id": MODULE_ID},
+            extra={"module_id": MODULE_ID, "charts": charts},
         )
 
     registry.replace(definition, _handler)
@@ -205,3 +206,135 @@ def _build_insights(summary_df: pd.DataFrame) -> list[str]:
         insights.append("缺少足够的耗时或 tokens 数据，无法生成统计指标。")
 
     return insights
+
+
+def _metric_value(summary_df: pd.DataFrame, metric: str) -> float | None:
+    row = summary_df.loc[summary_df["metric"] == metric]
+    if row.empty:
+        return None
+    value = row.iloc[0]["value"]
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+    return float(value)
+
+
+def _build_chart_configs(summary_df: pd.DataFrame) -> list[dict[str, Any]]:
+    charts: list[dict[str, Any]] = []
+
+    latency_metrics = [
+        ("平均耗时", "平均耗时"),
+        ("P95 耗时", "P95 耗时"),
+        ("最长耗时", "最长耗时"),
+        ("最短耗时", "最短耗时"),
+    ]
+    latency_values = [
+        _metric_value(summary_df, metric_id) for metric_id, _ in latency_metrics
+    ]
+    if any(value is not None for value in latency_values):
+        charts.append(
+            {
+                "id": "latency_stats",
+                "title": "耗时统计（毫秒）",
+                "description": "平均、P95、最长、最短耗时对比",
+                "option": {
+                    "tooltip": {"trigger": "axis"},
+                    "grid": {
+                        "left": "6%",
+                        "right": "4%",
+                        "bottom": "8%",
+                        "containLabel": True,
+                    },
+                    "xAxis": {
+                        "type": "category",
+                        "data": [label for _, label in latency_metrics],
+                        "axisTick": {"alignWithLabel": True},
+                    },
+                    "yAxis": {"type": "value", "name": "毫秒"},
+                    "series": [
+                        {
+                            "type": "bar",
+                            "data": [
+                                value if value is not None else 0
+                                for value in latency_values
+                            ],
+                            "itemStyle": {"color": "#5470C6"},
+                            "barWidth": "45%",
+                        }
+                    ],
+                },
+            }
+        )
+
+    token_metrics = [
+        ("总 tokens", "总 tokens"),
+        ("平均 tokens", "平均 tokens"),
+        ("P95 tokens", "P95 tokens"),
+        ("最大 tokens", "最大 tokens"),
+        ("平均 tokens/请求", "平均 tokens/请求"),
+    ]
+    token_values = [
+        _metric_value(summary_df, metric_id) for metric_id, _ in token_metrics
+    ]
+    if any(value is not None for value in token_values):
+        charts.append(
+            {
+                "id": "token_stats",
+                "title": "Tokens 消耗对比",
+                "description": "总量、平均、P95、最大以及单请求平均 tokens 指标",
+                "option": {
+                    "tooltip": {"trigger": "axis"},
+                    "grid": {
+                        "left": "6%",
+                        "right": "4%",
+                        "bottom": "8%",
+                        "containLabel": True,
+                    },
+                    "xAxis": {
+                        "type": "category",
+                        "data": [label for _, label in token_metrics],
+                        "axisTick": {"alignWithLabel": True},
+                    },
+                    "yAxis": {"type": "value", "name": "tokens"},
+                    "series": [
+                        {
+                            "type": "bar",
+                            "data": [
+                                value if value is not None else 0
+                                for value in token_values
+                            ],
+                            "itemStyle": {"color": "#91CC75"},
+                            "barWidth": "45%",
+                        }
+                    ],
+                },
+            }
+        )
+
+    throughput_value = _metric_value(summary_df, "平均吞吐量")
+    if throughput_value is not None:
+        charts.append(
+            {
+                "id": "throughput",
+                "title": "平均吞吐量",
+                "description": "单位时间内平均 tokens 消耗（tokens/s）",
+                "option": {
+                    "tooltip": {"trigger": "item"},
+                    "xAxis": {
+                        "type": "category",
+                        "data": ["平均吞吐量"],
+                        "axisTick": {"show": False},
+                    },
+                    "yAxis": {"type": "value", "name": "tokens/s"},
+                    "series": [
+                        {
+                            "type": "bar",
+                            "data": [throughput_value],
+                            "itemStyle": {"color": "#FAC858"},
+                            "barWidth": "35%",
+                        }
+                    ],
+                },
+            }
+        )
+
+    return charts

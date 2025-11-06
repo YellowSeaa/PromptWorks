@@ -469,17 +469,36 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                <div v-if="getChartableColumns(moduleId).length" class="analysis-chart-block">
-                  <div class="analysis-chart-toolbar">
-                    <el-select
-                      v-model="moduleStates[moduleId].chartColumn"
-                      size="small"
-                      class="analysis-chart-toolbar__select"
-                      @change="handleChartConfigChange(moduleId)"
-                    >
-                      <el-option
-                        v-for="meta in getChartableColumns(moduleId)"
-                        :key="`${moduleId}-${meta.name}`"
+                <div v-if="getPrebuiltCharts(moduleId).length" class="analysis-prebuilt-charts">
+                  <div
+                    v-for="chart in getPrebuiltCharts(moduleId)"
+                    :key="`${moduleId}-${chart.id}`"
+                    class="analysis-prebuilt-chart"
+                  >
+                    <div class="analysis-prebuilt-chart__header">
+                      <h5>{{ chart.title }}</h5>
+                      <p v-if="chart.description" class="analysis-prebuilt-chart__desc">
+                        {{ chart.description }}
+                      </p>
+                    </div>
+                    <div
+                      class="analysis-chart"
+                      :ref="(el) => handlePrebuiltChartRef(moduleId, chart.id, chart.option, el)"
+                    ></div>
+                  </div>
+                </div>
+                <template v-else-if="getChartableColumns(moduleId).length">
+                  <div class="analysis-chart-block">
+                    <div class="analysis-chart-toolbar">
+                      <el-select
+                        v-model="moduleStates[moduleId].chartColumn"
+                        size="small"
+                        class="analysis-chart-toolbar__select"
+                        @change="handleChartConfigChange(moduleId)"
+                      >
+                        <el-option
+                          v-for="meta in getChartableColumns(moduleId)"
+                          :key="`${moduleId}-${meta.name}`"
                         :label="meta.label"
                         :value="meta.name"
                       />
@@ -499,7 +518,8 @@
                     </el-select>
                   </div>
                   <div class="analysis-chart" :ref="(el) => handleChartRef(moduleId, el)"></div>
-                </div>
+                  </div>
+                </template>
               </template>
               <el-empty
                 v-else
@@ -540,7 +560,8 @@ import type {
   AnalysisModuleDefinition,
   AnalysisResultPayload,
   AnalysisColumnMeta,
-  AnalysisParameterSpec
+  AnalysisParameterSpec,
+  AnalysisChartConfig
 } from '../types/analysis'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
@@ -572,6 +593,7 @@ interface AnalysisModuleState {
   chartColumn: string | null
   chartType: string | null
   chartInstance: echarts.ECharts | null
+  charts: AnalysisChartConfig[]
   autoTriggered: boolean
 }
 
@@ -596,6 +618,7 @@ const selectedAnalysisModules = ref<string[]>([])
 const moduleStates = reactive<Record<string, AnalysisModuleState>>({})
 const autoSelectedModuleIds = ref<string[]>([])
 const chartRefs = new Map<string, HTMLElement | null>()
+const prebuiltChartInstances = new Map<string, Map<string, echarts.ECharts>>()
 let analysisSelectionInitialized = false
 
 function buildDefaultAnalysisForm(definition: AnalysisModuleDefinition): Record<string, unknown> {
@@ -630,6 +653,9 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
         existing.form[param.key] = defaults[param.key]
       }
     })
+    if (!Array.isArray(existing.charts)) {
+      existing.charts = []
+    }
     return
   }
   moduleStates[definition.module_id] = {
@@ -641,6 +667,7 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     chartColumn: null,
     chartType: null,
     chartInstance: null,
+    charts: [],
     autoTriggered: false
   }
 }
@@ -988,6 +1015,7 @@ watch(
       state.errorMessage = null
       state.chartColumn = null
       state.chartType = null
+      state.charts = []
       state.autoTriggered = false
       disposeModuleChart(moduleId)
     })
@@ -1099,11 +1127,27 @@ function getChartableColumns(moduleId: string): AnalysisColumnMeta[] {
   )
 }
 
+function getPrebuiltCharts(moduleId: string): AnalysisChartConfig[] {
+  const state = getModuleState(moduleId)
+  if (!state || !Array.isArray(state.charts)) {
+    return []
+  }
+  return state.charts
+}
+
 function disposeModuleChart(moduleId: string) {
   const state = getModuleState(moduleId)
-  if (state?.chartInstance) {
+  if (!state) return
+  if (state.chartInstance) {
     state.chartInstance.dispose()
     state.chartInstance = null
+  }
+  const chartMap = prebuiltChartInstances.get(moduleId)
+  if (chartMap) {
+    chartMap.forEach((instance) => {
+      instance.dispose()
+    })
+    prebuiltChartInstances.delete(moduleId)
   }
   chartRefs.delete(moduleId)
 }
@@ -1123,6 +1167,9 @@ function renderModuleChart(moduleId: string) {
   const state = getModuleState(moduleId)
   if (!state?.result) {
     disposeModuleChart(moduleId)
+    return
+  }
+  if (state.charts.length) {
     return
   }
   const chartable = getChartableColumns(moduleId)
@@ -1212,6 +1259,42 @@ function renderModuleChart(moduleId: string) {
   state.chartInstance.resize()
 }
 
+function handlePrebuiltChartRef(
+  moduleId: string,
+  chartId: string,
+  option: Record<string, unknown>,
+  el: HTMLElement | null
+) {
+  if (!el) {
+    const chartMap = prebuiltChartInstances.get(moduleId)
+    if (chartMap) {
+      const instance = chartMap.get(chartId)
+      if (instance) {
+        instance.dispose()
+      }
+      chartMap.delete(chartId)
+      if (chartMap.size === 0) {
+        prebuiltChartInstances.delete(moduleId)
+      }
+    }
+    return
+  }
+
+  let chartMap = prebuiltChartInstances.get(moduleId)
+  if (!chartMap) {
+    chartMap = new Map<string, echarts.ECharts>()
+    prebuiltChartInstances.set(moduleId, chartMap)
+  }
+
+  let instance = chartMap.get(chartId)
+  if (!instance) {
+    instance = echarts.init(el)
+    chartMap.set(chartId, instance)
+  }
+  const finalOption = JSON.parse(JSON.stringify(option))
+  instance.setOption(finalOption as echarts.EChartsOption, true)
+}
+
 function handleChartRef(moduleId: string, el: HTMLElement | null) {
   if (!el) {
     disposeModuleChart(moduleId)
@@ -1227,7 +1310,7 @@ function handleChartConfigChange(moduleId: string) {
 
 function getChartTypeOptions(moduleId: string): string[] {
   const state = getModuleState(moduleId)
-  if (!state?.result) return []
+  if (!state?.result || state.charts.length) return []
   const column = state.chartColumn
   if (column) {
     const meta = state.result.columns_meta.find((item) => item.name === column)
@@ -1311,6 +1394,7 @@ async function runAnalysisModule(moduleId: string) {
   state.status = 'running'
   state.errorMessage = null
   try {
+    disposeModuleChart(moduleId)
     const result = await executeAnalysisModule({
       module_id: moduleId,
       task_id: String(task.value.id),
@@ -1321,6 +1405,19 @@ async function runAnalysisModule(moduleId: string) {
     state.status = 'success'
     state.autoTriggered = true
     state.errorMessage = null
+    const charts = Array.isArray(result.extra?.charts)
+      ? (result.extra?.charts as AnalysisChartConfig[])
+      : []
+    state.charts = charts.map((chart, index) => ({
+      id: chart.id || `chart-${index}`,
+      title: chart.title ?? '',
+      description: chart.description ?? '',
+      option: JSON.parse(JSON.stringify(chart.option ?? {}))
+    }))
+    if (charts.length) {
+      state.chartColumn = null
+      state.chartType = null
+    }
     if (!state.chartColumn) {
       const chartable = getChartableColumns(moduleId)
       if (chartable.length) {
@@ -1329,7 +1426,9 @@ async function runAnalysisModule(moduleId: string) {
       }
     }
     await nextTick()
-    renderModuleChart(moduleId)
+    if (!state.charts.length) {
+      renderModuleChart(moduleId)
+    }
     ElMessage.success(t('promptTestResult.analysis.messages.runSuccess'))
   } catch (error: any) {
     state.status = 'error'
@@ -1373,6 +1472,9 @@ function formatAnalysisCell(value: unknown): string {
 function handleWindowResize() {
   Object.values(moduleStates).forEach((state) => {
     state.chartInstance?.resize()
+  })
+  prebuiltChartInstances.forEach((chartMap) => {
+    chartMap.forEach((instance) => instance.resize())
   })
 }
 
@@ -1873,6 +1975,30 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.analysis-prebuilt-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.analysis-prebuilt-chart__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-prebuilt-chart__header h5 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.analysis-prebuilt-chart__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-weak-color);
 }
 
 .analysis-option {

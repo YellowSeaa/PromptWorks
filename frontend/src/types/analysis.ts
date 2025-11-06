@@ -19,6 +19,13 @@ export interface AnalysisColumnMeta {
   extra?: Record<string, unknown> | null
 }
 
+export interface AnalysisChartConfig {
+  id: string
+  title: string
+  description?: string | null
+  option: Record<string, unknown>
+}
+
 export interface AnalysisModuleDefinition {
   module_id: string
   name: string
@@ -37,7 +44,7 @@ export interface AnalysisResultPayload {
   insights: string[]
   llm_usage?: Record<string, unknown> | null
   protocol_version: string
-  extra?: Record<string, unknown> | null
+  extra?: { charts?: AnalysisChartConfig[] | null } & Record<string, unknown>
 }
 
 export interface AnalysisModuleExecutionRequest {
