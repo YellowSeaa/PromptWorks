@@ -175,9 +175,7 @@ def execute_prompt_test_experiment(
         experiment.error = f"全部 {failed_runs} 次调用失败"
     else:
         experiment.status = PromptTestExperimentStatus.COMPLETED
-        experiment.error = (
-            f"{failed_runs} 次调用失败" if failed_runs else None
-        )
+        experiment.error = f"{failed_runs} 次调用失败" if failed_runs else None
     experiment.finished_at = datetime.now(UTC)
     db.flush()
     return experiment

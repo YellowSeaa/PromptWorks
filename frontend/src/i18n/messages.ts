@@ -594,6 +594,7 @@ export const messages = {
         newTest: '新增测试',
         empty: '暂无测试记录，点击右上角新增测试',
         columns: {
+          taskName: '任务名称',
           version: 'Prompt 版本',
           model: '模型',
           temperature: '温度',
@@ -1637,6 +1638,7 @@ export const messages = {
         newTest: 'New Test',
         empty: 'No test records yet. Click “New Test” to start.',
         columns: {
+          taskName: 'Task Name',
           version: 'Prompt Version',
           model: 'Model',
           temperature: 'Temperature',
