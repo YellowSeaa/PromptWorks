@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select
 
+from app.core import prompt_test_task_queue
 from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.prompt import Prompt, PromptClass, PromptVersion
 from app.models.prompt_test import (
@@ -273,6 +274,73 @@ def test_prompt_test_api_creates_and_executes_experiment(
     detail_resp = client.get(f"/api/v1/prompt-test/experiments/{body['id']}")
     assert detail_resp.status_code == 200
     assert detail_resp.json()["status"] == PromptTestExperimentStatus.COMPLETED.value
+
+
+def test_prompt_test_task_queue_executes_task_and_persists_results(
+    client, db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    provider = model.provider
+
+    def fake_post(*_, **kwargs):
+        payload = kwargs.get("json") or {}
+        messages = payload.get("messages") or []
+        user_text = messages[-1]["content"] if messages else ""
+        if "你好" in user_text:
+            response = {
+                "choices": [{"message": {"content": "Hello"}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 4},
+            }
+        else:
+            response = {
+                "choices": [{"message": {"content": "World"}}],
+                "usage": {"total_tokens": 16},
+            }
+        return DummyResponse(response, elapsed_ms=18)
+
+    monkeypatch.setattr("app.services.prompt_test_engine.httpx.post", fake_post)
+
+    response = client.post(
+        "/api/v1/prompt-test/tasks",
+        json={
+            "name": "队列执行验证",
+            "prompt_version_id": prompt_version.id,
+            "auto_execute": True,
+            "units": [
+                {
+                    "name": "翻译单元",
+                    "model_name": model.name,
+                    "llm_provider_id": provider.id,
+                    "rounds": 2,
+                    "prompt_template": "翻译：{text}",
+                    "variables": {"cases": [{"text": "你好"}, {"text": "谢谢"}]},
+                    "parameters": {"max_tokens": 16},
+                }
+            ],
+        },
+    )
+    assert response.status_code == 201
+    task = response.json()
+    task_id = task["id"]
+
+    units_resp = client.get(f"/api/v1/prompt-test/tasks/{task_id}/units")
+    assert units_resp.status_code == 200
+    units_data = units_resp.json()
+    assert len(units_data) == 1
+    unit_id = units_data[0]["id"]
+
+    from app.core import prompt_test_task_queue
+
+    assert prompt_test_task_queue.task_queue.wait_for_idle(timeout=2.0)
+
+    experiments_resp = client.get(f"/api/v1/prompt-test/units/{unit_id}/experiments")
+    assert experiments_resp.status_code == 200
+    experiments = experiments_resp.json()
+    assert experiments, "队列执行后应至少生成一个实验记录"
+    latest = experiments[0]
+    assert latest["status"] == PromptTestExperimentStatus.COMPLETED.value
+    assert latest["outputs"], "实验记录应包含输出结果"
 
 
 def test_soft_delete_prompt_test_task_hides_from_list(client, db_session):

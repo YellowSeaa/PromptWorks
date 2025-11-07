@@ -1013,7 +1013,8 @@ export const messages = {
         partialFailed: '部分实验数据加载失败，请稍后重试',
         invalidTask: '无效的测试任务编号',
         invalidUnit: '无效的最小测试单元编号',
-        unitLoadFailed: '加载最小测试单元详情失败，请稍后重试'
+        unitLoadFailed: '加载最小测试单元详情失败，请稍后重试',
+        taskFailedTitle: '任务执行失败'
       },
       fallback: {
         taskTitle: '测试任务 #{id}'
@@ -2056,7 +2057,8 @@ export const messages = {
         partialFailed: 'Some experiment data could not be loaded. Please retry later.',
         invalidTask: 'Invalid test task id.',
         invalidUnit: 'Invalid test unit id.',
-        unitLoadFailed: 'Failed to load test unit details. Please try again later.'
+        unitLoadFailed: 'Failed to load test unit details. Please try again later.',
+        taskFailedTitle: 'Test task failed'
       },
       fallback: {
         taskTitle: 'Test Task #{id}'

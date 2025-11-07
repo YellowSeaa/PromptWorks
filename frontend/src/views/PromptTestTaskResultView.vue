@@ -21,6 +21,19 @@
       </div>
     </section>
 
+    <el-alert
+      v-if="taskFailureReason"
+      class="task-status-alert"
+      type="error"
+      :closable="false"
+      show-icon
+      :title="t('promptTestResult.messages.taskFailedTitle')"
+    >
+      <template #default>
+        <span>{{ taskFailureReason }}</span>
+      </template>
+    </el-alert>
+
     <el-card v-loading="loading">
       <template #header>
         <div class="card-header">
@@ -702,6 +715,37 @@ const rawResponseDialog = reactive({
   visible: false,
   title: '',
   content: ''
+})
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+function pickString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : null
+  }
+  return null
+}
+
+const taskFailureReason = computed(() => {
+  const configRecord = toRecord(task.value?.config ?? null)
+  const configReason =
+    pickString(configRecord?.['last_error']) ?? pickString(configRecord?.['lastError'])
+  if (configReason) {
+    return configReason
+  }
+  for (const unit of units.value) {
+    const unitReason = pickString(unit.error)
+    if (unitReason) {
+      return unitReason
+    }
+  }
+  return null
 })
 
 const analysisModules = ref<AnalysisModuleDefinition[]>([])
@@ -2173,6 +2217,10 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.task-status-alert {
+  margin: 0 0 12px;
 }
 
 .result-alert {
