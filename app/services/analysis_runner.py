@@ -158,6 +158,10 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
             for index, output in enumerate(outputs, start=1):
                 if not isinstance(output, dict):
                     continue
+                status_value = str(output.get("status", "")).strip().lower()
+                if status_value in {"failed", "error"}:
+                    # 过滤掉执行失败的输出，避免纳入耗时与 tokens 统计
+                    continue
                 run_index = output.get("run_index") or output.get("sequence") or index
                 latency = output.get("latency_ms")
                 total_tokens = output.get("total_tokens") or (

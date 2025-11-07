@@ -94,6 +94,58 @@ def _create_prompt_test_task_with_results(db_session: Session) -> PromptTestTask
     return task
 
 
+def _create_prompt_test_task_with_failed_output(
+    db_session: Session,
+) -> PromptTestTask:
+    prompt_class = PromptClass(name="PromptTestFailed")
+    prompt = Prompt(name="PromptTest失败过滤", prompt_class=prompt_class)
+    prompt_version = PromptVersion(prompt=prompt, version="v1", content="测试内容")
+
+    task = PromptTestTask(
+        name="PromptTestTaskFailed",
+        status=PromptTestTaskStatus.COMPLETED,
+        prompt_version=prompt_version,
+        config=None,
+    )
+
+    unit = PromptTestUnit(
+        task=task,
+        name="单元失败过滤",
+        model_name="gpt-mini",
+        llm_provider_id=None,
+        temperature=0.2,
+        top_p=0.9,
+        rounds=3,
+    )
+
+    experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.COMPLETED,
+        outputs=[
+            {
+                "run_index": 1,
+                "latency_ms": 100,
+                "total_tokens": 80,
+            },
+            {
+                "run_index": 2,
+                "status": "failed",
+                "error": "LLM 请求失败",
+            },
+            {
+                "run_index": 3,
+                "latency_ms": 200,
+                "total_tokens": 130,
+            },
+        ],
+    )
+
+    db_session.add_all([prompt_class, prompt, prompt_version, task, unit, experiment])
+    db_session.commit()
+    return task
+
+
 def test_list_analysis_modules(client):
     response = client.get("/api/v1/analysis/modules")
     assert response.status_code == 200
@@ -195,3 +247,26 @@ def test_execute_prompt_test_task_analysis(client, db_session: Session):
     assert unit_links and unit_links[0]["label"] == "单元1"
     insight_details = extra.get("insight_details") or []
     assert insight_details
+
+
+def test_prompt_test_analysis_skips_failed_samples(client, db_session: Session):
+    task = _create_prompt_test_task_with_failed_output(db_session)
+    response = client.post(
+        "/api/v1/analysis/modules/execute",
+        json={
+            "module_id": "latency_tokens_summary",
+            "task_id": str(task.id),
+            "target_type": "prompt_test_task",
+            "parameters": {},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["data"]) == 1
+    row = payload["data"][0]
+    assert row["sample_count"] == 2
+    assert row["total_tokens"] == 210
+    assert row["avg_latency_ms"] == pytest.approx(150.0)
+    assert row["avg_tokens"] == pytest.approx(105.0)
+    assert row["avg_throughput_tokens_per_s"] == pytest.approx(725.0, rel=1e-3)
