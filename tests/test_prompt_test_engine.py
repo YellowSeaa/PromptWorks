@@ -276,6 +276,72 @@ def test_prompt_test_api_creates_and_executes_experiment(
     assert detail_resp.json()["status"] == PromptTestExperimentStatus.COMPLETED.value
 
 
+def test_execute_prompt_test_experiment_continues_after_run_failure(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+
+    task = PromptTestTask(name="允许部分失败", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="重试单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        if run_index == 1:
+            raise prompt_test_engine.PromptTestExecutionError(
+                "LLM 网络错误", status_code=502
+            )
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert refreshed.error and "1 次调用失败" in refreshed.error
+    assert len(refreshed.outputs or []) == 2
+    assert refreshed.outputs[0]["error"] == "LLM 网络错误"
+    assert refreshed.outputs[1]["output_text"] == "结果 2"
+    assert refreshed.metrics["failed_runs"] == 1
+
+
 def test_prompt_test_task_queue_executes_task_and_persists_results(
     client, db_session, monkeypatch
 ):

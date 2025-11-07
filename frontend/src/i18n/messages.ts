@@ -992,7 +992,8 @@ export const messages = {
       warnings: {
         missingOutputTitle: 'LLM 响应未能解析结果',
         missingOutputDescription: '模型返回了响应内容，但未提取到可展示的结果，请检查格式或解析规则。',
-        viewRawResponse: '查看原始响应'
+        viewRawResponse: '查看原始响应',
+        runFailedTitle: '调用失败'
       },
       dialog: {
         rawResponseTitle: '原始响应 · {unit} · 第 {index} 轮',
@@ -2036,7 +2037,8 @@ export const messages = {
       warnings: {
         missingOutputTitle: 'LLM response could not be parsed',
         missingOutputDescription: 'The model returned a payload but no displayable result was extracted. Please review the format or parsing rules.',
-        viewRawResponse: 'View raw response'
+        viewRawResponse: 'View raw response',
+        runFailedTitle: 'Request failed'
       },
       dialog: {
         rawResponseTitle: 'Raw Response · {unit} · Run #{index}',

@@ -6,6 +6,7 @@ export interface PromptTestResultOutput {
   meta: string
   variables: Record<string, string>
   rawResponse: string | null
+  errorMessage: string | null
 }
 
 export interface PromptTestResultUnit {
@@ -139,12 +140,26 @@ function buildOutputs(experiment: PromptTestExperiment | null): PromptTestResult
         rawResponse = String(rawResponseSource)
       }
     }
+    let errorMessage: string | null = null
+    if (typeof record.error === 'string') {
+      const trimmed = record.error.trim()
+      if (trimmed.length) {
+        errorMessage = trimmed
+      }
+    } else if (record.error !== undefined && record.error !== null) {
+      const formatted = formatDisplayValue(record.error)
+      if (formatted.trim().length) {
+        errorMessage = formatted.trim()
+      }
+    }
+
     return {
       runIndex,
       content,
       meta,
       variables,
-      rawResponse
+      rawResponse,
+      errorMessage
     }
   })
 }

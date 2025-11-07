@@ -143,11 +143,23 @@
                   class="grid-cell"
                 >
                   <div class="output-badge">#{{ row.index }}</div>
-                  <template v-if="cell">
-                    <div v-if="shouldShowWarning(cell)" class="output-warning">
-                      <el-alert
-                        type="warning"
-                        show-icon
+                    <template v-if="cell">
+                      <div v-if="cell.errorMessage" class="output-warning">
+                        <el-alert
+                          type="error"
+                          show-icon
+                          :closable="false"
+                          :title="t('promptTestResult.warnings.runFailedTitle')"
+                        >
+                          <template #default>
+                            <span>{{ cell.errorMessage }}</span>
+                          </template>
+                        </el-alert>
+                      </div>
+                      <div v-else-if="shouldShowWarning(cell)" class="output-warning">
+                        <el-alert
+                          type="warning"
+                          show-icon
                         :closable="false"
                         :title="t('promptTestResult.warnings.missingOutputTitle')"
                       >
@@ -1159,7 +1171,7 @@ function resolveCellContent(cell: UnitOutput | null | undefined) {
 }
 
 function shouldShowWarning(cell: UnitOutput | null | undefined): cell is UnitOutput {
-  if (!cell) return false
+  if (!cell || cell.errorMessage) return false
   const hasContent = typeof cell.content === 'string' && cell.content.trim().length > 0
   const hasRawResponse =
     typeof cell.rawResponse === 'string' && cell.rawResponse.trim().length > 0
