@@ -594,6 +594,7 @@ export const messages = {
         newTest: '新增测试',
         empty: '暂无测试记录，点击右上角新增测试',
         columns: {
+          taskName: '任务名称',
           version: 'Prompt 版本',
           model: '模型',
           temperature: '温度',
@@ -902,7 +903,8 @@ export const messages = {
         csvReadFailed: '文件读取失败，请重试或更换文件',
         noUnits: '未生成任何测试单元，请检查选择的模型、版本与参数集',
         createSuccess: '测试任务创建成功，已提交执行，共生成 {count} 个单元',
-        createFailed: '创建测试任务失败，请稍后重试'
+        createFailed: '创建测试任务失败，请稍后重试',
+        retryPrefillFailed: '复制原任务配置失败，请稍后重试'
       }
     },
     promptTestResult: {
@@ -936,7 +938,8 @@ export const messages = {
         removeColumn: '减少列',
         removeSingleColumn: '移除列',
         columnCount: '当前列数：{count}',
-        exportCsv: '导出 CSV'
+        exportCsv: '导出 CSV',
+        retryTask: '重试任务'
       },
       analysis: {
         selectPlaceholder: '请选择分析模块',
@@ -955,7 +958,7 @@ export const messages = {
         text: {
           latencyFastest: '平均耗时最快的是',
           latencySlowest: '最慢单元为',
-          tokensPeak: '平均 tokens 消耗最高的是',
+          tokensPeak: '平均 tokens 消耗最低的是',
           throughputPeak: '平均吞吐量最高的是',
           approx: '约'
         },
@@ -992,7 +995,8 @@ export const messages = {
       warnings: {
         missingOutputTitle: 'LLM 响应未能解析结果',
         missingOutputDescription: '模型返回了响应内容，但未提取到可展示的结果，请检查格式或解析规则。',
-        viewRawResponse: '查看原始响应'
+        viewRawResponse: '查看原始响应',
+        runFailedTitle: '调用失败'
       },
       dialog: {
         rawResponseTitle: '原始响应 · {unit} · 第 {index} 轮',
@@ -1013,7 +1017,8 @@ export const messages = {
         partialFailed: '部分实验数据加载失败，请稍后重试',
         invalidTask: '无效的测试任务编号',
         invalidUnit: '无效的最小测试单元编号',
-        unitLoadFailed: '加载最小测试单元详情失败，请稍后重试'
+        unitLoadFailed: '加载最小测试单元详情失败，请稍后重试',
+        taskFailedTitle: '任务执行失败'
       },
       fallback: {
         taskTitle: '测试任务 #{id}'
@@ -1635,6 +1640,7 @@ export const messages = {
         newTest: 'New Test',
         empty: 'No test records yet. Click “New Test” to start.',
         columns: {
+          taskName: 'Task Name',
           version: 'Prompt Version',
           model: 'Model',
           temperature: 'Temperature',
@@ -1945,7 +1951,8 @@ export const messages = {
         csvReadFailed: 'Unable to read the file. Please retry or choose another file.',
         noUnits: 'No test units were generated. Please review the selected prompts, models, and parameter sets.',
         createSuccess: 'Test task created and submitted. {count} units scheduled.',
-        createFailed: 'Failed to create test task. Please try again later.'
+        createFailed: 'Failed to create test task. Please try again later.',
+        retryPrefillFailed: 'Failed to copy the original task configuration. Please try again later.'
       }
     },
     promptTestResult: {
@@ -1979,7 +1986,8 @@ export const messages = {
         removeColumn: 'Remove Column',
         removeSingleColumn: 'Remove',
         columnCount: 'Columns: {count}',
-        exportCsv: 'Export CSV'
+        exportCsv: 'Export CSV',
+        retryTask: 'Retry Task'
       },
       analysis: {
         selectPlaceholder: 'Select analysis modules',
@@ -1998,7 +2006,7 @@ export const messages = {
         text: {
           latencyFastest: 'Fastest average latency:',
           latencySlowest: 'Slowest unit:',
-          tokensPeak: 'Highest average tokens:',
+          tokensPeak: 'Lowest average tokens:',
           throughputPeak: 'Best throughput:',
           approx: 'about'
         },
@@ -2035,7 +2043,8 @@ export const messages = {
       warnings: {
         missingOutputTitle: 'LLM response could not be parsed',
         missingOutputDescription: 'The model returned a payload but no displayable result was extracted. Please review the format or parsing rules.',
-        viewRawResponse: 'View raw response'
+        viewRawResponse: 'View raw response',
+        runFailedTitle: 'Request failed'
       },
       dialog: {
         rawResponseTitle: 'Raw Response · {unit} · Run #{index}',
@@ -2056,7 +2065,8 @@ export const messages = {
         partialFailed: 'Some experiment data could not be loaded. Please retry later.',
         invalidTask: 'Invalid test task id.',
         invalidUnit: 'Invalid test unit id.',
-        unitLoadFailed: 'Failed to load test unit details. Please try again later.'
+        unitLoadFailed: 'Failed to load test unit details. Please try again later.',
+        taskFailedTitle: 'Test task failed'
       },
       fallback: {
         taskTitle: 'Test Task #{id}'

@@ -387,28 +387,28 @@ def _build_insights(
 
     tokens_df = summary_df.dropna(subset=["avg_tokens"])
     if not tokens_df.empty:
-        max_tokens_unit = tokens_df.sort_values("avg_tokens", ascending=False).iloc[0]
-        max_tokens_id = _normalize_unit_id(max_tokens_unit["unit_id"], None)
-        max_tokens_label = label_map.get(
-            max_tokens_id,
+        min_tokens_unit = tokens_df.sort_values("avg_tokens", ascending=True).iloc[0]
+        min_tokens_id = _normalize_unit_id(min_tokens_unit["unit_id"], None)
+        min_tokens_label = label_map.get(
+            min_tokens_id,
             _safe_str(
-                max_tokens_unit.get("unit_label"),
-                _safe_str(max_tokens_unit["unit_name"], "总体"),
+                min_tokens_unit.get("unit_label"),
+                _safe_str(min_tokens_unit["unit_name"], "总体"),
             ),
         )
         insights.append(
-            f"平均 tokens 消耗最高的单元是 {max_tokens_unit['unit_name']}，约 {max_tokens_unit['avg_tokens']} tokens/请求。"
+            f"平均 tokens 消耗最低的单元是 {min_tokens_unit['unit_name']}，约 {min_tokens_unit['avg_tokens']} tokens/请求。"
         )
         details.append(
             {
                 "type": "tokens_peak",
                 "unit": {
-                    "unit_id": max_tokens_id,
-                    "unit_name": _safe_str(max_tokens_unit["unit_name"], "总体"),
-                    "label": max_tokens_label,
+                    "unit_id": min_tokens_id,
+                    "unit_name": _safe_str(min_tokens_unit["unit_name"], "总体"),
+                    "label": min_tokens_label,
                     "value": (
-                        float(max_tokens_unit["avg_tokens"])
-                        if max_tokens_unit["avg_tokens"] is not None
+                        float(min_tokens_unit["avg_tokens"])
+                        if min_tokens_unit["avg_tokens"] is not None
                         else None
                     ),
                     "unit": "tokens/请求",

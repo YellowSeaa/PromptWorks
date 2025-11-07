@@ -21,6 +21,19 @@
       </div>
     </section>
 
+    <el-alert
+      v-if="taskFailureReason"
+      class="task-status-alert"
+      type="error"
+      :closable="false"
+      show-icon
+      :title="t('promptTestResult.messages.taskFailedTitle')"
+    >
+      <template #default>
+        <span>{{ taskFailureReason }}</span>
+      </template>
+    </el-alert>
+
     <el-card v-loading="loading">
       <template #header>
         <div class="card-header">
@@ -29,6 +42,14 @@
             <el-radio-button label="results">{{ t('promptTestResult.tabs.results') }}</el-radio-button>
             <el-radio-button label="analysis">{{ t('promptTestResult.tabs.analysis') }}</el-radio-button>
           </el-radio-group>
+          <el-button
+            size="small"
+            type="primary"
+            :disabled="loading || !task"
+            @click="handleRetryTask"
+          >
+            {{ t('promptTestResult.actions.retryTask') }}
+          </el-button>
         </div>
       </template>
 
@@ -130,11 +151,23 @@
                   class="grid-cell"
                 >
                   <div class="output-badge">#{{ row.index }}</div>
-                  <template v-if="cell">
-                    <div v-if="shouldShowWarning(cell)" class="output-warning">
-                      <el-alert
-                        type="warning"
-                        show-icon
+                    <template v-if="cell">
+                      <div v-if="cell.errorMessage" class="output-warning">
+                        <el-alert
+                          type="error"
+                          show-icon
+                          :closable="false"
+                          :title="t('promptTestResult.warnings.runFailedTitle')"
+                        >
+                          <template #default>
+                            <span>{{ cell.errorMessage }}</span>
+                          </template>
+                        </el-alert>
+                      </div>
+                      <div v-else-if="shouldShowWarning(cell)" class="output-warning">
+                        <el-alert
+                          type="warning"
+                          show-icon
                         :closable="false"
                         :title="t('promptTestResult.warnings.missingOutputTitle')"
                       >
@@ -704,6 +737,37 @@ const rawResponseDialog = reactive({
   content: ''
 })
 
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+function pickString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : null
+  }
+  return null
+}
+
+const taskFailureReason = computed(() => {
+  const configRecord = toRecord(task.value?.config ?? null)
+  const configReason =
+    pickString(configRecord?.['last_error']) ?? pickString(configRecord?.['lastError'])
+  if (configReason) {
+    return configReason
+  }
+  for (const unit of units.value) {
+    const unitReason = pickString(unit.error)
+    if (unitReason) {
+      return unitReason
+    }
+  }
+  return null
+})
+
 const analysisModules = ref<AnalysisModuleDefinition[]>([])
 const analysisModulesLoading = ref(false)
 const selectedAnalysisModules = ref<string[]>([])
@@ -1115,7 +1179,7 @@ function resolveCellContent(cell: UnitOutput | null | undefined) {
 }
 
 function shouldShowWarning(cell: UnitOutput | null | undefined): cell is UnitOutput {
-  if (!cell) return false
+  if (!cell || cell.errorMessage) return false
   const hasContent = typeof cell.content === 'string' && cell.content.trim().length > 0
   const hasRawResponse =
     typeof cell.rawResponse === 'string' && cell.rawResponse.trim().length > 0
@@ -1971,6 +2035,15 @@ function removeLastColumn() {
   removeColumn(lastId)
 }
 
+function handleRetryTask() {
+  const currentTask = task.value
+  if (!currentTask) return
+  router.push({
+    name: 'prompt-test-task-create',
+    query: { retryTaskId: String(currentTask.id) }
+  })
+}
+
 function goBack() {
   router.push({ name: 'test-job-management' })
 }
@@ -2165,14 +2238,20 @@ watch(
 
 .card-header {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .result-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.task-status-alert {
+  margin: 0 0 12px;
 }
 
 .result-alert {

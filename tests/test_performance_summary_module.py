@@ -81,6 +81,10 @@ def test_build_summary_produces_metrics_for_multiple_units():
     assert latency_detail["fast"]["label"] == "单元1"
     assert latency_detail["slow"]["label"] == "单元2"
 
+    tokens_detail = next(item for item in details if item["type"] == "tokens_peak")
+    assert tokens_detail["unit"]["label"] == "单元2"
+    assert any("最低" in text for text in insights)
+
     charts = ps._build_chart_configs(summary, label_map)
     assert any(chart["id"] == "avg_latency" for chart in charts)
     bar_chart = next(chart for chart in charts if chart["id"] == "avg_latency")
