@@ -6,6 +6,8 @@
 
 PromptWorks is a full-stack solution focused on prompt asset management and large-model operations. The repository hosts a FastAPI backend together with a Vue + Element Plus frontend. The platform supports full prompt lifecycle management, model configuration, version comparison, and evaluation experiments, providing teams with a unified collaboration and testing workbench.
 
+![](frontend_en.png)
+
 ## ✨ Core Capabilities
 - **Prompt Management**: Create prompts, iterate versions, organize them with tags, and retain a complete audit trail.
 - **Version Comparison**: Provide diff views to quickly identify content changes introduced by prompt updates.
