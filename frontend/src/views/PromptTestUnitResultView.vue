@@ -131,7 +131,19 @@
           placement="top"
         >
           <el-card shadow="hover">
-            <div v-if="shouldShowWarning(output)" class="output-warning">
+            <div v-if="output.errorMessage" class="output-warning">
+              <el-alert
+                type="error"
+                show-icon
+                :closable="false"
+                :title="t('promptTestResult.warnings.runFailedTitle')"
+              >
+                <template #default>
+                  <span>{{ output.errorMessage }}</span>
+                </template>
+              </el-alert>
+            </div>
+            <div v-else-if="shouldShowWarning(output)" class="output-warning">
               <el-alert
                 type="warning"
                 show-icon
@@ -396,7 +408,7 @@ function resolveOutputContent(output: PromptTestResultOutput | null | undefined)
 function shouldShowWarning(
   output: PromptTestResultOutput | null | undefined
 ): output is PromptTestResultOutput {
-  if (!output) return false
+  if (!output || output.errorMessage) return false
   const hasContent = typeof output.content === 'string' && output.content.trim().length > 0
   const hasRawResponse =
     typeof output.rawResponse === 'string' && output.rawResponse.trim().length > 0

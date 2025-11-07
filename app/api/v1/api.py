@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    analysis,
     llms,
     prompt_classes,
     prompt_tags,
@@ -14,6 +15,7 @@ from app.api.v1.endpoints import (
 
 api_router = APIRouter()
 api_router.include_router(llms.router, prefix="/llm-providers", tags=["llm_providers"])
+api_router.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
 api_router.include_router(
     prompt_classes.router, prefix="/prompt-classes", tags=["prompt_classes"]
 )

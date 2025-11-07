@@ -219,6 +219,11 @@
         border
         v-loading="testRunLoading"
       >
+        <el-table-column :label="t('promptDetail.test.columns.taskName')" min-width="200">
+          <template #default="{ row }">
+            <span>{{ row.taskName }}</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('promptDetail.test.columns.version')" min-width="180">
           <template #default="{ row }">
             <div class="test-record-name">
@@ -347,6 +352,7 @@ type TestRecordStatus = 'completed' | 'failed' | 'running' | 'pending'
 interface TestRecordRow {
   key: string
   type: TestRecordType
+  taskName: string
   versionLabel: string
   modelLabel: string
   temperature: number | null
@@ -600,6 +606,7 @@ function buildLegacyTestRecord(
   return {
     key: `legacy-${run.id}`,
     type: 'legacy',
+    taskName: '--',
     versionLabel,
     modelLabel,
     temperature,
@@ -740,10 +747,13 @@ function buildPromptTestTaskRecord(
   const createdAtSource = task.created_at ?? task.updated_at ?? ''
   const createdAtSortValue = createdAtSource ? safeDateValue(createdAtSource) : 0
   const createdAtDisplay = createdAtSource ? formatDateTime(createdAtSource) : '--'
+  const taskName =
+    typeof task.name === 'string' && task.name.trim() ? task.name.trim() : '--'
 
   return {
     key: `task-${task.id}`,
     type: 'task',
+    taskName,
     versionLabel,
     modelLabel,
     temperature,

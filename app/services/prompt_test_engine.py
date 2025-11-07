@@ -98,12 +98,14 @@ def execute_prompt_test_experiment(
     latencies: list[int] = []
     token_totals: list[int] = []
     json_success = 0
+    failed_runs = 0
 
     rounds_per_case = max(1, int(unit.rounds or 1))
     case_count = _count_variable_cases(context_template)
     total_runs = rounds_per_case * max(case_count, 1)
 
     for run_index in range(1, total_runs + 1):
+        context = _resolve_context(context_template, run_index)
         try:
             run_record = _execute_single_round(
                 provider=provider,
@@ -111,16 +113,30 @@ def execute_prompt_test_experiment(
                 unit=unit,
                 prompt_snapshot=prompt_snapshot,
                 base_parameters=parameters,
-                context_template=context_template,
+                context=context,
                 run_index=run_index,
                 request_timeout=request_timeout,
             )
         except PromptTestExecutionError as exc:
-            experiment.status = PromptTestExperimentStatus.FAILED
-            experiment.error = str(exc)
-            experiment.finished_at = datetime.now(UTC)
-            db.flush()
-            return experiment
+            failed_runs += 1
+            failure_record: dict[str, Any] = {
+                "run_index": run_index,
+                "status": "failed",
+                "error": str(exc),
+                "variables": _extract_variables(context) or None,
+            }
+            if exc.status_code is not None:
+                failure_record["status_code"] = exc.status_code
+            run_records.append(failure_record)
+            if progress_callback is not None:
+                try:
+                    progress_callback(1)
+                except Exception:  # pragma: no cover - 防御性兜底
+                    logger.exception("更新 Prompt 测试进度时出现异常")
+            logger.warning(
+                "Prompt 测试单元 %s 的第 %s 次调用失败: %s", unit.id, run_index, exc
+            )
+            continue
 
         run_records.append(run_record)
         if progress_callback is not None:
@@ -151,7 +167,15 @@ def execute_prompt_test_experiment(
         total_rounds=len(run_records),
         json_success=json_success,
     )
-    experiment.status = PromptTestExperimentStatus.COMPLETED
+    experiment.metrics["failed_runs"] = failed_runs
+    experiment.metrics["success_runs"] = len(run_records) - failed_runs
+
+    if failed_runs and failed_runs == len(run_records):
+        experiment.status = PromptTestExperimentStatus.FAILED
+        experiment.error = f"全部 {failed_runs} 次调用失败"
+    else:
+        experiment.status = PromptTestExperimentStatus.COMPLETED
+        experiment.error = f"{failed_runs} 次调用失败" if failed_runs else None
     experiment.finished_at = datetime.now(UTC)
     db.flush()
     return experiment
@@ -241,11 +265,10 @@ def _execute_single_round(
     unit: PromptTestUnit,
     prompt_snapshot: str,
     base_parameters: Mapping[str, Any],
-    context_template: Mapping[str, Any] | Sequence[Any],
+    context: Mapping[str, Any],
     run_index: int,
     request_timeout: float,
 ) -> dict[str, Any]:
-    context = _resolve_context(context_template, run_index)
     messages = _build_messages(unit, prompt_snapshot, context, run_index)
     payload = {
         "model": model.name if model else unit.model_name,

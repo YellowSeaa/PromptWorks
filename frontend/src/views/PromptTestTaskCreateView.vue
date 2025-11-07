@@ -14,7 +14,7 @@
       </div>
     </section>
 
-    <el-card class="form-card">
+    <el-card class="form-card" v-loading="retryPrefillLoading">
       <template #header>
         <div class="card-header">
           <div>
@@ -217,6 +217,39 @@
         <el-divider />
 
         <section class="form-section">
+          <h4 class="section-title">{{ t('promptTestCreate.form.sections.analysis') }}</h4>
+          <el-form-item :label="t('promptTestCreate.form.fields.analysisModules')">
+            <el-select
+              v-model="taskForm.analysisModules"
+              multiple
+              filterable
+              collapse-tags
+              :loading="analysisModuleLoading"
+              :placeholder="t('promptTestCreate.form.placeholders.analysisModules')"
+            >
+              <el-option
+                v-for="module in analysisModuleOptions"
+                :key="module.module_id"
+                :label="module.name"
+                :value="module.module_id"
+              >
+                <div class="analysis-option">
+                  <span class="analysis-option__title">{{ module.name }}</span>
+                  <span v-if="module.description" class="analysis-option__desc">
+                    {{ module.description }}
+                  </span>
+                </div>
+              </el-option>
+            </el-select>
+            <p class="form-tip">
+              {{ t('promptTestCreate.form.tips.analysisModules') }}
+            </p>
+          </el-form-item>
+        </section>
+
+        <el-divider />
+
+        <section class="form-section">
           <div class="section-title-row">
             <h4 class="section-title">{{ t('promptTestCreate.form.sections.dataset') }}</h4>
             <el-tooltip :content="datasetTooltip" placement="top">
@@ -303,7 +336,7 @@
         <el-divider />
 
         <el-form-item>
-          <el-button type="primary" :loading="submitting" @click="handleSubmit">
+          <el-button type="primary" :loading="submitting || retryPrefillLoading" @click="handleSubmit">
             {{ t('promptTestCreate.form.submit') }}
           </el-button>
           <el-button @click="goTestManagement">
@@ -323,9 +356,12 @@ import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { listPrompts, getPrompt } from '../api/prompt'
 import { listLLMProviders } from '../api/llmProvider'
-import { createPromptTestTask } from '../api/promptTest'
+import { listAnalysisModules } from '../api/analysis'
+import { createPromptTestTask, getPromptTestTask, listPromptTestUnits } from '../api/promptTest'
 import type { Prompt } from '../types/prompt'
+import type { AnalysisModuleDefinition } from '../types/analysis'
 import type { LLMProvider } from '../types/llm'
+import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
 
 const route = useRoute()
 const router = useRouter()
@@ -387,12 +423,20 @@ interface UnitDraft {
   extra: Record<string, unknown> | null
 }
 
+interface ParameterSetSource {
+  label: string
+  temperature: number
+  top_p: number | null
+  parameters: Record<string, unknown> | null
+}
+
 const taskForm = reactive({
   name: '',
   description: '',
   promptId: null as number | null,
   promptVersionIds: [] as number[],
-  autoExecute: true
+  autoExecute: true,
+  analysisModules: [] as string[]
 })
 
 const unitForm = reactive({
@@ -416,6 +460,12 @@ const providers = ref<LLMProvider[]>([])
 const csvInputRef = ref<HTMLInputElement | null>(null)
 const routePromptId = ref<number | null>(null)
 const routeVersionIds = ref<number[]>([])
+const analysisModuleOptions = ref<AnalysisModuleDefinition[]>([])
+const analysisModuleLoading = ref(false)
+const retryPrefillLoading = ref(false)
+let lastAppliedRetryTaskId: number | null = null
+let pendingRetryTaskId: number | null = null
+let suppressPromptWatcher = false
 
 let parameterSetUid = 1
 const parameterSets = ref<ParameterSet[]>([createParameterSet()])
@@ -573,6 +623,7 @@ watch(
   () => taskForm.promptId,
   async (newId, oldId) => {
     if (newId === oldId) return
+    if (suppressPromptWatcher) return
     await loadPromptDetail(newId ?? null)
   }
 )
@@ -583,6 +634,19 @@ watch(
     const validIds = new Set(options.map((option) => option.id))
     if (taskForm.promptVersionIds.some((id) => !validIds.has(id))) {
       taskForm.promptVersionIds = taskForm.promptVersionIds.filter((id) =>
+        validIds.has(id)
+      )
+    }
+  },
+  { deep: true }
+)
+
+watch(
+  analysisModuleOptions,
+  (modules) => {
+    const validIds = new Set(modules.map((module) => module.module_id))
+    if (taskForm.analysisModules.some((id) => !validIds.has(id))) {
+      taskForm.analysisModules = taskForm.analysisModules.filter((id) =>
         validIds.has(id)
       )
     }
@@ -648,6 +712,72 @@ function normalizeRouteNumberList(value: unknown): number[] {
   return Array.from(new Set(result))
 }
 
+function toPositiveInteger(value: unknown): number | null {
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value > 0) {
+      return value
+    }
+    return null
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+  }
+  return null
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return isPlainRecord(value) ? (value as Record<string, unknown>) : null
+}
+
+function extractStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : null))
+    .filter((item): item is string => Boolean(item && item.length))
+}
+
+function extractNumberArray(value: unknown): number[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(
+    new Set(
+      value
+        .map((item) => toPositiveInteger(item))
+        .filter((item): item is number => item !== null)
+    )
+  )
+}
+
+function formatParametersJson(data: Record<string, unknown> | null | undefined): string {
+  if (!data || Object.keys(data).length === 0) {
+    return ''
+  }
+  try {
+    return JSON.stringify(data, null, 2)
+  } catch (error) {
+    void error
+    return ''
+  }
+}
+
+function formatDisplayValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  try {
+    return JSON.stringify(value)
+  } catch (error) {
+    void error
+    return String(value)
+  }
+}
+
 function applyRouteVersionDefaults(): boolean {
   const prompt = selectedPrompt.value
   if (!prompt) {
@@ -701,6 +831,22 @@ watch(
 
 syncRoutePromptId()
 
+function syncRetryTaskIdFromRoute() {
+  const parsed = normalizeRouteNumber(route.query.retryTaskId)
+  if (parsed !== null) {
+    void applyRetryTaskConfig(parsed)
+  }
+}
+
+watch(
+  () => route.query.retryTaskId,
+  () => {
+    syncRetryTaskIdFromRoute()
+  }
+)
+
+syncRetryTaskIdFromRoute()
+
 function createParameterSet(): ParameterSet {
   return {
     id: parameterSetUid++,
@@ -713,6 +859,321 @@ function createParameterSet(): ParameterSet {
 
 function defaultParameterSetLabel(index: number): string {
   return t('promptTestCreate.form.defaults.parameterSet', { index: index + 1 })
+}
+
+async function applyRetryTaskConfig(taskId: number) {
+  if (taskId === lastAppliedRetryTaskId) return
+  if (retryPrefillLoading.value && pendingRetryTaskId === taskId) return
+  retryPrefillLoading.value = true
+  pendingRetryTaskId = taskId
+  try {
+    const [taskData, unitList] = await Promise.all([
+      getPromptTestTask(taskId),
+      listPromptTestUnits(taskId)
+    ])
+    await hydrateFormFromTask(taskData, unitList)
+    lastAppliedRetryTaskId = taskId
+  } catch (error) {
+    console.error('复制测试任务配置失败', error)
+    ElMessage.error(t('promptTestCreate.messages.retryPrefillFailed'))
+  } finally {
+    retryPrefillLoading.value = false
+    pendingRetryTaskId = null
+  }
+}
+
+async function hydrateFormFromTask(taskData: PromptTestTask, unitList: PromptTestUnit[]) {
+  const configRecord = toRecord(taskData.config) ?? {}
+  const promptId = extractPromptIdFromConfig(configRecord)
+  const versionIds = extractVersionIdsFromConfig(configRecord, unitList)
+  routePromptId.value = promptId
+  routeVersionIds.value = versionIds
+  const normalizedTaskName = taskData.name.trim()
+  taskForm.name = `${normalizedTaskName}-retry`
+  taskForm.description = taskData.description ?? ''
+  const autoExecuteConfig = configRecord['auto_execute']
+  taskForm.autoExecute =
+    typeof autoExecuteConfig === 'boolean' ? autoExecuteConfig : true
+  const analysisModules = extractStringArray(configRecord['analysis_modules'])
+  taskForm.analysisModules = [...analysisModules]
+
+  suppressPromptWatcher = true
+  taskForm.promptId = promptId
+  suppressPromptWatcher = false
+
+  await loadPromptDetail(promptId)
+  if (promptId !== null) {
+    applyPromptVersionsFromRetry(versionIds)
+  } else {
+    taskForm.promptVersionIds = []
+  }
+
+  unitForm.selectedModels = [...extractModelKeys(configRecord, unitList)]
+  applyParameterSetSources(extractParameterSetSources(configRecord, unitList))
+  unitForm.rounds = inferRoundsFromUnits(unitList)
+  unitForm.baseName = inferBaseNameFromUnits(unitList, normalizedTaskName)
+  applyVariablesFromUnits(configRecord, unitList)
+}
+
+function applyPromptVersionsFromRetry(versionIds: number[]) {
+  const validIds = new Set(versionOptions.value.map((option) => option.id))
+  const resolved = versionIds.filter((id) => validIds.has(id))
+  if (resolved.length) {
+    taskForm.promptVersionIds = resolved
+    return
+  }
+  if (versionOptions.value.length) {
+    taskForm.promptVersionIds = [versionOptions.value[0].id]
+  } else {
+    taskForm.promptVersionIds = []
+  }
+}
+
+function extractPromptIdFromConfig(config: Record<string, unknown>): number | null {
+  const direct = toPositiveInteger(config['prompt_id'])
+  if (direct !== null) return direct
+  const list = extractNumberArray(config['prompt_ids'])
+  return list[0] ?? null
+}
+
+function extractVersionIdsFromConfig(
+  config: Record<string, unknown>,
+  units: PromptTestUnit[]
+): number[] {
+  const ids = extractNumberArray(config['prompt_version_ids'])
+  if (ids.length) {
+    return ids
+  }
+  const unitVersionIds = Array.from(
+    new Set(
+      units
+        .map((unit) => toPositiveInteger(unit.prompt_version_id))
+        .filter((id): id is number => id !== null)
+    )
+  )
+  return unitVersionIds
+}
+
+function extractModelKeys(
+  config: Record<string, unknown>,
+  units: PromptTestUnit[]
+): string[] {
+  const keys = extractStringArray(config['model_keys'])
+  if (keys.length) {
+    return keys
+  }
+  const derived = new Set<string>()
+  units.forEach((unit) => {
+    const providerId = toPositiveInteger(unit.llm_provider_id)
+    const extra = toRecord(unit.extra)
+    const modelId = extra ? toPositiveInteger(extra.llm_model_id) : null
+    if (providerId && modelId) {
+      derived.add(`${providerId}:${modelId}`)
+    }
+  })
+  return Array.from(derived)
+}
+
+function extractParameterSetSources(
+  config: Record<string, unknown>,
+  units: PromptTestUnit[]
+): ParameterSetSource[] {
+  const rawSets = Array.isArray(config['parameter_sets']) ? config['parameter_sets'] : []
+  const normalized = rawSets
+    .map((item) => {
+      const record = toRecord(item)
+      if (!record) return null
+      const temperature =
+        typeof record.temperature === 'number'
+          ? record.temperature
+          : Number(record.temperature)
+      const topSource = record.top_p ?? record.topP
+      const topValue =
+        topSource === null || topSource === undefined ? null : Number(topSource)
+      return {
+        label: typeof record.label === 'string' ? record.label : '',
+        temperature: Number.isFinite(temperature) ? Number(temperature) : 0.7,
+        top_p: Number.isFinite(topValue) ? Number(topValue) : null,
+        parameters: toRecord(record.parameters)
+      } as ParameterSetSource
+    })
+    .filter((item): item is ParameterSetSource => Boolean(item))
+  if (normalized.length) {
+    return normalized
+  }
+  return deriveParameterSetsFromUnits(units)
+}
+
+function deriveParameterSetsFromUnits(units: PromptTestUnit[]): ParameterSetSource[] {
+  const map = new Map<string, ParameterSetSource>()
+  units.forEach((unit, index) => {
+    const extra = toRecord(unit.extra)
+    const rawLabel =
+      typeof extra?.parameter_label === 'string'
+        ? extra.parameter_label.trim()
+        : ''
+    const fallbackIndex =
+      typeof extra?.parameter_index === 'number' ? extra.parameter_index : index + 1
+    const label =
+      rawLabel.length > 0
+        ? rawLabel
+        : t('promptTestCreate.form.defaults.parameterSet', { index: fallbackIndex })
+    if (map.has(label)) {
+      return
+    }
+    map.set(label, {
+      label,
+      temperature:
+        typeof unit.temperature === 'number' && Number.isFinite(unit.temperature)
+          ? unit.temperature
+          : 0.7,
+      top_p:
+        typeof unit.top_p === 'number' && Number.isFinite(unit.top_p)
+          ? unit.top_p
+          : null,
+      parameters: toRecord(unit.parameters)
+    })
+  })
+  return Array.from(map.values())
+}
+
+function applyParameterSetSources(sources: ParameterSetSource[]) {
+  if (!sources.length) {
+    parameterSetUid = 1
+    parameterSets.value = [createParameterSet()]
+    return
+  }
+  let nextId = 1
+  parameterSets.value = sources.map((source) => ({
+    id: nextId++,
+    label: source.label ?? '',
+    temperature: Number.isFinite(source.temperature) ? source.temperature : 0.7,
+    topP:
+      typeof source.top_p === 'number' && Number.isFinite(source.top_p)
+        ? source.top_p
+        : null,
+    parametersJson: formatParametersJson(source.parameters ?? null)
+  }))
+  parameterSetUid = nextId
+}
+
+function inferRoundsFromUnits(units: PromptTestUnit[]): number {
+  const target = units.find(
+    (unit) => typeof unit.rounds === 'number' && Number.isFinite(unit.rounds) && unit.rounds > 0
+  )
+  if (!target) {
+    return Math.max(1, Math.floor(unitForm.rounds))
+  }
+  return Math.max(1, Math.floor(target.rounds))
+}
+
+function inferBaseNameFromUnits(units: PromptTestUnit[], fallback: string): string {
+  const first = units[0]
+  if (!first || typeof first.name !== 'string') {
+    return fallback
+  }
+  const extra = toRecord(first.extra)
+  const promptName =
+    typeof extra?.prompt_name === 'string' ? extra.prompt_name.trim() : ''
+  const promptVersion =
+    typeof extra?.prompt_version === 'string' ? extra.prompt_version.trim() : ''
+  const promptLabel = [promptName, promptVersion].filter(Boolean).join(' ').trim()
+  const parameterLabel =
+    typeof extra?.parameter_label === 'string' ? extra.parameter_label.trim() : ''
+  const suffixParts = [promptLabel, first.model_name, parameterLabel].filter(
+    (part) => typeof part === 'string' && part.length
+  )
+  if (!suffixParts.length) {
+    return fallback
+  }
+  const suffix = suffixParts.join(' / ')
+  if (first.name.endsWith(suffix)) {
+    const base = first.name.slice(0, first.name.length - suffix.length).replace(/\s*\/\s*$/, '')
+    const trimmed = base.trim()
+    return trimmed || fallback
+  }
+  return fallback
+}
+
+function applyVariablesFromUnits(
+  config: Record<string, unknown>,
+  units: PromptTestUnit[]
+) {
+  const rows = extractVariableRows(units)
+  if (!rows.length) {
+    unitForm.variableHeaders = []
+    unitForm.variablesPreview = []
+    unitForm.variablesText = ''
+    unitForm.variableInputMode = 'textarea'
+    unitForm.csvFileName = ''
+    return
+  }
+  const headers = extractStringArray(config['variable_headers'])
+  const headerSet = new Set(headers)
+  rows.forEach((row) => {
+    Object.keys(row).forEach((key) => {
+      if (!headerSet.has(key)) {
+        headerSet.add(key)
+        headers.push(key)
+      }
+    })
+  })
+  if (!headers.length) {
+    const fallbackHeaders = Array.from(
+      new Set(rows.flatMap((row) => Object.keys(row)))
+    )
+    headers.push(...fallbackHeaders)
+  }
+  unitForm.variableHeaders = [...headers]
+  unitForm.variablesPreview = rows.map((row) => ({ ...row }))
+  unitForm.variablesText = buildVariablesText(headers, rows)
+  unitForm.variableInputMode =
+    typeof config['variable_source'] === 'string' && config['variable_source'] === 'csv'
+      ? 'csv'
+      : 'textarea'
+  unitForm.csvFileName = ''
+}
+
+function extractVariableRows(units: PromptTestUnit[]): Array<Record<string, string>> {
+  for (const unit of units) {
+    const variables = toRecord(unit.variables)
+    if (!variables) continue
+    const cases = variables.cases
+    if (!Array.isArray(cases) || !cases.length) {
+      continue
+    }
+    return cases
+      .map((item) => toRecord(item))
+      .filter((row): row is Record<string, unknown> => Boolean(row))
+      .map((row) => {
+        const normalized: Record<string, string> = {}
+        Object.entries(row).forEach(([key, value]) => {
+          normalized[key] = formatDisplayValue(value)
+        })
+        return normalized
+      })
+  }
+  return []
+}
+
+function buildVariablesText(
+  headers: string[],
+  rows: Array<Record<string, string>>
+): string {
+  if (!headers.length || !rows.length) {
+    return ''
+  }
+  const escapeCell = (value: string): string => {
+    if (value.includes('"') || value.includes(',') || /\r|\n/.test(value)) {
+      return `"${value.replace(/"/g, '""')}"`
+    }
+    return value
+  }
+  const lines = [
+    headers.map((header) => escapeCell(header)).join(','),
+    ...rows.map((row) => headers.map((header) => escapeCell(row[header] ?? '')).join(','))
+  ]
+  return lines.join('\n')
 }
 
 function addParameterSet() {
@@ -748,6 +1209,18 @@ async function fetchProviders() {
     ElMessage.error(t('promptTestCreate.messages.loadProviderFailed'))
   } finally {
     providerLoading.value = false
+  }
+}
+
+async function fetchAnalysisModules() {
+  analysisModuleLoading.value = true
+  try {
+    analysisModuleOptions.value = await listAnalysisModules()
+  } catch (error) {
+    console.error('加载分析模块失败', error)
+    ElMessage.error(t('promptTestCreate.messages.loadAnalysisModuleFailed'))
+  } finally {
+    analysisModuleLoading.value = false
   }
 }
 
@@ -1048,7 +1521,8 @@ async function handleSubmit() {
           parameters: set.parameters ?? {}
         })),
         variable_headers: unitForm.variableHeaders,
-        variable_source: unitForm.variableInputMode
+        variable_source: unitForm.variableInputMode,
+        analysis_modules: taskForm.analysisModules
       },
       auto_execute: taskForm.autoExecute,
       units: unitsPayload.map((unit) => ({
@@ -1083,7 +1557,7 @@ async function handleSubmit() {
 }
 
 onMounted(() => {
-  void Promise.all([fetchPrompts(), fetchProviders()])
+  void Promise.all([fetchPrompts(), fetchProviders(), fetchAnalysisModules()])
 })
 </script>
 
@@ -1217,6 +1691,22 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+}
+
+.analysis-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analysis-option__title {
+  font-weight: 600;
+}
+
+.analysis-option__desc {
+  font-size: 12px;
+  color: var(--text-weak-color);
+  white-space: normal;
 }
 
 .add-parameter-set {
