@@ -42,6 +42,14 @@
             <el-radio-button label="results">{{ t('promptTestResult.tabs.results') }}</el-radio-button>
             <el-radio-button label="analysis">{{ t('promptTestResult.tabs.analysis') }}</el-radio-button>
           </el-radio-group>
+          <el-button
+            size="small"
+            type="primary"
+            :disabled="loading || !task"
+            @click="handleRetryTask"
+          >
+            {{ t('promptTestResult.actions.retryTask') }}
+          </el-button>
         </div>
       </template>
 
@@ -2027,6 +2035,15 @@ function removeLastColumn() {
   removeColumn(lastId)
 }
 
+function handleRetryTask() {
+  const currentTask = task.value
+  if (!currentTask) return
+  router.push({
+    name: 'prompt-test-task-create',
+    query: { retryTaskId: String(currentTask.id) }
+  })
+}
+
 function goBack() {
   router.push({ name: 'test-job-management' })
 }
@@ -2221,8 +2238,10 @@ watch(
 
 .card-header {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .result-panel {

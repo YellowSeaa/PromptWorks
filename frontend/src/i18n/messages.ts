@@ -903,7 +903,8 @@ export const messages = {
         csvReadFailed: '文件读取失败，请重试或更换文件',
         noUnits: '未生成任何测试单元，请检查选择的模型、版本与参数集',
         createSuccess: '测试任务创建成功，已提交执行，共生成 {count} 个单元',
-        createFailed: '创建测试任务失败，请稍后重试'
+        createFailed: '创建测试任务失败，请稍后重试',
+        retryPrefillFailed: '复制原任务配置失败，请稍后重试'
       }
     },
     promptTestResult: {
@@ -937,7 +938,8 @@ export const messages = {
         removeColumn: '减少列',
         removeSingleColumn: '移除列',
         columnCount: '当前列数：{count}',
-        exportCsv: '导出 CSV'
+        exportCsv: '导出 CSV',
+        retryTask: '重试任务'
       },
       analysis: {
         selectPlaceholder: '请选择分析模块',
@@ -1949,7 +1951,8 @@ export const messages = {
         csvReadFailed: 'Unable to read the file. Please retry or choose another file.',
         noUnits: 'No test units were generated. Please review the selected prompts, models, and parameter sets.',
         createSuccess: 'Test task created and submitted. {count} units scheduled.',
-        createFailed: 'Failed to create test task. Please try again later.'
+        createFailed: 'Failed to create test task. Please try again later.',
+        retryPrefillFailed: 'Failed to copy the original task configuration. Please try again later.'
       }
     },
     promptTestResult: {
@@ -1983,7 +1986,8 @@ export const messages = {
         removeColumn: 'Remove Column',
         removeSingleColumn: 'Remove',
         columnCount: 'Columns: {count}',
-        exportCsv: 'Export CSV'
+        exportCsv: 'Export CSV',
+        retryTask: 'Retry Task'
       },
       analysis: {
         selectPlaceholder: 'Select analysis modules',
