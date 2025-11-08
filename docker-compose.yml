@@ -31,9 +31,7 @@ services:
       retries: 10
 
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-yellowseaa/promptworks:backend-main-latest}
     container_name: promptworks-backend
     environment:
       APP_ENV: production
@@ -53,11 +51,7 @@ services:
       - "8000:8000"
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: http://localhost:8000/api/v1
+    image: ${FRONTEND_IMAGE:-yellowseaa/promptworks:frontend-main-latest}
     container_name: promptworks-frontend
     depends_on:
       backend:
