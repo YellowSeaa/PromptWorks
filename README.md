@@ -26,12 +26,53 @@ PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决
 - **统一配置**：通过根目录 `.env` 与前端 `VITE_` 前缀环境变量解耦各环境差异。
 
 ## 🚀 快速开始
-### 0. 环境准备
+### 通过 Docker 部署（推荐）
+#### 1. **全栈一键启动**（默认拉取 main 渠道镜像）：
+```bash
+docker compose pull backend frontend
+docker compose up -d
+```
+
+- Compose 默认引用 `yellowseaa/promptworks:backend-main-latest` 与 `yellowseaa/promptworks:frontend-main-latest`，会自动启动 PostgreSQL 与 Redis。
+- 若想切换到 dev 渠道或指定具体版本，可在 `.env` 中设置 `BACKEND_IMAGE`、`FRONTEND_IMAGE`，或在命令前临时注入：  
+`BACKEND_IMAGE=yellowseaa/promptworks:backend-dev-latest FRONTEND_IMAGE=yellowseaa/promptworks:frontend-dev-latest docker compose up -d`
+
+#### 2. **仅运行后端**：需要单独调试 FastAPI 服务时，可直接拉取后端镜像：
+```bash
+docker pull yellowseaa/promptworks:backend-main-latest
+docker run -d --name promptworks-backend -p 8000:8000 yellowseaa/promptworks:backend-main-latest
+```
+> 自建部署时如需自定义域名、HTTPS 或前端 API 地址，可 fork 后通过新的标签重新构建推送。
+
+#### 3. **访问入口**
+
+前端服务默认暴露在 `http://localhost:18080`，后端 API 为 `http://localhost:8000/api/v1`，数据库与 Redis 对应端口分别为 `15432` 与 `6379`。
+
+#### 4. **停止/清理**：
+```bash
+docker compose down            # 停止容器
+docker compose down -v         # 停止并删除数据卷
+```
+
+#### 5. **容器编排说明**
+
+| 服务 | 说明 | 端口 | 额外信息 |
+| --- | --- | --- | --- |
+| `postgres` | PostgreSQL 数据库 | 15432 | 默认账户、密码、库名均为 `promptworks` |
+| `redis` | Redis 缓存/消息队列 | 6379 | 已启用 AOF，适合作为开发环境使用 |
+| `backend` | FastAPI 后端 | 8000 | 启动前自动执行 `alembic upgrade head` 同步结构 |
+| `frontend` | Nginx 托管的前端静态文件 | 18080 | 构建时可通过 `VITE_API_BASE_URL` 定制后端地址 |
+
+> 提示：如需自定义端口或数据库密码，可在 `docker-compose.yml` 中调整对应环境变量与端口映射（当前示例采用 `15432`、`18080`），然后重新执行 `docker compose up -d`。
+
+### 通过本地代码启动
+
+#### 1. 环境准备
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL、Redis（生产环境推荐）；本地可参考 `.env.example` 使用默认参数快速启动。
 
-### 1. 后端环境初始化
+#### 2. 后端环境初始化
 ```bash
 # 同步后端依赖（包含开发工具）
 uv sync --extra dev
@@ -50,13 +91,13 @@ createdb promptworks -O promptworks
 uv run alembic upgrade head
 ```
 
-### 2. 前端依赖安装
+#### 3. 前端依赖安装
 ```bash
 cd frontend
 npm install
 ```
 
-### 3. 启动服务
+#### 4. 启动服务
 ```bash
 # 后端 FastAPI 调试服务
 uv run poe server
@@ -69,7 +110,7 @@ uv run poe frontend
 ```
 后端默认运行在 `http://127.0.0.1:8000`（API 文档访问 `/docs`），前端默认运行在 `http://127.0.0.1:5173`。
 
-### 4. 常用质量校验
+#### 5. 常用质量校验
 ```bash
 uv run poe format      # 统一代码风格
 uv run poe lint        # 静态类型检查
@@ -84,29 +125,6 @@ npm run build
 - 若测试任务的 Schema 未显式提供 `system` 消息，平台会把当前 Prompt 快照以 `user` 角色注入消息列表，兼容仅识别用户输入的模型。
 - Schema 中若包含 `system` 消息，则保持原有顺序，不会重复注入快照内容。
 - 仍会保证测试输入（`inputs`/`test_inputs`）中的问题作为后续 `user` 消息发送，支持多轮回放。
-
-## 🐳 Docker 一键部署
-- **环境准备**：确保本机已安装 Docker 与 Docker Compose（Docker Desktop 或 NerdCTL 均可）。
-- **启动命令**：
-```bash
-docker compose up -d --build
-```
-- **访问入口**：前端服务默认暴露在 `http://localhost:18080`，后端 API 为 `http://localhost:8000/api/v1`，数据库与 Redis 对应端口分别为 `15432` 与 `6379`。
-- **停止/清理**：
-```bash
-docker compose down            # 停止容器
-docker compose down -v         # 停止并删除数据卷
-```
-
-### 容器编排说明
-| 服务 | 说明 | 端口 | 额外信息 |
-| --- | --- | --- | --- |
-| `postgres` | PostgreSQL 数据库 | 15432 | 默认账户、密码、库名均为 `promptworks` |
-| `redis` | Redis 缓存/消息队列 | 6379 | 已启用 AOF，适合作为开发环境使用 |
-| `backend` | FastAPI 后端 | 8000 | 启动前自动执行 `alembic upgrade head` 同步结构 |
-| `frontend` | Nginx 托管的前端静态文件 | 18080 | 构建时可通过 `VITE_API_BASE_URL` 定制后端地址 |
-
-> 提示：如需自定义端口或数据库密码，可在 `docker-compose.yml` 中调整对应环境变量与端口映射（当前示例采用 `15432`、`18080`），然后重新执行 `docker compose up -d --build`。
 
 ## ⚙️ 环境变量说明
 | 名称 | 是否必填 | 默认值 | 说明 |

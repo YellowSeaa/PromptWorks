@@ -26,12 +26,52 @@ PromptWorks is a full-stack solution focused on prompt asset management and larg
 - **Unified Configuration**: Uses the root `.env` and front-end `VITE_` environment variables to decouple environment-specific settings.
 
 ## 🚀 Quick Start
-### 0. Prerequisites
+### Docker Deployment (Recommended)
+#### 1. Full-stack bootstrap (defaults to the `main` channel images)
+```bash
+docker compose pull backend frontend
+docker compose up -d
+```
+- The compose file references `yellowseaa/promptworks:backend-main-latest` and `yellowseaa/promptworks:frontend-main-latest` and automatically starts PostgreSQL plus Redis.
+- To switch to the dev channel or a pinned version, set `BACKEND_IMAGE` / `FRONTEND_IMAGE` in `.env` or inline:  
+  `BACKEND_IMAGE=yellowseaa/promptworks:backend-dev-latest FRONTEND_IMAGE=yellowseaa/promptworks:frontend-dev-latest docker compose up -d`
+
+#### 2. Backend only
+Useful when debugging the API without the frontend:
+```bash
+docker pull yellowseaa/promptworks:backend-main-latest
+docker run -d --name promptworks-backend -p 8000:8000 yellowseaa/promptworks:backend-main-latest
+```
+> For custom domains, HTTPS, or API endpoints, fork and rebuild with new tags before pushing.
+
+#### 3. Access endpoints
+Frontend: `http://localhost:18080`  
+Backend API: `http://localhost:8000/api/v1`  
+PostgreSQL / Redis ports: `15432` / `6379`
+
+#### 4. Stop / clean up
+```bash
+docker compose down
+docker compose down -v   # remove volumes (data will be lost)
+```
+
+#### 5. Service overview
+| Service | Description | Port | Extra Info |
+| --- | --- | --- | --- |
+| `postgres` | PostgreSQL database | 15432 | Default user, password, and database are `promptworks`. |
+| `redis` | Redis cache / message broker | 6379 | AOF enabled, suitable for development usage. |
+| `backend` | FastAPI backend | 8000 | Runs `alembic upgrade head` before serving traffic. |
+| `frontend` | Nginx-hosted frontend assets | 18080 | Use `VITE_API_BASE_URL` to point to custom backend endpoints. |
+
+> Tip: customize ports or credentials by editing `docker-compose.yml` and rerun `docker compose up -d`.
+
+### Local Development From Source
+#### 1. Prerequisites
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL and Redis (recommended for production); for local development, refer to `.env.example` for default parameters.
 
-### 1. Backend Setup
+#### 2. Backend setup
 ```bash
 # Sync backend dependencies (including development tools)
 uv sync --extra dev
@@ -50,13 +90,13 @@ createdb promptworks -O promptworks
 uv run alembic upgrade head
 ```
 
-### 2. Frontend Dependencies
+#### 3. Frontend dependencies
 ```bash
 cd frontend
 npm install
 ```
 
-### 3. Launch Services
+#### 4. Launch services
 ```bash
 # Start the FastAPI development server
 uv run poe server
@@ -69,7 +109,7 @@ uv run poe frontend
 ```
 The backend runs at `http://127.0.0.1:8000` (API docs at `/docs`), while the frontend runs at `http://127.0.0.1:5173`.
 
-### 4. Common Quality Checks
+#### 5. Common quality checks
 ```bash
 uv run poe format      # Enforce code style
 uv run poe lint        # Static type checking
@@ -84,29 +124,6 @@ npm run build
 - When a test run schema does not declare a `system` message, the platform injects the current prompt snapshot as a `user` message so providers that only honor user turns keep working.
 - If a schema already includes a `system` role, we preserve the original order and do not duplicate the snapshot.
 - Entries from `inputs`/`test_inputs` are still appended as subsequent `user` messages to support multi-run playback.
-
-## 🐳 Docker Deployment
-- **Prerequisites**: Ensure Docker and Docker Compose are installed (Docker Desktop or NerdCTL).
-- **Startup**:
-```bash
-docker compose up -d --build
-```
-- **Entry Points**: Frontend defaults to `http://localhost:18080`, backend API to `http://localhost:8000/api/v1`, with database and Redis accessible via ports `15432` and `6379`.
-- **Stop / Clean Up**:
-```bash
-docker compose down            # Stop containers
-docker compose down -v         # Stop and remove volumes
-```
-
-### Service Matrix
-| Service | Description | Port | Extra Info |
-| --- | --- | --- | --- |
-| `postgres` | PostgreSQL database | 15432 | Default user, password, and database are all `promptworks`. |
-| `redis` | Redis cache / message queue | 6379 | AOF enabled, suitable for development usage. |
-| `backend` | FastAPI backend | 8000 | Automatically runs `alembic upgrade head` before startup. |
-| `frontend` | Nginx-hosted frontend assets | 18080 | Configure backend endpoint via `VITE_API_BASE_URL` during build. |
-
-> Tip: To customize ports or database credentials, update the corresponding environment variables and port mappings in `docker-compose.yml` (current sample uses `15432` and `18080`), then re-run `docker compose up -d --build`.
 
 ## ⚙️ Environment Variables
 | Name | Required | Default | Description |
