@@ -51,7 +51,14 @@ jobs:
     name: 构建并推送镜像
     needs: quality-check
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.base.ref == 'main' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.base.ref == 'dev' &&
+        github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -64,7 +71,13 @@ jobs:
         run: |
           set -euo pipefail
           SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            TARGET_BRANCH="${GITHUB_BASE_REF}"
+          else
+            TARGET_BRANCH="${GITHUB_REF##*/}"
+          fi
+
+          if [[ "${TARGET_BRANCH}" == "main" ]]; then
             echo "channel=main" >> "$GITHUB_OUTPUT"
             echo "tags=${DOCKER_REPOSITORY}:main-${SHORT_SHA},${DOCKER_REPOSITORY}:latest" >> "$GITHUB_OUTPUT"
           else
