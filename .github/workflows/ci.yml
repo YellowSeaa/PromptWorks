@@ -69,18 +69,16 @@ jobs:
         run: |
           set -euo pipefail
           SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            TARGET_BRANCH="${GITHUB_BASE_REF}"
-          else
-            TARGET_BRANCH="${GITHUB_REF##*/}"
-          fi
+          TARGET_BRANCH="${GITHUB_REF##*/}"
 
           if [[ "${TARGET_BRANCH}" == "main" ]]; then
             echo "channel=main" >> "$GITHUB_OUTPUT"
-            echo "tags=${DOCKER_REPOSITORY}:main-${SHORT_SHA},${DOCKER_REPOSITORY}:latest" >> "$GITHUB_OUTPUT"
+            echo "backend_tags=${DOCKER_REPOSITORY}:backend-main-${SHORT_SHA},${DOCKER_REPOSITORY}:backend-main-latest" >> "$GITHUB_OUTPUT"
+            echo "frontend_tags=${DOCKER_REPOSITORY}:frontend-main-${SHORT_SHA},${DOCKER_REPOSITORY}:frontend-main-latest" >> "$GITHUB_OUTPUT"
           else
             echo "channel=dev" >> "$GITHUB_OUTPUT"
-            echo "tags=${DOCKER_REPOSITORY}:dev-${SHORT_SHA},${DOCKER_REPOSITORY}:dev-latest" >> "$GITHUB_OUTPUT"
+            echo "backend_tags=${DOCKER_REPOSITORY}:backend-dev-${SHORT_SHA},${DOCKER_REPOSITORY}:backend-dev-latest" >> "$GITHUB_OUTPUT"
+            echo "frontend_tags=${DOCKER_REPOSITORY}:frontend-dev-${SHORT_SHA},${DOCKER_REPOSITORY}:frontend-dev-latest" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 登录 Docker Hub
@@ -89,14 +87,28 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: 构建并推送镜像
+      - name: 构建并推送后端镜像
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.tags.outputs.backend_tags }}
           labels: |
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.tags.outputs.channel }}-${{ github.sha }}
+
+      - name: 构建并推送前端镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.frontend_tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.channel }}-${{ github.sha }}
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.DOCKER_FRONTEND_API_BASE_URL || 'http://localhost:8000/api/v1' }}
