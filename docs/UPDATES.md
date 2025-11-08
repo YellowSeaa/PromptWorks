@@ -6,7 +6,6 @@
 - CI 现会分别构建并推送后端与前端镜像到同一个仓库 `yellowseaa/promptworks`，标签以 `backend-*` / `frontend-*` + 渠道后缀区分。
 - `docker-compose.yml` 默认引用远端镜像并支持通过 `BACKEND_IMAGE`、`FRONTEND_IMAGE` 环境变量切换 main/dev 或特定版本。
 - README 与 README_en 的 Docker 指南同步更新，强调 `docker compose pull + up -d` 即可获取完整栈镜像。
-- 新增 `docs/architecture.svg` 架构图，并在中英文 README 中展示系统拓扑。
 
 ## 0.6.2 (发布日期: 2025-11-08)
 - README 与英文版 README_en 将 Docker 部署移动到快速开始首位，并推荐直接拉取 `yellowseaa/promptworks` 镜像实现一键体验。
