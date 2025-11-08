@@ -21,10 +21,15 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: 安装 uv
         uses: astral-sh/setup-uv@v3
         with:
-          python-version: "3.11"
+          version: "0.5.0"
 
       - name: 安装 Python 依赖
         run: uv sync
@@ -51,14 +56,7 @@ jobs:
     name: 构建并推送镜像
     needs: quality-check
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
-      (github.event_name == 'pull_request' &&
-        github.event.pull_request.base.ref == 'main' &&
-        github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'pull_request' &&
-        github.event.pull_request.base.ref == 'dev' &&
-        github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
