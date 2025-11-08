@@ -64,6 +64,8 @@ docker compose down -v   # remove volumes (data will be lost)
 | `frontend` | Nginx-hosted frontend assets | 18080 | Use `VITE_API_BASE_URL` to point to custom backend endpoints. |
 
 > Tip: customize ports or credentials by editing `docker-compose.yml` and rerun `docker compose up -d`.
+>
+> ⚠️ Apple Silicon / ARM hosts: the CI pipeline already publishes `backend-*-latest` and `frontend-*-latest` as `linux/amd64 + linux/arm64` manifests, so you can pull them directly. When building custom images, remember to run `docker buildx build --platform linux/amd64,linux/arm64 ... --push`; otherwise Arm machines will hit `no matching manifest for linux/arm64`.
 
 ### Local Development From Source
 #### 1. Prerequisites

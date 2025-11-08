@@ -64,6 +64,8 @@ docker compose down -v         # 停止并删除数据卷
 | `frontend` | Nginx 托管的前端静态文件 | 18080 | 构建时可通过 `VITE_API_BASE_URL` 定制后端地址 |
 
 > 提示：如需自定义端口或数据库密码，可在 `docker-compose.yml` 中调整对应环境变量与端口映射（当前示例采用 `15432`、`18080`），然后重新执行 `docker compose up -d`。
+>
+> ⚠️ Apple Silicon / ARM 设备：CI 默认将 `backend-*-latest` 与 `frontend-*-latest` 镜像发布为 `linux/amd64 + linux/arm64` 多架构 manifest，可直接拉取使用；若你自行构建镜像，请使用 `docker buildx build --platform linux/amd64,linux/arm64 ... --push`，否则 ARM 主机会提示 `no matching manifest for linux/arm64`。
 
 ### 通过本地代码启动
 
