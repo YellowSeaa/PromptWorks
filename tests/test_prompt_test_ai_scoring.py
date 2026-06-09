@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 from sqlalchemy import select
 
@@ -477,6 +478,95 @@ def test_create_optimization_recommendation_success(db_session, monkeypatch):
     assert recommendation.status == PromptTestOptimizationRecommendationStatus.COMPLETED
     assert recommendation.content["prompt_revision"] == "请分步骤回答。"
     assert latest is recommendation
+
+
+def test_create_optimization_recommendation_handles_read_timeout(
+    db_session, monkeypatch
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+
+    def fake_post(*_, **__):
+        raise httpx.ReadTimeout("The read operation timed out")
+
+    monkeypatch.setattr("app.services.prompt_test_ai_scoring.httpx.post", fake_post)
+
+    recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
+        db_session,
+        task_id=experiment.unit.task_id,
+        evaluator_provider_id=model.provider_id,
+        evaluator_model_id=model.id,
+        evaluator_model_name=model.name,
+        language="zh-CN",
+    )
+
+    assert recommendation.status == PromptTestOptimizationRecommendationStatus.FAILED
+    assert recommendation.error is not None
+    assert "LLM 请求超时" in recommendation.error
+    assert "The read operation timed out" not in recommendation.error
+
+
+def test_recommendation_prompt_uses_compact_output_excerpt(db_session):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    long_output = "很长的模型输出" * 300
+    experiment.outputs = [
+        {
+            "run_index": 1,
+            "messages": [{"role": "user", "content": "用户问题：" + "退款" * 300}],
+            "variables": {"question": "如何退款？"},
+            "output_text": long_output,
+            "latency_ms": 10,
+            "total_tokens": 20,
+        }
+    ]
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+    task = prompt_test_ai_scoring._load_task_with_outputs(
+        db_session, experiment.unit.task_id
+    )
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+
+    prompt = prompt_test_ai_scoring._build_recommendation_prompt(task, summary, "zh-CN")
+
+    assert long_output not in prompt
+    assert "output_excerpt" in prompt
+    assert "score_summary" in prompt
+    assert "PromptTestOutputScore" not in prompt
 
 
 def test_prompt_test_ai_scoring_api_triggers_and_retries_score(

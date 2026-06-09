@@ -31,6 +31,10 @@ from app.services.system_settings import (
 
 MAX_SCORE_RETRIES = 2
 DEFAULT_SCORE_LANGUAGE = "zh-CN"
+MAX_RECOMMENDATION_SCORE_ITEMS = 50
+MAX_RECOMMENDATION_OUTPUT_CHARS = 800
+MAX_RECOMMENDATION_JSON_CHARS = 800
+MAX_RECOMMENDATION_REASON_CHARS = 300
 
 
 class PromptTestAIScoringError(Exception):
@@ -557,19 +561,24 @@ def _post_chat_completion(
     base_url = _resolve_base_url(provider)
     timeout_config = get_testing_timeout_config(db)
     timeout = float(timeout_config.test_task_timeout or DEFAULT_TEST_TASK_TIMEOUT)
-    response = httpx.post(
-        f"{base_url}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {provider.api_key}",
-            "Content-Type": "application/json",
-        },
-        json={"model": model_name, "messages": messages, **parameters},
-        timeout=timeout,
-    )
-    if response.status_code >= 400:
-        raise PromptTestAIScoringError(
-            f"LLM 评分请求失败 (HTTP {response.status_code})"
+    try:
+        response = httpx.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {provider.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={"model": model_name, "messages": messages, **parameters},
+            timeout=timeout,
         )
+    except httpx.TimeoutException as exc:
+        raise PromptTestAIScoringError(
+            f"LLM 请求超时（{timeout:g} 秒），请调大测试任务超时时间或减少测试输出内容后重试。"
+        ) from exc
+    except httpx.RequestError as exc:
+        raise PromptTestAIScoringError(f"LLM 请求失败：{exc}") from exc
+    if response.status_code >= 400:
+        raise PromptTestAIScoringError(f"LLM 请求失败 (HTTP {response.status_code})")
     try:
         payload = response.json()
     except ValueError as exc:
@@ -714,13 +723,15 @@ def _build_recommendation_prompt(
                 "top_p": unit.top_p,
                 "prompt": unit.prompt_template
                 or (unit.prompt_version.content if unit.prompt_version else ""),
-                "sample_outputs": outputs[:3],
+                "sample_outputs": [
+                    _compact_recommendation_output(output) for output in outputs[:3]
+                ],
             }
         )
     payload = {
         "language": language,
         "task": {"id": task.id, "name": task.name, "description": task.description},
-        "score_summary": summary,
+        "score_summary": _compact_recommendation_score_summary(summary),
         "units": units_payload,
     }
     return (
@@ -875,6 +886,79 @@ def _merge_task_scoring_status(
         "language", DEFAULT_SCORE_LANGUAGE
     )
     return merged
+
+
+def _compact_recommendation_score_summary(summary: Mapping[str, Any]) -> dict[str, Any]:
+    scores_payload: list[dict[str, Any]] = []
+    raw_scores = summary.get("scores")
+    scores = raw_scores if isinstance(raw_scores, Sequence) else []
+    for score in scores[:MAX_RECOMMENDATION_SCORE_ITEMS]:
+        scores_payload.append(
+            {
+                "unit_id": getattr(score, "unit_id", None),
+                "run_index": getattr(score, "run_index", None),
+                "status": _enum_value(getattr(score, "status", None)),
+                "overall_score": getattr(score, "overall_score", None),
+                "dimension_scores": _plain_mapping(
+                    getattr(score, "dimension_scores", None)
+                ),
+                "reason": _truncate_text(
+                    getattr(score, "reason", None),
+                    max_chars=MAX_RECOMMENDATION_REASON_CHARS,
+                ),
+            }
+        )
+    return {
+        "status": summary.get("status"),
+        "unit_summaries": summary.get("unit_summaries"),
+        "scores": scores_payload,
+    }
+
+
+def _compact_recommendation_output(output: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "run_index": _resolve_run_index(output),
+        "variables": _truncate_json(
+            output.get("variables"), max_chars=MAX_RECOMMENDATION_JSON_CHARS
+        ),
+        "messages_excerpt": _truncate_json(
+            output.get("messages"), max_chars=MAX_RECOMMENDATION_JSON_CHARS
+        ),
+        "output_excerpt": _truncate_text(
+            output.get("output_text"), max_chars=MAX_RECOMMENDATION_OUTPUT_CHARS
+        ),
+        "latency_ms": output.get("latency_ms"),
+        "total_tokens": output.get("total_tokens"),
+    }
+
+
+def _truncate_json(value: Any, *, max_chars: int) -> str | None:
+    if value is None:
+        return None
+    return _truncate_text(
+        json.dumps(value, ensure_ascii=False, default=str), max_chars=max_chars
+    )
+
+
+def _truncate_text(value: Any, *, max_chars: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max_chars]}...（已截断）"
+
+
+def _plain_mapping(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    return dict(value)
+
+
+def _enum_value(value: Any) -> Any:
+    return getattr(value, "value", value)
 
 
 def _resolve_base_url(provider: LLMProvider) -> str:
