@@ -35,6 +35,7 @@ from app.services.system_settings import (
     get_testing_timeout_config,
 )
 from app.services.prompt_test_ai_scoring import (
+    ensure_pending_output_score,
     parse_ai_scoring_config,
     resolve_parallel_limits,
     score_experiment_output,
@@ -256,6 +257,22 @@ def execute_prompt_test_experiment(
 
     def _submit_scoring(run_index: int, run_record: dict[str, Any]) -> None:
         if scoring_config is None or not run_record.get("output_text"):
+            return
+        try:
+            ensure_pending_output_score(
+                db,
+                experiment=experiment,
+                output=run_record,
+                scoring_config=scoring_config,
+            )
+            db.commit()
+        except Exception:  # pragma: no cover - 评分状态初始化失败不影响测试任务
+            db.rollback()
+            logger.exception(
+                "Prompt 测试单元 %s 的第 %s 次 AI 评分记录初始化失败",
+                unit.id,
+                run_index,
+            )
             return
         if scoring_executor is None:
             try:

@@ -14,6 +14,8 @@ from app.models.prompt import Prompt, PromptClass, PromptVersion
 from app.models.prompt_test import (
     PromptTestExperiment,
     PromptTestExperimentStatus,
+    PromptTestOutputScore,
+    PromptTestOutputScoreStatus,
     PromptTestTask,
     PromptTestTaskStatus,
     PromptTestUnit,
@@ -728,6 +730,126 @@ def test_execute_prompt_test_experiment_scores_outputs_concurrently(
     assert all_scores_done.wait(timeout=1)
     assert test_started_while_scoring is True
     assert max_active_scores <= 2
+
+
+def test_execute_prompt_test_experiment_creates_pending_score_rows_before_async_scoring(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 4
+    evaluator_provider = LLMProvider(
+        provider_name="Pending Judge",
+        provider_key=None,
+        api_key="judge-key",
+        is_custom=True,
+        base_url="https://judge.fake/api",
+    )
+    evaluator_model = LLMModel(
+        provider=evaluator_provider, name="judge-pro", concurrency_limit=4
+    )
+    db_session.add_all([evaluator_provider, evaluator_model])
+    db_session.flush()
+
+    task = PromptTestTask(
+        name="预创建评分记录任务",
+        prompt_version_id=prompt_version.id,
+        config={
+            "ai_scoring": {
+                "enabled": True,
+                "evaluator_provider_id": evaluator_provider.id,
+                "evaluator_model_id": evaluator_model.id,
+                "evaluator_model_name": evaluator_model.name,
+                "language": "zh-CN",
+            }
+        },
+    )
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="预创建评分记录单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=4,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    release_scores = threading.Event()
+    score_calls = 0
+    finished_score_calls = 0
+    all_scores_started = threading.Event()
+    all_scores_done = threading.Event()
+    lock = threading.Lock()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    def fake_score_output(*_, **__):
+        nonlocal score_calls, finished_score_calls
+        with lock:
+            score_calls += 1
+            if score_calls == 4:
+                all_scores_started.set()
+        release_scores.wait(timeout=1)
+        with lock:
+            finished_score_calls += 1
+            if finished_score_calls == 4:
+                all_scores_done.set()
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine.score_experiment_output", fake_score_output
+    )
+
+    try:
+        execute_prompt_test_experiment(db_session, experiment)
+        db_session.expire_all()
+
+        scores = list(
+            db_session.scalars(
+                select(PromptTestOutputScore).where(
+                    PromptTestOutputScore.experiment_id == experiment.id
+                )
+            )
+        )
+
+        assert len(scores) == 4
+        assert {score.run_index for score in scores} == {1, 2, 3, 4}
+        assert {score.status for score in scores} == {
+            PromptTestOutputScoreStatus.PENDING
+        }
+        assert all_scores_started.wait(timeout=1)
+    finally:
+        release_scores.set()
+        all_scores_done.wait(timeout=1)
 
 
 def test_execute_prompt_test_experiment_splits_shared_scoring_model_concurrency(

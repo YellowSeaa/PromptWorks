@@ -178,7 +178,8 @@ def score_task_outputs(
 
     completed = 0
     for experiment, output in candidates:
-        if not force and _find_existing_score(db, experiment.id, output) is not None:
+        existing = _find_existing_score(db, experiment.id, output)
+        if _should_skip_existing_score(existing, force=force):
             completed += 1
             continue
         score_experiment_output(
@@ -228,7 +229,7 @@ def score_experiment_output(
 
     run_index = _resolve_run_index(output)
     existing = _find_existing_score(db, experiment.id, output)
-    if existing and not force:
+    if existing is not None and _should_skip_existing_score(existing, force=force):
         return existing
 
     unit = experiment.unit
@@ -283,6 +284,39 @@ def score_experiment_output(
     score.status = PromptTestOutputScoreStatus.FAILED
     score.error = str(last_error) if last_error else "AI 评分失败"
     score.finished_at = datetime.now(UTC)
+    db.flush()
+    return score
+
+
+def ensure_pending_output_score(
+    db: Session,
+    *,
+    experiment: PromptTestExperiment,
+    output: Mapping[str, Any],
+    scoring_config: AIScoringConfig,
+) -> PromptTestOutputScore:
+    """为待异步评分的输出预创建 pending 记录。"""
+
+    existing = _find_existing_score(db, experiment.id, output)
+    if existing is not None:
+        return existing
+
+    unit = experiment.unit
+    if unit is None:
+        raise PromptTestAIScoringError("实验缺少关联测试单元。")
+
+    score = PromptTestOutputScore(
+        task_id=unit.task_id,
+        unit_id=unit.id,
+        experiment_id=experiment.id,
+        run_index=_resolve_run_index(output),
+        status=PromptTestOutputScoreStatus.PENDING,
+        evaluator_provider_id=scoring_config.evaluator_provider_id,
+        evaluator_model_id=scoring_config.evaluator_model_id,
+        evaluator_model_name=scoring_config.evaluator_model_name,
+        language=scoring_config.language or DEFAULT_SCORE_LANGUAGE,
+    )
+    db.add(score)
     db.flush()
     return score
 
@@ -612,6 +646,18 @@ def _find_existing_score(
     )
 
 
+def _should_skip_existing_score(
+    score: PromptTestOutputScore | None, *, force: bool
+) -> bool:
+    if score is None or force:
+        return False
+    return score.status in {
+        PromptTestOutputScoreStatus.COMPLETED,
+        PromptTestOutputScoreStatus.FAILED,
+        PromptTestOutputScoreStatus.RUNNING,
+    }
+
+
 def _build_score_prompt(
     unit: PromptTestUnit, output: Mapping[str, Any], language: str
 ) -> str:
@@ -857,6 +903,7 @@ __all__ = [
     "retry_output_score",
     "build_task_score_summary",
     "create_optimization_recommendation",
+    "ensure_pending_output_score",
     "get_latest_recommendation",
     "update_task_ai_scoring_status",
 ]
