@@ -82,6 +82,7 @@ class LLMModel(Base):
     concurrency_limit: Mapped[int] = mapped_column(
         Integer, nullable=False, default=5, server_default="5"
     )
+    context_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

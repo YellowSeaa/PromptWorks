@@ -33,6 +33,7 @@ from app.schemas.llm_provider import (
     LLMUsageMessage,
 )
 from app.services.llm_usage import list_quick_test_usage_logs
+from app.services.llm_context import truncate_messages_for_context
 from app.services.system_settings import (
     DEFAULT_QUICK_TEST_TIMEOUT,
     get_testing_timeout_config,
@@ -505,6 +506,8 @@ def update_llm_model(
     concurrency = update_data.get("concurrency_limit")
     if concurrency is not None:
         model.concurrency_limit = concurrency
+    if "context_length" in update_data:
+        model.context_length = update_data["context_length"]
 
     if "capability" in update_data:
         model.capability = update_data["capability"]
@@ -515,10 +518,11 @@ def update_llm_model(
     db.refresh(model)
 
     logger.info(
-        "更新模型成功: provider_id=%s model_id=%s concurrency=%s",
+        "更新模型成功: provider_id=%s model_id=%s concurrency=%s context_length=%s",
         provider_id,
         model_id,
         model.concurrency_limit,
+        model.context_length,
     )
     return LLMModelRead.model_validate(model, from_attributes=True)
 
@@ -605,6 +609,9 @@ def invoke_llm(
         request_payload.setdefault("temperature", payload.temperature)
     request_payload["model"] = model_name
     request_messages = [message.model_dump() for message in payload.messages]
+    request_messages = truncate_messages_for_context(
+        request_messages, target_model, request_payload
+    )
     request_payload["messages"] = request_messages
 
     headers = {
@@ -784,7 +791,11 @@ async def stream_invoke_llm(
     request_payload.pop("stream", None)
     request_payload["temperature"] = payload.temperature
     request_payload["model"] = model_name
-    request_payload["messages"] = [message.model_dump() for message in payload.messages]
+    request_messages = [message.model_dump() for message in payload.messages]
+    request_messages = truncate_messages_for_context(
+        request_messages, target_model, request_payload
+    )
+    request_payload["messages"] = request_messages
     request_payload["stream"] = True
 
     stream_options = request_payload.get("stream_options")
@@ -811,7 +822,6 @@ async def stream_invoke_llm(
     usage_summary: dict[str, int | None] | None = None
     generated_chunks: list[str] = []
     should_persist = True
-    request_messages = [message.model_dump() for message in payload.messages]
     original_parameters = dict(payload.parameters)
 
     def _process_event(lines: list[str]) -> list[str]:

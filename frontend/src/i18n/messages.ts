@@ -357,8 +357,10 @@ export const messages = {
             capability: '能力标签',
             quota: '配额策略',
             concurrency: '并发数',
+            contextLength: '上下文长度',
             actions: '操作'
           },
+          unlimitedContext: '不限制',
           edit: '编辑',
           check: '检测',
           remove: '删除'
@@ -387,7 +389,9 @@ export const messages = {
         quotaLabel: '配额策略',
         quotaPlaceholder: '如 团队共享 100k tokens/日（可选）',
         concurrencyLabel: '测试并发数',
-        concurrencyPlaceholder: '并发请求上限，默认 5'
+        concurrencyPlaceholder: '并发请求上限，默认 5',
+        contextLengthLabel: '上下文长度',
+        contextLengthPlaceholder: '按 token 近似值填写，留空不截断'
       },
       confirmations: {
         removeModel: {
@@ -421,6 +425,7 @@ export const messages = {
         updateModelSuccess: '模型配置已更新',
         updateModelFailed: '更新模型失败，请稍后重试',
         concurrencyRequired: '请设置至少 1 的并发数',
+        contextLengthRequired: '上下文长度需大于 0，或留空表示不截断',
         baseUrlUpdated: '访问地址已更新',
         baseUrlUpdateFailed: '更新访问地址失败，请稍后重试',
         providerDeleted: '提供方已删除',
@@ -1403,8 +1408,10 @@ export const messages = {
             capability: 'Capability Tags',
             quota: 'Quota Policy',
             concurrency: 'Concurrency',
+            contextLength: 'Context Length',
             actions: 'Actions'
           },
+          unlimitedContext: 'Unlimited',
           edit: 'Edit',
           check: 'Check',
           remove: 'Remove'
@@ -1433,7 +1440,9 @@ export const messages = {
         quotaLabel: 'Quota Policy',
         quotaPlaceholder: 'e.g. Team shared 100k tokens/day (optional)',
         concurrencyLabel: 'Test Concurrency',
-        concurrencyPlaceholder: 'Max concurrent requests (default 5)'
+        concurrencyPlaceholder: 'Max concurrent requests (default 5)',
+        contextLengthLabel: 'Context Length',
+        contextLengthPlaceholder: 'Approximate tokens; blank disables truncation'
       },
       confirmations: {
         removeModel: {
@@ -1467,6 +1476,7 @@ export const messages = {
         updateModelSuccess: 'Model settings updated.',
         updateModelFailed: 'Failed to update model. Try again later.',
         concurrencyRequired: 'Set concurrency to at least 1.',
+        contextLengthRequired: 'Context length must be greater than 0, or blank to disable truncation.',
         baseUrlUpdated: 'Endpoint updated.',
         baseUrlUpdateFailed: 'Failed to update endpoint. Try again later.',
         providerDeleted: 'Provider deleted.',

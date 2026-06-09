@@ -20,6 +20,7 @@ from app.models.prompt_test import (
     PromptTestUnit,
 )
 from app.models.usage import LLMUsageLog
+from app.services.llm_context import truncate_messages_for_context
 from app.services.test_run import (
     REQUEST_SLEEP_RANGE,
     _format_error_detail,
@@ -368,6 +369,7 @@ def _execute_single_round(
     request_timeout: float,
 ) -> dict[str, Any]:
     messages = _build_messages(unit, prompt_snapshot, context, run_index)
+    messages = truncate_messages_for_context(messages, model, base_parameters)
     payload = {
         "model": model.name if model else unit.model_name,
         "messages": messages,

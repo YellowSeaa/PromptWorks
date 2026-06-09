@@ -18,6 +18,12 @@ class LLMModelBase(BaseModel):
         le=50,
         description="执行测试任务时的最大并发请求数",
     )
+    context_length: int | None = Field(
+        default=None,
+        ge=1,
+        le=2_000_000,
+        description="模型上下文长度，按近似 token 数配置；为空表示不截断",
+    )
 
 
 class LLMModelCreate(LLMModelBase):
@@ -32,6 +38,12 @@ class LLMModelUpdate(BaseModel):
         ge=1,
         le=50,
         description="执行测试任务时的最大并发请求数",
+    )
+    context_length: int | None = Field(
+        default=None,
+        ge=1,
+        le=2_000_000,
+        description="模型上下文长度，按近似 token 数配置；为空表示不截断",
     )
 
 

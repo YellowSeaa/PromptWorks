@@ -169,6 +169,54 @@ def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatc
     assert latest_log.prompt_tokens is not None or latest_log.total_tokens is not None
 
 
+def test_execute_prompt_test_experiment_truncates_messages_by_model_context_length(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.context_length = 12
+    provider = model.provider
+    db_session.commit()
+
+    captured_payloads: list[dict[str, Any]] = []
+
+    def fake_post(*_, **kwargs):
+        payload = kwargs.get("json") or {}
+        captured_payloads.append(payload)
+        response = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"total_tokens": 3},
+        }
+        return DummyResponse(response, elapsed_ms=12)
+
+    monkeypatch.setattr("app.services.prompt_test_engine.httpx.post", fake_post)
+
+    long_text = "前置内容" * 40 + "保留结尾"
+    task = PromptTestTask(name="上下文截断任务", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="截断单元",
+        model_name=model.name,
+        llm_provider_id=provider.id,
+        rounds=1,
+        prompt_template="{text}",
+        variables={"text": long_text},
+        parameters={"max_tokens": 2},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    messages = captured_payloads[0]["messages"]
+    user_message = messages[-1]["content"]
+    assert user_message.endswith("保留结尾")
+    assert len(user_message) < len(long_text)
+
+
 def test_prompt_test_engine_uses_custom_timeout(db_session, monkeypatch):
     prompt_version = _create_prompt_version(db_session)
     model = _create_provider_and_model(db_session)
