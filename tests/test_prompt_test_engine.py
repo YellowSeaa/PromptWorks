@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -341,6 +343,79 @@ def test_execute_prompt_test_experiment_continues_after_run_failure(
     assert refreshed.outputs[0]["error"] == "LLM 网络错误"
     assert refreshed.outputs[1]["output_text"] == "结果 2"
     assert refreshed.metrics["failed_runs"] == 1
+
+
+def test_execute_prompt_test_experiment_respects_model_concurrency_limit(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 2
+    db_session.commit()
+
+    task = PromptTestTask(name="并发限制验证", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="并发单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=4,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    active_calls = 0
+    max_active_calls = 0
+    lock = threading.Lock()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        nonlocal active_calls, max_active_calls
+        with lock:
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+        time.sleep(0.03)
+        with lock:
+            active_calls -= 1
+
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert [item["run_index"] for item in refreshed.outputs or []] == [1, 2, 3, 4]
+    assert max_active_calls == 2
 
 
 def test_prompt_test_task_queue_executes_task_and_persists_results(

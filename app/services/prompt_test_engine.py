@@ -5,8 +5,10 @@ import random
 import statistics
 import time
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 from sqlalchemy import select
@@ -21,6 +23,7 @@ from app.models.prompt_test import (
 )
 from app.models.usage import LLMUsageLog
 from app.services.test_run import (
+    DEFAULT_CONCURRENCY_LIMIT,
     REQUEST_SLEEP_RANGE,
     _format_error_detail,
     _try_parse_json,
@@ -103,63 +106,118 @@ def execute_prompt_test_experiment(
     rounds_per_case = max(1, int(unit.rounds or 1))
     case_count = _count_variable_cases(context_template)
     total_runs = rounds_per_case * max(case_count, 1)
+    concurrency_limit = DEFAULT_CONCURRENCY_LIMIT
+    if model and isinstance(model.concurrency_limit, int):
+        concurrency_limit = max(1, model.concurrency_limit)
+    worker_count = max(1, min(concurrency_limit, total_runs))
+    provider_for_call = cast(
+        LLMProvider,
+        SimpleNamespace(
+            id=provider.id,
+            provider_key=provider.provider_key,
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+        ),
+    )
+    model_for_call = (
+        cast(
+            LLMModel,
+            SimpleNamespace(
+                id=model.id,
+                provider_id=model.provider_id,
+                name=model.name,
+            ),
+        )
+        if model
+        else None
+    )
+    unit_for_call = cast(
+        PromptTestUnit,
+        SimpleNamespace(
+            id=unit.id,
+            model_name=unit.model_name,
+            parameters=unit.parameters,
+            prompt_template=unit.prompt_template,
+        ),
+    )
 
-    for run_index in range(1, total_runs + 1):
+    def _execute_run(run_index: int) -> dict[str, Any]:
         context = _resolve_context(context_template, run_index)
-        try:
-            run_record = _execute_single_round(
-                provider=provider,
-                model=model,
-                unit=unit,
-                prompt_snapshot=prompt_snapshot,
-                base_parameters=parameters,
-                context=context,
-                run_index=run_index,
-                request_timeout=request_timeout,
-            )
-        except PromptTestExecutionError as exc:
-            failed_runs += 1
-            failure_record: dict[str, Any] = {
-                "run_index": run_index,
-                "status": "failed",
-                "error": str(exc),
-                "variables": _extract_variables(context) or None,
-            }
-            if exc.status_code is not None:
-                failure_record["status_code"] = exc.status_code
-            run_records.append(failure_record)
+        return _execute_single_round(
+            provider=provider_for_call,
+            model=model_for_call,
+            unit=unit_for_call,
+            prompt_snapshot=prompt_snapshot,
+            base_parameters=parameters,
+            context=context,
+            run_index=run_index,
+            request_timeout=request_timeout,
+        )
+
+    completed_records: dict[int, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        future_map = {
+            executor.submit(_execute_run, run_index): run_index
+            for run_index in range(1, total_runs + 1)
+        }
+        for future in as_completed(future_map):
+            run_index = future_map[future]
+            try:
+                run_record = future.result()
+            except PromptTestExecutionError as exc:
+                failed_runs += 1
+                failure_record: dict[str, Any] = {
+                    "run_index": run_index,
+                    "status": "failed",
+                    "error": str(exc),
+                    "variables": _extract_variables(
+                        _resolve_context(context_template, run_index)
+                    )
+                    or None,
+                }
+                if exc.status_code is not None:
+                    failure_record["status_code"] = exc.status_code
+                completed_records[run_index] = failure_record
+                if progress_callback is not None:
+                    try:
+                        progress_callback(1)
+                    except Exception:  # pragma: no cover - 防御性兜底
+                        logger.exception("更新 Prompt 测试进度时出现异常")
+                logger.warning(
+                    "Prompt 测试单元 %s 的第 %s 次调用失败: %s",
+                    unit.id,
+                    run_index,
+                    exc,
+                )
+                continue
+
+            completed_records[run_index] = run_record
             if progress_callback is not None:
                 try:
                     progress_callback(1)
                 except Exception:  # pragma: no cover - 防御性兜底
                     logger.exception("更新 Prompt 测试进度时出现异常")
-            logger.warning(
-                "Prompt 测试单元 %s 的第 %s 次调用失败: %s", unit.id, run_index, exc
+            usage_log = _build_usage_log(
+                provider=provider,
+                model=model,
+                unit=unit,
+                run_record=run_record,
             )
-            continue
+            db.add(usage_log)
+            latency = run_record.get("latency_ms")
+            if isinstance(latency, (int, float)):
+                latencies.append(int(latency))
+            tokens = run_record.get("total_tokens")
+            if isinstance(tokens, (int, float)):
+                token_totals.append(int(tokens))
+            if run_record.get("parsed_output") is not None:
+                json_success += 1
 
-        run_records.append(run_record)
-        if progress_callback is not None:
-            try:
-                progress_callback(1)
-            except Exception:  # pragma: no cover - 防御性兜底
-                logger.exception("更新 Prompt 测试进度时出现异常")
-        usage_log = _build_usage_log(
-            provider=provider,
-            model=model,
-            unit=unit,
-            run_record=run_record,
-        )
-        db.add(usage_log)
-        latency = run_record.get("latency_ms")
-        if isinstance(latency, (int, float)):
-            latencies.append(int(latency))
-        tokens = run_record.get("total_tokens")
-        if isinstance(tokens, (int, float)):
-            token_totals.append(int(tokens))
-        if run_record.get("parsed_output") is not None:
-            json_success += 1
-
+    run_records = [
+        completed_records[run_index]
+        for run_index in range(1, total_runs + 1)
+        if run_index in completed_records
+    ]
     experiment.outputs = run_records
     experiment.metrics = _aggregate_metrics(
         latencies=latencies,
