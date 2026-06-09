@@ -630,6 +630,7 @@ def test_recommendation_prompt_uses_compact_output_excerpt(db_session):
     assert long_output not in prompt
     assert "output_excerpt" in prompt
     assert "score_summary" in prompt
+    assert "prompt_revision 必须是完整可直接落库的新 Prompt 文本" in prompt
     assert "PromptTestOutputScore" not in prompt
 
 

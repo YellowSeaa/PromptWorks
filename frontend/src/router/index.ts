@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { menu: 'test-job', title: '测试任务结果（新）' }
     },
     {
+      path: '/tests/tasks/:taskId/optimization',
+      name: 'prompt-test-optimization',
+      component: () => import('../views/PromptTestOptimizationView.vue'),
+      meta: { menu: 'test-job', title: 'AI 优化' }
+    },
+    {
       path: '/tests/tasks/:taskId/units/:unitId',
       name: 'prompt-test-unit-result',
       component: () => import('../views/PromptTestUnitResultView.vue'),

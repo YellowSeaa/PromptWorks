@@ -747,6 +747,7 @@ def _build_recommendation_prompt(
     return (
         "请基于评分结果生成 Prompt 测试优化建议。只返回 JSON，字段包括 "
         "overall_advice、temperature_advice、model_advice、prompt_revision、validation_plan。"
+        "prompt_revision 必须是完整可直接落库的新 Prompt 文本，不能只返回修改片段、摘要或解释。"
         f"所有文本使用 {language} 对应语言。\n"
         f"{json.dumps(payload, ensure_ascii=False, default=str)}"
     )

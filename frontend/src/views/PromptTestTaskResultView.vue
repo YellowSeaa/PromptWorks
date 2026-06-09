@@ -96,23 +96,27 @@
           </div>
         </div>
 
-        <div class="ai-scoring-panel">
-          <div class="ai-scoring-panel__header">
+        <div class="ai-assist-panel">
+          <div class="ai-assist-panel__header">
             <div>
               <h4>{{ t('promptTestResult.aiScoring.title') }}</h4>
-              <p>{{ t('promptTestResult.aiScoring.subtitle') }}</p>
+              <p>{{ t('promptTestResult.aiScoring.combinedSubtitle') }}</p>
             </div>
           </div>
-          <div class="ai-scoring-panel__control">
-            <div class="ai-scoring-panel__main">
+          <div class="ai-assist-panel__body">
+            <div class="ai-assist-panel__status">
               <el-tag size="small" type="info">{{ scoringStatusText }}</el-tag>
-              <span class="ai-scoring-panel__progress">{{ scoringProgressText }}</span>
+              <span class="ai-assist-panel__progress">{{ scoringProgressText }}</span>
+              <el-divider direction="vertical" />
+              <span class="ai-assist-panel__progress">{{ recommendationStatusText }}</span>
+            </div>
+            <div class="ai-assist-panel__actions">
               <el-select
                 v-model="scoringModelKey"
                 size="small"
                 filterable
                 clearable
-                class="ai-scoring-panel__select"
+                class="ai-assist-panel__select"
                 :disabled="scoringControlDisabled"
                 :placeholder="t('promptTestResult.aiScoring.modelPlaceholder')"
               >
@@ -129,53 +133,25 @@
                   />
                 </el-option-group>
               </el-select>
-            </div>
-            <el-button
-              size="small"
-              type="primary"
-              :loading="scoringLoading"
-              :disabled="scoringActionDisabled"
-              @click="handleRunAIScoringAction"
-            >
-              {{ scoringActionText }}
-            </el-button>
-          </div>
-        </div>
-
-        <div class="recommendation-panel">
-          <div class="recommendation-panel__header">
-            <div>
-              <h4>{{ t('promptTestResult.recommendation.title') }}</h4>
-              <p>{{ t('promptTestResult.recommendation.subtitle') }}</p>
-            </div>
-            <el-button
-              size="small"
-              type="primary"
-              :loading="recommendationLoading"
-              @click="handleGenerateRecommendation"
-            >
-              {{
-                recommendation
-                  ? t('promptTestResult.recommendation.actions.regenerate')
-                  : t('promptTestResult.recommendation.actions.generate')
-              }}
-            </el-button>
-          </div>
-          <el-alert
-            v-if="recommendation?.status === 'failed'"
-            type="error"
-            show-icon
-            :closable="false"
-            :title="recommendation.error || t('promptTestResult.recommendation.messages.failed')"
-          />
-          <div v-else-if="recommendation?.content" class="recommendation-grid">
-            <div
-              v-for="key in ['overall_advice', 'temperature_advice', 'model_advice', 'prompt_revision', 'validation_plan']"
-              :key="key"
-              class="recommendation-item"
-            >
-              <h5>{{ t(`promptTestResult.recommendation.fields.${key}`) }}</h5>
-              <pre>{{ recommendationText(key) || '-' }}</pre>
+              <div class="ai-assist-panel__buttons">
+                <el-button
+                  size="small"
+                  type="primary"
+                  :loading="scoringLoading"
+                  :disabled="scoringActionDisabled"
+                  @click="handleRunAIScoringAction"
+                >
+                  {{ scoringActionText }}
+                </el-button>
+                <el-button
+                  size="small"
+                  type="success"
+                  :disabled="!task"
+                  @click="openOptimizationPage"
+                >
+                  {{ t('promptTestResult.recommendation.actions.optimize') }}
+                </el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -786,7 +762,6 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
-  createPromptTestOptimizationRecommendation,
   getLatestPromptTestOptimizationRecommendation,
   getPromptTestAIScores,
   getPromptTestTask,
@@ -906,7 +881,6 @@ const scoringModelKey = ref('')
 const scoringSummary = ref<PromptTestAIScoreSummary | null>(null)
 const scoringLoading = ref(false)
 const recommendation = ref<PromptTestOptimizationRecommendation | null>(null)
-const recommendationLoading = ref(false)
 const RESULT_POLL_INTERVAL_MS = 3000
 let resultPollTimer: ReturnType<typeof window.setInterval> | null = null
 let resultPollingInFlight = false
@@ -1062,6 +1036,13 @@ const scoringActionDisabled = computed(
 const scoringControlDisabled = computed(
   () => !task.value || scoringActionIsBusy.value || scoringLoading.value
 )
+
+const recommendationStatusText = computed(() => {
+  if (!recommendation.value) {
+    return t('promptTestResult.recommendation.status.empty')
+  }
+  return t(`promptTestResult.recommendation.status.${recommendation.value.status}`)
+})
 
 const analysisModules = ref<AnalysisModuleDefinition[]>([])
 const analysisModulesLoading = ref(false)
@@ -2408,32 +2389,6 @@ async function handleRetryScore(score: PromptTestOutputScore | null | undefined)
   }
 }
 
-async function handleGenerateRecommendation() {
-  const currentTask = task.value
-  if (!currentTask) return
-  const model = requireScoringModel()
-  if (!model) return
-  recommendationLoading.value = true
-  try {
-    recommendation.value = await createPromptTestOptimizationRecommendation(currentTask.id, {
-      evaluator_provider_id: model.providerId,
-      evaluator_model_id: model.modelId,
-      evaluator_model_name: model.modelName,
-      language: locale.value
-    })
-    if (recommendation.value.status === 'failed') {
-      ElMessage.error(recommendation.value.error || t('promptTestResult.recommendation.messages.failed'))
-    } else {
-      ElMessage.success(t('promptTestResult.recommendation.messages.success'))
-    }
-  } catch (error: any) {
-    console.error('生成优化建议失败', error)
-    ElMessage.error(error?.message ?? t('promptTestResult.recommendation.messages.failed'))
-  } finally {
-    recommendationLoading.value = false
-  }
-}
-
 function formatScoreValue(value: unknown): string {
   return formatAIScoreValue(value, locale.value)
 }
@@ -2454,20 +2409,14 @@ function formatUnitAverageScore(unit: PromptTestResultUnit): string {
   return t('promptTestResult.aiScoring.status.idle')
 }
 
-function recommendationText(key: string): string {
-  const content = recommendation.value?.content
-  const value = content?.[key]
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
 function goBack() {
   router.push({ name: 'test-job-management' })
+}
+
+function openOptimizationPage() {
+  const currentTask = task.value
+  if (!currentTask) return
+  router.push({ name: 'prompt-test-optimization', params: { taskId: currentTask.id } })
 }
 
 function exportUnitsCsv() {
@@ -2835,58 +2784,61 @@ watch(
   color: var(--text-weak-color);
 }
 
-.ai-scoring-panel,
-.recommendation-panel {
+.ai-assist-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--el-color-info-light-8);
-  border-radius: 6px;
-  background: var(--el-fill-color-lighter);
+  padding: 14px;
+  border: 1px solid var(--el-color-primary-light-8);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--el-color-primary-light-9), var(--el-fill-color-blank));
 }
 
-.ai-scoring-panel__main,
-.ai-scoring-panel__header,
-.ai-scoring-panel__control,
-.recommendation-panel__header {
+.ai-assist-panel__header,
+.ai-assist-panel__body,
+.ai-assist-panel__status,
+.ai-assist-panel__actions,
+.ai-assist-panel__buttons {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.ai-scoring-panel__header h4,
-.ai-scoring-panel__header p,
-.recommendation-panel__header h4,
-.recommendation-panel__header p {
+.ai-assist-panel__header h4,
+.ai-assist-panel__header p {
   margin: 0;
 }
 
-.ai-scoring-panel__header p,
-.recommendation-panel__header p {
+.ai-assist-panel__header p {
   margin-top: 4px;
   color: var(--text-weak-color);
   font-size: 13px;
 }
 
-.ai-scoring-panel__main {
-  flex: 1 1 480px;
-  justify-content: flex-start;
-}
-
-.ai-scoring-panel__control,
-.recommendation-panel__header {
+.ai-assist-panel__body {
   justify-content: space-between;
 }
 
-.ai-scoring-panel__progress {
+.ai-assist-panel__status {
+  flex: 1 1 360px;
+}
+
+.ai-assist-panel__actions {
+  justify-content: flex-end;
+}
+
+.ai-assist-panel__progress {
   font-size: 13px;
   color: var(--text-weak-color);
 }
 
-.ai-scoring-panel__select {
+.ai-assist-panel__select {
   width: min(360px, 100%);
+}
+
+.ai-assist-panel__buttons {
+  justify-content: flex-end;
 }
 
 .recommendation-grid {

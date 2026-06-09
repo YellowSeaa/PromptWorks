@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.prompt_test_task_queue import enqueue_prompt_test_task
 from app.db.session import get_db
+from app.models.prompt import PromptVersion
 from app.models.prompt_test import (
     PromptTestExperiment,
     PromptTestExperimentStatus,
@@ -74,6 +75,37 @@ def _get_unit_or_404(db: Session, unit_id: int) -> PromptTestUnit:
     return unit
 
 
+def _validate_single_prompt_scope(
+    db: Session, prompt_version_ids: Sequence[int | None]
+) -> None:
+    """确保一个测试任务只引用同一个 Prompt 下的版本。"""
+
+    version_ids = [item for item in prompt_version_ids if item is not None]
+    if not version_ids:
+        return
+
+    unique_ids = list(dict.fromkeys(version_ids))
+    versions = db.scalars(
+        select(PromptVersion).where(PromptVersion.id.in_(unique_ids))
+    ).all()
+    found_ids = {version.id for version in versions}
+    missing_ids = [
+        version_id for version_id in unique_ids if version_id not in found_ids
+    ]
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Prompt 版本不存在: {missing_ids}",
+        )
+
+    prompt_ids = {version.prompt_id for version in versions}
+    if len(prompt_ids) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="同一个测试任务只能引用同一个 Prompt 下的版本",
+        )
+
+
 @router.get("/tasks", response_model=list[PromptTestTaskRead])
 def list_prompt_test_tasks(
     *,
@@ -101,12 +133,20 @@ def create_prompt_test_task(
 ) -> PromptTestTask:
     """创建新的测试任务，可同时定义最小测试单元。"""
 
+    units_payload = payload.units or []
+    _validate_single_prompt_scope(
+        db,
+        [
+            payload.prompt_version_id,
+            *(unit_payload.prompt_version_id for unit_payload in units_payload),
+        ],
+    )
+
     task_data = payload.model_dump(exclude={"units", "auto_execute"})
     task = PromptTestTask(**task_data)
     db.add(task)
     db.flush()
 
-    units_payload = payload.units or []
     for unit_payload in units_payload:
         unit_data = unit_payload.model_dump(exclude_none=True)
         unit_data["task_id"] = task.id
@@ -339,7 +379,20 @@ def create_unit_for_task(
 ) -> PromptTestUnit:
     """为指定测试任务新增最小测试单元。"""
 
-    _get_task_or_404(db, task_id)
+    task = _get_task_or_404(db, task_id)
+    existing_unit_version_ids = db.scalars(
+        select(PromptTestUnit.prompt_version_id).where(
+            PromptTestUnit.task_id == task_id
+        )
+    ).all()
+    _validate_single_prompt_scope(
+        db,
+        [
+            task.prompt_version_id,
+            *existing_unit_version_ids,
+            payload.prompt_version_id,
+        ],
+    )
 
     unit_data = payload.model_dump(exclude_none=True)
     unit_data["task_id"] = task_id

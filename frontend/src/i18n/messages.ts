@@ -1006,6 +1006,7 @@ export const messages = {
       aiScoring: {
         title: 'AI 评分',
         subtitle: '使用指定模型对当前测试结果逐条评分，并在结果卡片中展示分数、维度明细与评分理由。',
+        combinedSubtitle: '统一管理 AI 评分与 Prompt 优化入口，评分后可进入独立页面生成改写建议。',
         modelPlaceholder: '选择评分模型',
         progress: '评分进度：{completed}/{total}',
         noScores: '暂无评分',
@@ -1038,7 +1039,14 @@ export const messages = {
         subtitle: '基于 AI 评分生成参数、模型与 Prompt 迭代建议。',
         actions: {
           generate: '生成建议',
-          regenerate: '重新生成'
+          regenerate: '重新生成',
+          optimize: '优化'
+        },
+        status: {
+          empty: '暂无优化建议',
+          running: '优化建议生成中',
+          completed: '已有优化建议',
+          failed: '优化建议失败'
         },
         fields: {
           overall_advice: '总体建议',
@@ -1105,6 +1113,73 @@ export const messages = {
           unknownTitle: '暂无输出',
           unknownDescription: '可能因为模型响应为空或尚未开始执行。'
         }
+      }
+    },
+    promptTestOptimization: {
+      title: 'AI 优化工作台',
+      subtitle: '基于 AI 评分定位问题，生成 Prompt 改写草稿，并一键沉淀为新的 Prompt 版本。',
+      breadcrumb: {
+        task: '测试任务',
+        current: 'AI 优化'
+      },
+      sections: {
+        summary: '评分摘要',
+        issue: '问题归因',
+        issueDesc: '优先展示低分输出中的评分理由',
+        currentPrompt: '当前 Prompt',
+        workbench: '优化工作台',
+        revision: 'Prompt 改写结果',
+        revisionDesc: '可在创建版本前人工调整内容'
+      },
+      labels: {
+        averageScore: '平均分',
+        scoreProgress: '已评分 {completed}/{total}',
+        recommendationMeta: '模型：{model} · 生成时间：{time}'
+      },
+      status: {
+        noRecommendation: '暂无优化建议',
+        running: '生成中',
+        completed: '已完成',
+        failed: '失败'
+      },
+      actions: {
+        backResult: '返回结果页',
+        generate: '生成优化',
+        regenerate: '重新生成',
+        copy: '复制改写',
+        createVersion: '新增版本'
+      },
+      placeholders: {
+        model: '选择优化模型',
+        revision: '生成优化建议后，这里会填入可编辑的 Prompt 改写结果'
+      },
+      versionDialog: {
+        title: '新增 Prompt 版本',
+        prompt: '目标 Prompt',
+        version: '版本号',
+        versionPlaceholder: '例如 v3',
+        content: '版本内容'
+      },
+      empty: {
+        noTask: '测试任务不存在',
+        noDimensions: '暂无维度评分',
+        noIssues: '暂无低分问题归因',
+        noPromptContent: '暂无 Prompt 内容',
+        promptUnknown: '无法识别 Prompt'
+      },
+      messages: {
+        invalidTask: '无效的测试任务编号',
+        loadFailed: '加载 AI 优化页失败，请稍后重试',
+        promptScopeInvalid: '无法解析该测试任务唯一归属的 Prompt，可继续生成和复制改写结果，但不能直接新增版本。',
+        modelRequired: '请选择优化模型',
+        generateSuccess: '优化建议已生成',
+        generateFailed: '优化建议生成失败',
+        copySuccess: '已复制 Prompt 改写结果',
+        copyFailed: '复制失败，请手动复制',
+        versionDisabled: '无法识别唯一 Prompt，暂不能新增版本。',
+        versionRequired: '请填写版本号和版本内容',
+        versionCreated: 'Prompt 新版本已创建并激活',
+        versionCreateFailed: '新增 Prompt 版本失败'
       }
     }
   },
@@ -2117,6 +2192,7 @@ export const messages = {
       aiScoring: {
         title: 'AI Scoring',
         subtitle: 'Score each current test output with the selected model, then show scores, dimension details, and reasoning on result cards.',
+        combinedSubtitle: 'Manage AI scoring and Prompt optimization from one entry, then open the dedicated workspace for rewritten drafts.',
         modelPlaceholder: 'Select scoring model',
         progress: 'Scoring: {completed}/{total}',
         noScores: 'No scores yet',
@@ -2149,7 +2225,14 @@ export const messages = {
         subtitle: 'Generate parameter, model, and prompt iteration advice from AI scores.',
         actions: {
           generate: 'Generate',
-          regenerate: 'Regenerate'
+          regenerate: 'Regenerate',
+          optimize: 'Optimize'
+        },
+        status: {
+          empty: 'No recommendation yet',
+          running: 'Generating recommendation',
+          completed: 'Recommendation available',
+          failed: 'Recommendation failed'
         },
         fields: {
           overall_advice: 'Overall Advice',
@@ -2216,6 +2299,73 @@ export const messages = {
           unknownTitle: 'No output available',
           unknownDescription: 'The model may have returned an empty response or execution has not started yet.'
         }
+      }
+    },
+    promptTestOptimization: {
+      title: 'AI Optimization Workspace',
+      subtitle: 'Use AI scores to find issues, generate a rewritten prompt draft, and save it as a new Prompt version.',
+      breadcrumb: {
+        task: 'Test Task',
+        current: 'AI Optimization'
+      },
+      sections: {
+        summary: 'Score Summary',
+        issue: 'Issue Diagnosis',
+        issueDesc: 'Prioritizes reasoning from low-score outputs',
+        currentPrompt: 'Current Prompt',
+        workbench: 'Optimization Workspace',
+        revision: 'Prompt Revision',
+        revisionDesc: 'Edit the content before creating a new version'
+      },
+      labels: {
+        averageScore: 'Average Score',
+        scoreProgress: 'Scored {completed}/{total}',
+        recommendationMeta: 'Model: {model} · Generated: {time}'
+      },
+      status: {
+        noRecommendation: 'No recommendation yet',
+        running: 'Generating',
+        completed: 'Completed',
+        failed: 'Failed'
+      },
+      actions: {
+        backResult: 'Back to Results',
+        generate: 'Generate',
+        regenerate: 'Regenerate',
+        copy: 'Copy Revision',
+        createVersion: 'Create Version'
+      },
+      placeholders: {
+        model: 'Select optimization model',
+        revision: 'After generating recommendations, the editable prompt revision will appear here'
+      },
+      versionDialog: {
+        title: 'Create Prompt Version',
+        prompt: 'Target Prompt',
+        version: 'Version',
+        versionPlaceholder: 'e.g. v3',
+        content: 'Version Content'
+      },
+      empty: {
+        noTask: 'Test task not found',
+        noDimensions: 'No dimension scores',
+        noIssues: 'No low-score issue diagnosis',
+        noPromptContent: 'No Prompt content',
+        promptUnknown: 'Prompt unknown'
+      },
+      messages: {
+        invalidTask: 'Invalid test task id.',
+        loadFailed: 'Failed to load the AI optimization workspace. Please try again later.',
+        promptScopeInvalid: 'Unable to resolve a unique Prompt for this test task. You can still generate and copy revisions, but direct version creation is disabled.',
+        modelRequired: 'Please select an optimization model.',
+        generateSuccess: 'Recommendations generated.',
+        generateFailed: 'Failed to generate recommendations.',
+        copySuccess: 'Prompt revision copied.',
+        copyFailed: 'Copy failed. Please copy manually.',
+        versionDisabled: 'Unable to resolve a unique Prompt, so version creation is disabled.',
+        versionRequired: 'Please enter the version and content.',
+        versionCreated: 'New Prompt version created and activated.',
+        versionCreateFailed: 'Failed to create Prompt version.'
       }
     }
   }

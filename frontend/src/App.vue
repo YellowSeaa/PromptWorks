@@ -186,7 +186,7 @@ const settingsForm = reactive({
 
 const TIMEOUT_MIN = 1
 const TIMEOUT_MAX = 600
-const APP_VERSION = 'v0.7.0'
+const APP_VERSION = 'v0.7.1'
 
 function validateTimeout(
   _: unknown,
