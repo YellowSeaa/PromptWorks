@@ -66,12 +66,14 @@ def execute_prompt_test_experiment(
     db: Session,
     experiment: PromptTestExperiment,
     progress_callback: Callable[[int], None] | None = None,
+    cancellation_callback: Callable[[], bool] | None = None,
 ) -> PromptTestExperiment:
     """执行单个最小测试单元的实验，并存储结果。"""
 
     if experiment.status not in {
         PromptTestExperimentStatus.PENDING,
         PromptTestExperimentStatus.RUNNING,
+        PromptTestExperimentStatus.FAILED,
     }:
         return experiment
 
@@ -94,17 +96,27 @@ def execute_prompt_test_experiment(
         timeout_config.test_task_timeout or DEFAULT_TEST_TASK_TIMEOUT
     )
 
-    run_records: list[dict[str, Any]] = []
-    latencies: list[int] = []
-    token_totals: list[int] = []
-    json_success = 0
-    failed_runs = 0
+    run_records = _normalize_existing_outputs(experiment.outputs)
+    completed_indexes = _collect_completed_run_indexes(run_records)
 
     rounds_per_case = max(1, int(unit.rounds or 1))
     case_count = _count_variable_cases(context_template)
     total_runs = rounds_per_case * max(case_count, 1)
 
     for run_index in range(1, total_runs + 1):
+        if run_index in completed_indexes:
+            continue
+        if cancellation_callback is not None and cancellation_callback():
+            _persist_experiment_state(
+                db,
+                experiment,
+                run_records,
+                status=PromptTestExperimentStatus.CANCELLED,
+                error="测试任务已取消",
+                finished=True,
+            )
+            return experiment
+
         context = _resolve_context(context_template, run_index)
         try:
             run_record = _execute_single_round(
@@ -118,7 +130,6 @@ def execute_prompt_test_experiment(
                 request_timeout=request_timeout,
             )
         except PromptTestExecutionError as exc:
-            failed_runs += 1
             failure_record: dict[str, Any] = {
                 "run_index": run_index,
                 "status": "failed",
@@ -128,6 +139,14 @@ def execute_prompt_test_experiment(
             if exc.status_code is not None:
                 failure_record["status_code"] = exc.status_code
             run_records.append(failure_record)
+            completed_indexes.add(run_index)
+            _persist_experiment_state(
+                db,
+                experiment,
+                run_records,
+                status=PromptTestExperimentStatus.RUNNING,
+                error=str(exc),
+            )
             if progress_callback is not None:
                 try:
                     progress_callback(1)
@@ -139,6 +158,14 @@ def execute_prompt_test_experiment(
             continue
 
         run_records.append(run_record)
+        completed_indexes.add(run_index)
+        _persist_experiment_state(
+            db,
+            experiment,
+            run_records,
+            status=PromptTestExperimentStatus.RUNNING,
+            error=None,
+        )
         if progress_callback is not None:
             try:
                 progress_callback(1)
@@ -151,34 +178,105 @@ def execute_prompt_test_experiment(
             run_record=run_record,
         )
         db.add(usage_log)
-        latency = run_record.get("latency_ms")
+
+    if cancellation_callback is not None and cancellation_callback():
+        _persist_experiment_state(
+            db,
+            experiment,
+            run_records,
+            status=PromptTestExperimentStatus.CANCELLED,
+            error="测试任务已取消",
+            finished=True,
+        )
+        return experiment
+
+    summary = _summarize_run_records(run_records)
+    failed_runs = summary["failed_runs"]
+    error: str | None
+    if failed_runs and failed_runs == len(run_records):
+        status = PromptTestExperimentStatus.FAILED
+        error = f"全部 {failed_runs} 次调用失败"
+    else:
+        status = PromptTestExperimentStatus.COMPLETED
+        error = f"{failed_runs} 次调用失败" if failed_runs else None
+    _persist_experiment_state(
+        db,
+        experiment,
+        run_records,
+        status=status,
+        error=error,
+        finished=True,
+        metrics=summary["metrics"],
+    )
+    return experiment
+
+
+def _normalize_existing_outputs(outputs: Any) -> list[dict[str, Any]]:
+    if not isinstance(outputs, Sequence) or isinstance(
+        outputs, (str, bytes, bytearray)
+    ):
+        return []
+    return [dict(item) for item in outputs if isinstance(item, Mapping)]
+
+
+def _collect_completed_run_indexes(records: Sequence[Mapping[str, Any]]) -> set[int]:
+    indexes: set[int] = set()
+    for record in records:
+        value = record.get("run_index")
+        if isinstance(value, (int, float)) and int(value) > 0:
+            indexes.add(int(value))
+    return indexes
+
+
+def _summarize_run_records(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    latencies: list[int] = []
+    token_totals: list[int] = []
+    json_success = 0
+    failed_runs = 0
+
+    for record in records:
+        if record.get("status") == "failed" or record.get("error"):
+            failed_runs += 1
+            continue
+
+        latency = record.get("latency_ms")
         if isinstance(latency, (int, float)):
             latencies.append(int(latency))
-        tokens = run_record.get("total_tokens")
+        tokens = record.get("total_tokens")
         if isinstance(tokens, (int, float)):
             token_totals.append(int(tokens))
-        if run_record.get("parsed_output") is not None:
+        if record.get("parsed_output") is not None:
             json_success += 1
 
-    experiment.outputs = run_records
-    experiment.metrics = _aggregate_metrics(
+    metrics = _aggregate_metrics(
         latencies=latencies,
         tokens=token_totals,
-        total_rounds=len(run_records),
+        total_rounds=len(records),
         json_success=json_success,
     )
-    experiment.metrics["failed_runs"] = failed_runs
-    experiment.metrics["success_runs"] = len(run_records) - failed_runs
+    metrics["failed_runs"] = failed_runs
+    metrics["success_runs"] = len(records) - failed_runs
+    return {"metrics": metrics, "failed_runs": failed_runs}
 
-    if failed_runs and failed_runs == len(run_records):
-        experiment.status = PromptTestExperimentStatus.FAILED
-        experiment.error = f"全部 {failed_runs} 次调用失败"
-    else:
-        experiment.status = PromptTestExperimentStatus.COMPLETED
-        experiment.error = f"{failed_runs} 次调用失败" if failed_runs else None
-    experiment.finished_at = datetime.now(UTC)
+
+def _persist_experiment_state(
+    db: Session,
+    experiment: PromptTestExperiment,
+    records: Sequence[Mapping[str, Any]],
+    *,
+    status: PromptTestExperimentStatus,
+    error: str | None,
+    finished: bool = False,
+    metrics: dict[str, Any] | None = None,
+) -> None:
+    experiment.outputs = [dict(record) for record in records]
+    summary_metrics = metrics or _summarize_run_records(records)["metrics"]
+    experiment.metrics = summary_metrics
+    experiment.status = status
+    experiment.error = error
+    if finished:
+        experiment.finished_at = datetime.now(UTC)
     db.flush()
-    return experiment
 
 
 def _resolve_provider_and_model(

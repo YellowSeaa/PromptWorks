@@ -38,14 +38,15 @@ class PromptTestProgressTracker:
         total_runs: int,
         *,
         step_percent: int = 5,
+        initial_completed: int = 0,
     ) -> None:
         self._session = session
         self._task = task
         self._configured_total = max(1, int(total_runs)) if total_runs else 1
         self._actual_total = max(1, total_runs)
         self._step = max(1, step_percent)
-        self._completed = 0
-        self._last_percent = 0
+        self._completed = min(self._actual_total, max(0, int(initial_completed)))
+        self._last_percent = self._calculate_percent(self._completed)
         self._next_threshold = self._step
         self._initialized = False
 
@@ -56,20 +57,22 @@ class PromptTestProgressTracker:
             progress_record = {}
         progress_record.update(
             {
-                "current": 0,
+                "current": min(self._completed, self._configured_total),
                 "total": self._configured_total,
-                "percentage": 0,
+                "percentage": self._last_percent,
                 "step": self._step,
             }
         )
         config["progress"] = progress_record
-        config["progress_current"] = 0
-        config["progressCurrent"] = 0
+        config["progress_current"] = min(self._completed, self._configured_total)
+        config["progressCurrent"] = min(self._completed, self._configured_total)
         config["progress_total"] = self._configured_total
         config["progressTotal"] = self._configured_total
-        config["progress_percentage"] = 0
-        config["progressPercentage"] = 0
+        config["progress_percentage"] = self._last_percent
+        config["progressPercentage"] = self._last_percent
         self._task.config = config
+        next_multiple = ((self._last_percent // self._step) + 1) * self._step
+        self._next_threshold = min(100, max(self._step, next_multiple))
         self._initialized = True
         self._session.flush()
 
@@ -162,10 +165,50 @@ def _count_variable_cases(value: Any) -> int:
 def _estimate_total_runs(units: Sequence[PromptTestUnit]) -> int:
     total = 0
     for unit in units:
-        rounds = unit.rounds or 1
-        case_count = _count_variable_cases(unit.variables)
-        total += max(1, int(rounds)) * max(1, int(case_count))
+        total += _estimate_unit_runs(unit)
     return max(total, 1)
+
+
+def _estimate_unit_runs(unit: PromptTestUnit) -> int:
+    rounds = unit.rounds or 1
+    case_count = _count_variable_cases(unit.variables)
+    return max(1, int(rounds)) * max(1, int(case_count))
+
+
+def _count_experiment_outputs(experiment: PromptTestExperiment | None) -> int:
+    if experiment is None or not isinstance(experiment.outputs, Sequence):
+        return 0
+    return len(
+        [
+            item
+            for item in experiment.outputs
+            if isinstance(item, Mapping)
+            and isinstance(item.get("run_index"), (int, float))
+            and int(item["run_index"]) > 0
+        ]
+    )
+
+
+def _count_completed_runs(units: Sequence[PromptTestUnit]) -> int:
+    completed = 0
+    for unit in units:
+        expected_runs = _estimate_unit_runs(unit)
+        experiments = sorted(
+            unit.experiments or [], key=lambda item: item.sequence, reverse=True
+        )
+        for experiment in experiments:
+            output_count = _count_experiment_outputs(experiment)
+            if experiment.status == PromptTestExperimentStatus.COMPLETED:
+                completed += min(expected_runs, output_count or expected_runs)
+                break
+            if experiment.status in {
+                PromptTestExperimentStatus.RUNNING,
+                PromptTestExperimentStatus.FAILED,
+                PromptTestExperimentStatus.PENDING,
+            }:
+                completed += min(expected_runs, output_count)
+                break
+    return completed
 
 
 class PromptTestTaskQueue:
@@ -190,6 +233,62 @@ class PromptTestTaskQueue:
             cleaned = dict(task.config)
             cleaned.pop("last_error", None)
             task.config = cleaned
+
+    @staticmethod
+    def _is_task_deleted(session: Session, task_id: int) -> bool:
+        return bool(
+            session.scalar(
+                select(PromptTestTask.is_deleted).where(PromptTestTask.id == task_id)
+            )
+        )
+
+    @staticmethod
+    def _find_resume_experiment(
+        session: Session, unit: PromptTestUnit, expected_runs: int
+    ) -> tuple[PromptTestExperiment | None, bool]:
+        experiments = list(
+            session.scalars(
+                select(PromptTestExperiment)
+                .where(PromptTestExperiment.unit_id == unit.id)
+                .order_by(PromptTestExperiment.sequence.desc())
+            )
+        )
+        for experiment in experiments:
+            output_count = _count_experiment_outputs(experiment)
+            if (
+                experiment.status == PromptTestExperimentStatus.COMPLETED
+                and output_count >= expected_runs
+            ):
+                return None, True
+            if experiment.status in {
+                PromptTestExperimentStatus.PENDING,
+                PromptTestExperimentStatus.RUNNING,
+                PromptTestExperimentStatus.FAILED,
+            }:
+                return experiment, output_count >= expected_runs
+        return None, False
+
+    @staticmethod
+    def _create_experiment(
+        session: Session, unit: PromptTestUnit
+    ) -> PromptTestExperiment:
+        sequence = (
+            session.scalar(
+                select(func.max(PromptTestExperiment.sequence)).where(
+                    PromptTestExperiment.unit_id == unit.id
+                )
+            )
+            or 0
+        ) + 1
+
+        experiment = PromptTestExperiment(
+            unit_id=unit.id,
+            sequence=sequence,
+            status=PromptTestExperimentStatus.PENDING,
+        )
+        session.add(experiment)
+        session.flush()
+        return experiment
 
     def enqueue(self, task_id: int) -> None:
         """将任务加入待执行队列。"""
@@ -233,7 +332,11 @@ class PromptTestTaskQueue:
             task = session.execute(
                 select(PromptTestTask)
                 .where(PromptTestTask.id == task_id)
-                .options(selectinload(PromptTestTask.units))
+                .options(
+                    selectinload(PromptTestTask.units).selectinload(
+                        PromptTestUnit.experiments
+                    )
+                )
             ).scalar_one_or_none()
             if not task:
                 logger.warning("Prompt 测试任务 %s 不存在，跳过执行", task_id)
@@ -244,7 +347,10 @@ class PromptTestTaskQueue:
 
             units = [unit for unit in task.units if isinstance(unit, PromptTestUnit)]
             total_runs = _estimate_total_runs(units)
-            progress_tracker = PromptTestProgressTracker(session, task, total_runs)
+            completed_runs = _count_completed_runs(units)
+            progress_tracker = PromptTestProgressTracker(
+                session, task, total_runs, initial_completed=completed_runs
+            )
             progress_tracker.initialize()
 
             if not units:
@@ -261,26 +367,25 @@ class PromptTestTaskQueue:
             session.commit()
 
             for unit in units:
-                sequence = (
-                    session.scalar(
-                        select(func.max(PromptTestExperiment.sequence)).where(
-                            PromptTestExperiment.unit_id == unit.id
-                        )
-                    )
-                    or 0
-                ) + 1
+                if self._is_task_deleted(session, task_id):
+                    logger.info("Prompt 测试任务 %s 已删除，中止后续执行", task_id)
+                    return
 
-                experiment = PromptTestExperiment(
-                    unit_id=unit.id,
-                    sequence=sequence,
-                    status=PromptTestExperimentStatus.PENDING,
+                expected_runs = _estimate_unit_runs(unit)
+                experiment, already_completed = self._find_resume_experiment(
+                    session, unit, expected_runs
                 )
-                session.add(experiment)
-                session.flush()
+                if already_completed:
+                    continue
+                if experiment is None:
+                    experiment = self._create_experiment(session, unit)
 
                 try:
                     execute_prompt_test_experiment(
-                        session, experiment, progress_tracker.advance
+                        session,
+                        experiment,
+                        progress_tracker.advance,
+                        lambda: self._is_task_deleted(session, task_id),
                     )
                 except PromptTestExecutionError as exc:
                     session.refresh(experiment)
@@ -315,6 +420,9 @@ class PromptTestTaskQueue:
                     return
 
                 session.commit()
+                if self._is_task_deleted(session, task_id):
+                    logger.info("Prompt 测试任务 %s 已删除，中止后续执行", task_id)
+                    return
 
             task.status = PromptTestTaskStatus.COMPLETED
             self._update_task_last_error(task, None)

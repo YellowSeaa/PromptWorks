@@ -149,6 +149,28 @@ def delete_prompt_test_task(*, db: Session = Depends(get_db), task_id: int) -> R
     task = _get_task_or_404(db, task_id)
     if not task.is_deleted:
         task.is_deleted = True
+        cancel_time = datetime.now(UTC)
+        unfinished_experiments = db.scalars(
+            select(PromptTestExperiment)
+            .join(PromptTestUnit, PromptTestExperiment.unit_id == PromptTestUnit.id)
+            .where(
+                PromptTestUnit.task_id == task.id,
+                PromptTestExperiment.status.in_(
+                    [
+                        PromptTestExperimentStatus.PENDING,
+                        PromptTestExperimentStatus.RUNNING,
+                    ]
+                ),
+            )
+        )
+        for experiment in unfinished_experiments:
+            experiment.status = PromptTestExperimentStatus.CANCELLED
+            experiment.error = experiment.error or "测试任务已取消"
+            experiment.finished_at = cancel_time
+
+        config = dict(task.config) if isinstance(task.config, dict) else {}
+        config["last_error"] = "测试任务已取消"
+        task.config = config
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

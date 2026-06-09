@@ -731,6 +731,9 @@ const units = ref<PromptTestResultUnit[]>([])
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const resultMarkdownEnabled = ref(false)
+const RESULT_POLL_INTERVAL_MS = 3000
+let resultPollTimer: ReturnType<typeof window.setInterval> | null = null
+let resultPollingInFlight = false
 const rawResponseDialog = reactive({
   visible: false,
   title: '',
@@ -1127,6 +1130,10 @@ const taskStatusTag = computed(() => {
     type: statusTagType[task.value.status] ?? 'info'
   }
 })
+
+function shouldPollTaskResult(status: string | null | undefined) {
+  return status === 'ready' || status === 'running'
+}
 
 const dateTimeFormatter = computed(
   () =>
@@ -2122,9 +2129,14 @@ async function fetchAnalysisModulesList() {
   }
 }
 
-async function loadTaskResult(taskId: number) {
-  loading.value = true
-  errorMessage.value = null
+async function loadTaskResult(taskId: number, options: { silent?: boolean } = {}) {
+  const silent = options.silent === true
+  if (!silent) {
+    loading.value = true
+  }
+  if (!silent) {
+    errorMessage.value = null
+  }
   try {
     const [taskData, unitList] = await Promise.all([
       getPromptTestTask(taskId),
@@ -2145,23 +2157,63 @@ async function loadTaskResult(taskId: number) {
       return buildPromptTestResultUnit(unit, [])
     })
     units.value = resultUnits
+    errorMessage.value = null
     if (hasExperimentError) {
       const message = t('promptTestResult.messages.partialFailed')
       errorMessage.value = message
-      ElMessage.warning(message)
+      if (!silent) {
+        ElMessage.warning(message)
+      }
     }
   } catch (error) {
     console.error('加载测试任务结果失败', error)
-    task.value = null
-    units.value = []
-    columnConfigs.value = []
-    columnUid = 0
     const message = t('promptTestResult.messages.loadFailed')
     errorMessage.value = message
-    ElMessage.error(message)
+    if (!silent) {
+      task.value = null
+      units.value = []
+      columnConfigs.value = []
+      columnUid = 0
+      ElMessage.error(message)
+    }
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
+}
+
+function stopResultPolling() {
+  if (resultPollTimer !== null) {
+    window.clearInterval(resultPollTimer)
+    resultPollTimer = null
+  }
+}
+
+async function pollTaskResult() {
+  if (resultPollingInFlight) return
+  const id = extractTaskId(route.params.taskId)
+  if (id === null) {
+    stopResultPolling()
+    return
+  }
+  resultPollingInFlight = true
+  try {
+    await loadTaskResult(id, { silent: true })
+  } finally {
+    resultPollingInFlight = false
+  }
+}
+
+function updateResultPolling() {
+  if (!shouldPollTaskResult(task.value?.status)) {
+    stopResultPolling()
+    return
+  }
+  if (resultPollTimer !== null) return
+  resultPollTimer = window.setInterval(() => {
+    void pollTaskResult()
+  }, RESULT_POLL_INTERVAL_MS)
 }
 
 async function refreshTask() {
@@ -2176,6 +2228,7 @@ async function refreshTask() {
     return
   }
   await loadTaskResult(id)
+  updateResultPolling()
 }
 
 onMounted(() => {
@@ -2185,13 +2238,22 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleWindowResize)
+  stopResultPolling()
   Object.keys(moduleStates).forEach((moduleId) => disposeModuleChart(moduleId))
 })
 
 watch(
   () => route.params.taskId,
   () => {
+    stopResultPolling()
     void refreshTask()
+  }
+)
+
+watch(
+  () => task.value?.status,
+  () => {
+    updateResultPolling()
   }
 )
 </script>

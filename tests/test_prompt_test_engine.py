@@ -343,6 +343,152 @@ def test_execute_prompt_test_experiment_continues_after_run_failure(
     assert refreshed.metrics["failed_runs"] == 1
 
 
+def test_execute_prompt_test_experiment_persists_outputs_after_each_run(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+
+    task = PromptTestTask(name="运行中结果可见", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="多轮单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    observed_outputs: list[list[dict[str, Any]]] = []
+
+    def capture_progress(_amount: int) -> None:
+        observed_outputs.append(list(experiment.outputs or []))
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment, capture_progress)
+
+    assert observed_outputs
+    assert observed_outputs[0][0]["output_text"] == "结果 1"
+    assert len(observed_outputs[-1]) == 2
+
+
+def test_execute_prompt_test_experiment_resumes_from_existing_outputs(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+
+    task = PromptTestTask(name="断点续传", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="续跑单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.RUNNING,
+        outputs=[
+            {
+                "run_index": 1,
+                "messages": [],
+                "parameters": {"max_tokens": 16},
+                "variables": {"run_index": 1},
+                "output_text": "已有结果",
+                "parsed_output": None,
+                "prompt_tokens": 4,
+                "completion_tokens": 4,
+                "total_tokens": 8,
+                "latency_ms": 15,
+                "raw_response": {"choices": []},
+            }
+        ],
+    )
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    executed_indexes: list[int] = []
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        executed_indexes.append(run_index)
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"续跑结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 5,
+            "completion_tokens": 5,
+            "total_tokens": 10,
+            "latency_ms": 20,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert executed_indexes == [2]
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert [item["output_text"] for item in refreshed.outputs or []] == [
+        "已有结果",
+        "续跑结果 2",
+    ]
+
+
 def test_prompt_test_task_queue_executes_task_and_persists_results(
     client, db_session, monkeypatch
 ):
@@ -454,6 +600,53 @@ def test_soft_delete_prompt_test_task_hides_from_list(client, db_session):
 
     delete_again = client.delete(f"/api/v1/prompt-test/tasks/{task_id}")
     assert delete_again.status_code == 404
+
+
+def test_delete_running_prompt_test_task_cancels_unfinished_experiments(
+    client, db_session
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    task = PromptTestTask(
+        name="取消运行中任务",
+        prompt_version_id=prompt_version.id,
+        status=PromptTestTaskStatus.RUNNING,
+    )
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="运行单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+    )
+    running_experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.RUNNING,
+        outputs=[{"run_index": 1, "output_text": "已有结果"}],
+    )
+    pending_experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=2,
+        status=PromptTestExperimentStatus.PENDING,
+    )
+    db_session.add_all([task, unit, running_experiment, pending_experiment])
+    db_session.commit()
+
+    delete_resp = client.delete(f"/api/v1/prompt-test/tasks/{task.id}")
+    assert delete_resp.status_code == 204
+
+    db_session.expire_all()
+    refreshed_running = db_session.get(PromptTestExperiment, running_experiment.id)
+    refreshed_pending = db_session.get(PromptTestExperiment, pending_experiment.id)
+    refreshed_task = db_session.get(PromptTestTask, task.id)
+    assert refreshed_task is not None and refreshed_task.is_deleted
+    assert refreshed_running is not None
+    assert refreshed_pending is not None
+    assert refreshed_running.status == PromptTestExperimentStatus.CANCELLED
+    assert refreshed_running.outputs == [{"run_index": 1, "output_text": "已有结果"}]
+    assert refreshed_pending.status == PromptTestExperimentStatus.CANCELLED
 
 
 def test_list_prompt_test_tasks_supports_status_filter(client, db_session):
