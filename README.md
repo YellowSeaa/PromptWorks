@@ -15,6 +15,9 @@ PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决
 - **AI 评分与优化**：对测试输出进行 AI 百分制评分，汇总维度分与评分理由，并在独立优化工作台中生成 Prompt 改写建议，一键沉淀为新版本。
 - **评估测试**：后端暴露实验执行、指标记录能力，前端已预置测试面板待接入。
 
+### AI 评分与优化工作台
+![AI 评分与优化工作台](docs/frontend-ai.png)
+
 ## 🧱 技术栈
 - **后端**：Python 3.10+、FastAPI、SQLAlchemy、Alembic、Redis、Celery。
 - **前端**：Vite、Vue 3（TypeScript）、Vue Router、Element Plus。
