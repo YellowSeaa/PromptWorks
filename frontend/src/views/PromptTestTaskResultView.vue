@@ -985,10 +985,22 @@ const taskAutoScoringInProgress = computed(
 const rawScoringStatus = computed(() =>
   String(scoringSummary.value?.status?.status ?? 'idle')
 )
+const scoringPendingCount = computed(() =>
+  Number(scoringSummary.value?.status?.pending ?? 0)
+)
+const scoringRunningCount = computed(() =>
+  Number(scoringSummary.value?.status?.running ?? 0)
+)
 
 const effectiveScoringStatus = computed(() => {
   if (taskAutoScoringInProgress.value) {
     return 'running'
+  }
+  if (scoringRunningCount.value > 0) {
+    return 'running'
+  }
+  if (scoringPendingCount.value > 0) {
+    return 'pending'
   }
   return rawScoringStatus.value
 })
@@ -1402,7 +1414,9 @@ function shouldPollTaskResult(status: string | null | undefined) {
     status === 'ready' ||
     status === 'running' ||
     scoringStatus === 'running' ||
-    scoringStatus === 'pending'
+    scoringStatus === 'pending' ||
+    scoringRunningCount.value > 0 ||
+    scoringPendingCount.value > 0
   )
 }
 

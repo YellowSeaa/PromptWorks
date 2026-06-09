@@ -253,6 +253,32 @@ def test_build_task_score_summary_uses_successful_scores_only(db_session):
     assert unit_summary["dimension_stats"]["准确性"]["variance"] == 25
 
 
+def test_build_task_score_summary_marks_pending_scores_as_pending(db_session):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.PENDING,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+        )
+    )
+    db_session.commit()
+
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+
+    assert summary["status"]["status"] == "pending"
+    assert summary["status"]["pending"] == 1
+
+
 def test_parse_ai_scoring_config_and_update_task_status(db_session):
     model = _create_provider_and_model(db_session)
     task = PromptTestTask(name="配置任务", config={})
@@ -278,6 +304,52 @@ def test_parse_ai_scoring_config_and_update_task_status(db_session):
     assert task.config["ai_scoring"]["status"] == "running"
     assert task.config["ai_scoring"]["progress"]["percentage"] == 50
     assert prompt_test_ai_scoring.parse_ai_scoring_config({"ai_scoring": {}}) is None
+
+
+def test_score_output_retries_when_response_uses_compact_score_scale(
+    db_session, monkeypatch
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    responses = [
+        '{"overall_score": 5, "dimension_scores": {"准确性": 5, "完整性": 5, "清晰度": 5, "稳定性": 5}, "reason": "回复完整准确。"}',
+        '{"overall_score": 92, "dimension_scores": {"准确性": 94, "完整性": 90, "清晰度": 92, "稳定性": 91}, "reason": "回复完整准确，表达清晰。"}',
+    ]
+
+    def fake_post(*_, **__):
+        return DummyResponse(
+            {
+                "choices": [
+                    {"message": {"content": responses.pop(0)}},
+                ]
+            }
+        )
+
+    monkeypatch.setattr("app.services.prompt_test_ai_scoring.httpx.post", fake_post)
+
+    score = prompt_test_ai_scoring.score_experiment_output(
+        db_session,
+        experiment=experiment,
+        output=experiment.outputs[0],
+        scoring_config=prompt_test_ai_scoring.AIScoringConfig(
+            enabled=True,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+        ),
+    )
+
+    assert responses == []
+    assert score.status == PromptTestOutputScoreStatus.COMPLETED
+    assert score.retry_count == 1
+    assert score.overall_score == 92
+    assert score.dimension_scores == {
+        "准确性": 94.0,
+        "完整性": 90.0,
+        "清晰度": 92.0,
+        "稳定性": 91.0,
+    }
 
 
 def test_score_task_outputs_scores_existing_latest_outputs(db_session, monkeypatch):

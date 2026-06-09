@@ -265,12 +265,11 @@ def score_experiment_output(
                 output=output,
                 scoring_config=scoring_config,
             )
+            overall_score, dimension_scores, reason = _normalize_score_payload(payload)
             score.status = PromptTestOutputScoreStatus.COMPLETED
-            score.overall_score = _clamp_score(payload.get("overall_score"))
-            score.dimension_scores = _normalize_dimension_scores(
-                payload.get("dimension_scores")
-            )
-            score.reason = _safe_str(payload.get("reason"))
+            score.overall_score = overall_score
+            score.dimension_scores = dimension_scores
+            score.reason = reason
             score.raw_response = raw_response
             score.error = None
             score.finished_at = datetime.now(UTC)
@@ -679,9 +678,13 @@ def _build_score_prompt(
         "llm_output": output.get("output_text"),
     }
     return (
-        "请基于以下 JSON 对 LLM 输出做多角度评分。返回 JSON："
+        "请基于以下 JSON 对 LLM 输出做多角度评分。必须只返回 JSON，不要返回 Markdown。"
+        "评分统一使用 0-100 的百分制整数，0 表示完全不可用，100 表示完全满足且无需改进。"
+        "禁止使用 0-5、1-5、0-10 或 1-10 分制；如果你习惯给 8/10，请返回 80。"
+        "返回结构必须为："
         '{"overall_score": number, "dimension_scores": {"准确性": number, '
         '"完整性": number, "清晰度": number, "稳定性": number}, "reason": string}。'
+        "overall_score 和所有 dimension_scores 都必须是 0 到 100 之间的数字。"
         f"理由必须使用 {language} 对应语言。\n"
         f"{json.dumps(payload, ensure_ascii=False)}"
     )
@@ -754,15 +757,28 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return parsed
 
 
+def _normalize_score_payload(
+    payload: Mapping[str, Any],
+) -> tuple[float, dict[str, float], str | None]:
+    overall_score = _parse_score_value(
+        payload.get("overall_score"), field="overall_score"
+    )
+    dimension_scores = _normalize_dimension_scores(payload.get("dimension_scores"))
+    _reject_compact_score_scale([overall_score, *dimension_scores.values()])
+    return overall_score, dimension_scores, _safe_str(payload.get("reason"))
+
+
 def _normalize_dimension_scores(value: Any) -> dict[str, float]:
-    if not isinstance(value, Mapping):
-        return {}
+    if not isinstance(value, Mapping) or not value:
+        raise PromptTestAIScoringError("评分响应缺少 dimension_scores。")
     result: dict[str, float] = {}
     for key, raw_score in value.items():
         label = str(key).strip()
         if not label:
             continue
-        result[label] = _clamp_score(raw_score)
+        result[label] = _parse_score_value(raw_score, field=f"dimension_scores.{label}")
+    if not result:
+        raise PromptTestAIScoringError("评分响应缺少有效的维度评分。")
     return result
 
 
@@ -803,6 +819,8 @@ def _build_status_from_scores(
     )
     if running:
         status = "running"
+    elif pending:
+        status = "pending"
     elif failed and completed == 0:
         status = "failed"
     elif total and completed + failed >= total:
@@ -864,16 +882,30 @@ def _safe_str(value: Any) -> str | None:
     return None
 
 
-def _clamp_score(value: Any) -> float:
-    numeric = 0.0
-    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+def _parse_score_value(value: Any, *, field: str) -> float:
+    numeric: float | None = None
+    if isinstance(value, bool):
+        numeric = None
+    elif isinstance(value, (int, float)) and math.isfinite(float(value)):
         numeric = float(value)
     elif isinstance(value, str) and value.strip():
         try:
             numeric = float(value)
         except ValueError:
-            numeric = 0.0
-    return max(0.0, min(100.0, numeric))
+            numeric = None
+    if numeric is None or not 0 <= numeric <= 100:
+        raise PromptTestAIScoringError(f"评分字段 {field} 必须是 0-100 的数字。")
+    return float(numeric)
+
+
+def _reject_compact_score_scale(values: Sequence[float]) -> None:
+    if not values:
+        raise PromptTestAIScoringError("评分响应缺少有效分数。")
+    max_score = max(values)
+    if 0 < max_score <= 10:
+        raise PromptTestAIScoringError(
+            "评分疑似使用 5 分制或 10 分制，请按 0-100 百分制重新评分。"
+        )
 
 
 def _variance(values: Sequence[float]) -> float:
