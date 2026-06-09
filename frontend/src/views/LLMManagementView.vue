@@ -143,6 +143,17 @@
                         <el-tag size="small" type="info">{{ row.concurrencyLimit }}</el-tag>
                       </template>
                     </el-table-column>
+                    <el-table-column
+                      prop="contextLength"
+                      :label="t('llmManagement.card.table.columns.contextLength')"
+                      width="160"
+                    >
+                      <template #default="{ row }">
+                        <el-tag size="small" type="info">
+                          {{ formatContextLength(row.contextLength) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
                     <el-table-column :label="t('llmManagement.card.table.columns.actions')" width="220" align="center">
                       <template #default="{ row }">
                         <div class="provider-card__model-actions">
@@ -283,6 +294,16 @@
             :placeholder="t('llmManagement.modelDialog.concurrencyPlaceholder')"
           />
         </el-form-item>
+        <el-form-item :label="t('llmManagement.modelDialog.contextLengthLabel')">
+          <el-input-number
+            v-model="modelForm.contextLength"
+            :min="1"
+            :max="2000000"
+            :step="1024"
+            controls-position="right"
+            :placeholder="t('llmManagement.modelDialog.contextLengthPlaceholder')"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="modelDialogVisible = false">{{ t('common.cancel') }}</el-button>
@@ -325,6 +346,7 @@ interface ProviderCardModel {
   capability: string | null
   quota: string | null
   concurrencyLimit: number
+  contextLength: number | null
 }
 
 interface ProviderCard {
@@ -512,7 +534,8 @@ function mapProviderToCard(
       name: model.name,
       capability: model.capability,
       quota: model.quota,
-      concurrencyLimit: model.concurrency_limit
+      concurrencyLimit: model.concurrency_limit,
+      contextLength: model.context_length
     })),
     collapsed: collapsedState.get(provider.id) ?? false,
     revealApiKey: revealState.get(provider.id) ?? false
@@ -610,7 +633,8 @@ const modelForm = reactive({
   name: '',
   capability: '',
   quota: '',
-  concurrency: 5
+  concurrency: 5,
+  contextLength: null as number | null
 })
 const isEditingModel = ref(false)
 const editingModelId = ref<number | null>(null)
@@ -623,6 +647,7 @@ function handleAddModel(providerId: number) {
   modelForm.capability = ''
   modelForm.quota = ''
   modelForm.concurrency = 5
+  modelForm.contextLength = null
   modelDialogVisible.value = true
 }
 
@@ -643,6 +668,17 @@ async function submitModel() {
     ElMessage.warning(t('llmManagement.messages.concurrencyRequired'))
     return
   }
+  const contextLengthValue =
+    modelForm.contextLength === null || modelForm.contextLength === undefined
+      ? null
+      : Math.trunc(modelForm.contextLength)
+  if (
+    contextLengthValue !== null &&
+    (!Number.isFinite(contextLengthValue) || contextLengthValue < 1)
+  ) {
+    ElMessage.warning(t('llmManagement.messages.contextLengthRequired'))
+    return
+  }
 
   const capabilityValue = modelForm.capability.trim()
   const quotaValue = modelForm.quota.trim()
@@ -657,7 +693,8 @@ async function submitModel() {
       await updateLLMModel(providerId, modelId, {
         capability: capabilityValue ? capabilityValue : null,
         quota: quotaValue ? quotaValue : null,
-        concurrency_limit: concurrencyValue
+        concurrency_limit: concurrencyValue,
+        context_length: contextLengthValue
       })
       ElMessage.success(t('llmManagement.messages.updateModelSuccess'))
     } else {
@@ -665,7 +702,8 @@ async function submitModel() {
         name: modelForm.name.trim(),
         capability: capabilityValue || undefined,
         quota: quotaValue || undefined,
-        concurrency_limit: concurrencyValue
+        concurrency_limit: concurrencyValue,
+        context_length: contextLengthValue
       })
       ElMessage.success(t('llmManagement.messages.createModelSuccess'))
     }
@@ -692,7 +730,15 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.capability = model.capability ?? ''
   modelForm.quota = model.quota ?? ''
   modelForm.concurrency = model.concurrencyLimit
+  modelForm.contextLength = model.contextLength
   modelDialogVisible.value = true
+}
+
+function formatContextLength(value: number | null) {
+  if (!value) {
+    return t('llmManagement.card.table.unlimitedContext')
+  }
+  return value.toLocaleString()
 }
 
 async function handleBaseUrlChange(card: ProviderCard, value: string) {

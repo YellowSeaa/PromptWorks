@@ -96,6 +96,66 @@
           </div>
         </div>
 
+        <div class="ai-assist-panel">
+          <div class="ai-assist-panel__header">
+            <div>
+              <h4>{{ t('promptTestResult.aiScoring.title') }}</h4>
+              <p>{{ t('promptTestResult.aiScoring.combinedSubtitle') }}</p>
+            </div>
+          </div>
+          <div class="ai-assist-panel__body">
+            <div class="ai-assist-panel__status">
+              <el-tag size="small" type="info">{{ scoringStatusText }}</el-tag>
+              <span class="ai-assist-panel__progress">{{ scoringProgressText }}</span>
+              <el-divider direction="vertical" />
+              <span class="ai-assist-panel__progress">{{ recommendationStatusText }}</span>
+            </div>
+            <div class="ai-assist-panel__actions">
+              <el-select
+                v-model="scoringModelKey"
+                size="small"
+                filterable
+                clearable
+                class="ai-assist-panel__select"
+                :disabled="scoringControlDisabled"
+                :placeholder="t('promptTestResult.aiScoring.modelPlaceholder')"
+              >
+                <el-option-group
+                  v-for="group in modelOptionGroups"
+                  :key="`result-score-${group.providerId}`"
+                  :label="group.label"
+                >
+                  <el-option
+                    v-for="option in group.options"
+                    :key="`result-score-${option.value}`"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-option-group>
+              </el-select>
+              <div class="ai-assist-panel__buttons">
+                <el-button
+                  size="small"
+                  type="primary"
+                  :loading="scoringLoading"
+                  :disabled="scoringActionDisabled"
+                  @click="handleRunAIScoringAction"
+                >
+                  {{ scoringActionText }}
+                </el-button>
+                <el-button
+                  size="small"
+                  type="success"
+                  :disabled="!task"
+                  @click="openOptimizationPage"
+                >
+                  {{ t('promptTestResult.recommendation.actions.optimize') }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="result-grid">
           <div class="result-grid-scroll" :style="{ width: gridWidth, minWidth: '100%' }">
             <div
@@ -150,7 +210,56 @@
                   :key="cellIndex"
                   class="grid-cell"
                 >
-                  <div class="output-badge">#{{ row.index }}</div>
+                  <div class="output-card-top">
+                    <div class="output-badge">#{{ row.index }}</div>
+                    <el-tooltip
+                      v-if="cell?.score"
+                      placement="left"
+                      popper-class="score-tooltip"
+                    >
+                      <template #content>
+                        <div class="score-tooltip__content">
+                          <div class="score-tooltip__title">
+                            {{ t('promptTestResult.aiScoring.score') }}:
+                            {{ formatScoreValue(cell.score.overall_score) }}
+                          </div>
+                          <div
+                            v-for="[key, value] in dimensionEntries(cell.score)"
+                            :key="key"
+                            class="score-tooltip__row"
+                          >
+                            <span>{{ key }}</span>
+                            <strong>{{ value }}</strong>
+                          </div>
+                          <p v-if="cell.score.reason" class="score-tooltip__reason">
+                            {{ cell.score.reason }}
+                          </p>
+                          <p v-if="cell.score.error" class="score-tooltip__error">
+                            {{ cell.score.error }}
+                          </p>
+                          <el-button
+                            v-if="cell.score.status === 'failed'"
+                            size="small"
+                            type="primary"
+                            link
+                            @click.stop="handleRetryScore(cell.score)"
+                          >
+                            {{ t('promptTestResult.aiScoring.actions.retry') }}
+                          </el-button>
+                        </div>
+                      </template>
+                      <el-tag
+                        size="small"
+                        :type="cell.score.status === 'completed' ? 'success' : cell.score.status === 'failed' ? 'danger' : 'warning'"
+                      >
+                        {{
+                          cell.score.status === 'completed'
+                            ? formatScoreValue(cell.score.overall_score)
+                            : t(`promptTestResult.aiScoring.status.${cell.score.status}`)
+                        }}
+                      </el-tag>
+                    </el-tooltip>
+                  </div>
                     <template v-if="cell">
                       <div v-if="cell.errorMessage" class="output-warning">
                         <el-alert
@@ -313,7 +422,15 @@
           >
             <div class="unit-card__header">
               <h4>{{ unit.name }}</h4>
-              <el-tag size="small">{{ unit.outputs.length }} {{ t('promptTestResult.labels.outputs') }}</el-tag>
+              <div class="unit-card__badges">
+                <el-tag size="small">{{ unit.outputs.length }} {{ t('promptTestResult.labels.outputs') }}</el-tag>
+                <el-tag
+                  size="small"
+                  :type="unit.averageScore !== null ? 'success' : unit.scoreTotal > 0 ? 'warning' : 'info'"
+                >
+                  {{ formatUnitAverageScore(unit) }}
+                </el-tag>
+              </div>
             </div>
             <div class="unit-card__meta">
               <div>{{ t('promptTestResult.fields.version') }}: {{ unit.promptVersion }}</div>
@@ -644,12 +761,33 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { getPromptTestTask, listPromptTestUnits, listPromptTestExperiments } from '../api/promptTest'
-import type { PromptTestTask } from '../types/promptTest'
+import {
+  getLatestPromptTestOptimizationRecommendation,
+  getPromptTestAIScores,
+  getPromptTestTask,
+  listPromptTestExperiments,
+  listPromptTestUnits,
+  retryPromptTestOutputScore,
+  runPromptTestAIScoring
+} from '../api/promptTest'
+import { listLLMProviders } from '../api/llmProvider'
+import type {
+  PromptTestAIScoreSummary,
+  PromptTestOptimizationRecommendation,
+  PromptTestOutputScore,
+  PromptTestTask
+} from '../types/promptTest'
+import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
-import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
+import {
+  attachScoresToResultUnits,
+  buildPromptTestResultUnit,
+  detectMissingOutput,
+  dimensionEntries as formatDimensionEntries,
+  formatScoreValue as formatAIScoreValue
+} from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
-import * as echarts from 'echarts'
+import { init, type ECharts, type EChartsOption } from '../utils/echarts'
 import { listAnalysisModules, executeAnalysisModule } from '../api/analysis'
 import type {
   AnalysisModuleDefinition,
@@ -680,6 +818,13 @@ interface MissingOutputInfo {
   description?: string
 }
 
+interface ModelInfo {
+  providerId: number
+  providerName: string
+  modelId: number
+  modelName: string
+}
+
 type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
 
 interface AnalysisModuleState {
@@ -690,7 +835,7 @@ interface AnalysisModuleState {
   errorMessage: string | null
   chartColumn: string | null
   chartType: string | null
-  chartInstance: echarts.ECharts | null
+  chartInstance: ECharts | null
   charts: AnalysisChartConfig[]
   unitLinks: AnalysisUnitLink[]
   unitLinkMapById: Map<string, AnalysisUnitLink>
@@ -731,6 +876,14 @@ const units = ref<PromptTestResultUnit[]>([])
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const resultMarkdownEnabled = ref(false)
+const providers = ref<LLMProvider[]>([])
+const scoringModelKey = ref('')
+const scoringSummary = ref<PromptTestAIScoreSummary | null>(null)
+const scoringLoading = ref(false)
+const recommendation = ref<PromptTestOptimizationRecommendation | null>(null)
+const RESULT_POLL_INTERVAL_MS = 3000
+let resultPollTimer: ReturnType<typeof window.setInterval> | null = null
+let resultPollingInFlight = false
 const rawResponseDialog = reactive({
   visible: false,
   title: '',
@@ -768,13 +921,136 @@ const taskFailureReason = computed(() => {
   return null
 })
 
+const modelOptionGroups = computed(() =>
+  providers.value
+    .filter((provider) => !provider.is_archived)
+    .map((provider) => ({
+      providerId: provider.id,
+      label: provider.provider_name,
+      options: provider.models.map((model) => ({
+        value: `${provider.id}:${model.id}`,
+        label: model.name,
+        providerId: provider.id,
+        providerName: provider.provider_name,
+        modelId: model.id,
+        modelName: model.name
+      }))
+    }))
+    .filter((group) => group.options.length > 0)
+)
+
+const scoringModelMap = computed<Map<string, ModelInfo>>(() => {
+  const map = new Map<string, ModelInfo>()
+  modelOptionGroups.value.forEach((group) => {
+    group.options.forEach((option) => {
+      map.set(option.value, {
+        providerId: option.providerId,
+        providerName: option.providerName,
+        modelId: option.modelId,
+        modelName: option.modelName
+      })
+    })
+  })
+  return map
+})
+
+const selectedScoringModel = computed<ModelInfo | null>(() => {
+  if (!scoringModelKey.value) return null
+  return scoringModelMap.value.get(scoringModelKey.value) ?? null
+})
+
+const taskAIScoringConfig = computed(() => {
+  const config = toRecord(task.value?.config ?? null)
+  return toRecord(config?.ai_scoring)
+})
+
+const taskAIScoringEnabled = computed(() => Boolean(taskAIScoringConfig.value?.enabled))
+const taskIsRunning = computed(() => task.value?.status === 'running')
+const taskAutoScoringInProgress = computed(
+  () => taskIsRunning.value && taskAIScoringEnabled.value
+)
+
+const rawScoringStatus = computed(() =>
+  String(scoringSummary.value?.status?.status ?? 'idle')
+)
+const scoringPendingCount = computed(() =>
+  Number(scoringSummary.value?.status?.pending ?? 0)
+)
+const scoringRunningCount = computed(() =>
+  Number(scoringSummary.value?.status?.running ?? 0)
+)
+
+const effectiveScoringStatus = computed(() => {
+  if (taskAutoScoringInProgress.value) {
+    return 'running'
+  }
+  if (scoringRunningCount.value > 0) {
+    return 'running'
+  }
+  if (scoringPendingCount.value > 0) {
+    return 'pending'
+  }
+  return rawScoringStatus.value
+})
+
+const scoringStatusText = computed(() => {
+  return t(`promptTestResult.aiScoring.status.${effectiveScoringStatus.value}`)
+})
+
+const scoringProgressText = computed(() => {
+  const status = scoringSummary.value?.status ?? {}
+  const current = Number(status.current)
+  const completed = Number(status.completed ?? 0)
+  const failed = Number(status.failed ?? 0)
+  const total = Number(status.total ?? 0)
+  if (!total) {
+    return t('promptTestResult.aiScoring.noScores')
+  }
+  return t('promptTestResult.aiScoring.progress', {
+    completed: Number.isFinite(current) ? current : completed + failed,
+    total
+  })
+})
+
+const scoringActionIsBusy = computed(() =>
+  ['pending', 'running'].includes(effectiveScoringStatus.value)
+)
+
+const scoringActionForce = computed(
+  () => effectiveScoringStatus.value === 'completed' || effectiveScoringStatus.value === 'failed'
+)
+
+const scoringActionText = computed(() => {
+  if (scoringActionIsBusy.value) {
+    return t('promptTestResult.aiScoring.actions.scoring')
+  }
+  if (scoringActionForce.value) {
+    return t('promptTestResult.aiScoring.actions.rerun')
+  }
+  return t('promptTestResult.aiScoring.actions.run')
+})
+
+const scoringActionDisabled = computed(
+  () => !task.value || scoringActionIsBusy.value || scoringLoading.value
+)
+const scoringControlDisabled = computed(
+  () => !task.value || scoringActionIsBusy.value || scoringLoading.value
+)
+
+const recommendationStatusText = computed(() => {
+  if (!recommendation.value) {
+    return t('promptTestResult.recommendation.status.empty')
+  }
+  return t(`promptTestResult.recommendation.status.${recommendation.value.status}`)
+})
+
 const analysisModules = ref<AnalysisModuleDefinition[]>([])
 const analysisModulesLoading = ref(false)
 const selectedAnalysisModules = ref<string[]>([])
 const moduleStates = reactive<Record<string, AnalysisModuleState>>({})
 const autoSelectedModuleIds = ref<string[]>([])
 const chartRefs = new Map<string, HTMLElement | null>()
-const prebuiltChartInstances = new Map<string, Map<string, echarts.ECharts>>()
+const prebuiltChartInstances = new Map<string, Map<string, ECharts>>()
 const chartRenderRetryCount = new Map<string, number>()
 const restoredModuleIds = new Set<string>()
 const MAX_CHART_RENDER_RETRY = 5
@@ -1127,6 +1403,18 @@ const taskStatusTag = computed(() => {
     type: statusTagType[task.value.status] ?? 'info'
   }
 })
+
+function shouldPollTaskResult(status: string | null | undefined) {
+  const scoringStatus = String(scoringSummary.value?.status?.status ?? 'idle')
+  return (
+    status === 'ready' ||
+    status === 'running' ||
+    scoringStatus === 'running' ||
+    scoringStatus === 'pending' ||
+    scoringRunningCount.value > 0 ||
+    scoringPendingCount.value > 0
+  )
+}
 
 const dateTimeFormatter = computed(
   () =>
@@ -1637,7 +1925,7 @@ function renderModuleChart(moduleId: string) {
   }
   chartRenderRetryCount.delete(retryKey)
   if (!state.chartInstance) {
-    state.chartInstance = echarts.init(container)
+    state.chartInstance = init(container)
   }
 
   const dimensionMeta = resolveDimensionColumn(state)
@@ -1663,7 +1951,7 @@ function renderModuleChart(moduleId: string) {
     return
   }
 
-  let option: echarts.EChartsOption
+  let option: EChartsOption
   if (chartType === 'pie') {
     option = {
       tooltip: { trigger: 'item' },
@@ -1767,13 +2055,13 @@ function handlePrebuiltChartRef(
 
   let chartMap = prebuiltChartInstances.get(moduleId)
   if (!chartMap) {
-    chartMap = new Map<string, echarts.ECharts>()
+    chartMap = new Map<string, ECharts>()
     prebuiltChartInstances.set(moduleId, chartMap)
   }
 
   let instance = chartMap.get(chartId)
   if (!instance) {
-    instance = echarts.init(el)
+    instance = init(el)
     chartMap.set(chartId, instance)
   }
 
@@ -1802,7 +2090,7 @@ function handlePrebuiltChartRef(
     }
   }
 
-  instance.setOption(finalOption as echarts.EChartsOption, true)
+  instance.setOption(finalOption as EChartsOption, true)
   instance.resize()
 }
 
@@ -2044,8 +2332,91 @@ function handleRetryTask() {
   })
 }
 
+function requireScoringModel(): ModelInfo | null {
+  const model = selectedScoringModel.value
+  if (!model) {
+    ElMessage.warning(t('promptTestResult.aiScoring.messages.modelRequired'))
+    return null
+  }
+  return model
+}
+
+async function handleRunAIScoring(force = false) {
+  const currentTask = task.value
+  if (!currentTask) return
+  const model = requireScoringModel()
+  if (!model) return
+  scoringLoading.value = true
+  try {
+    scoringSummary.value = await runPromptTestAIScoring(currentTask.id, {
+      enabled: true,
+      evaluator_provider_id: model.providerId,
+      evaluator_model_id: model.modelId,
+      evaluator_model_name: model.modelName,
+      language: locale.value,
+      force
+    })
+    units.value = attachScoresToUnits(units.value, scoringSummary.value)
+    ElMessage.success(t('promptTestResult.aiScoring.messages.runSuccess'))
+  } catch (error: any) {
+    console.error('执行 AI 评分失败', error)
+    ElMessage.error(error?.message ?? t('promptTestResult.aiScoring.messages.runFailed'))
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+async function handleRunAIScoringAction() {
+  if (scoringActionDisabled.value) return
+  await handleRunAIScoring(scoringActionForce.value)
+}
+
+async function handleRetryScore(score: PromptTestOutputScore | null | undefined) {
+  if (!score) return
+  scoringLoading.value = true
+  try {
+    await retryPromptTestOutputScore(score.id)
+    const id = task.value?.id
+    if (id) {
+      await refreshAIScores(id, { silent: true })
+    }
+    ElMessage.success(t('promptTestResult.aiScoring.messages.retrySuccess'))
+  } catch (error: any) {
+    console.error('重试 AI 评分失败', error)
+    ElMessage.error(error?.message ?? t('promptTestResult.aiScoring.messages.retryFailed'))
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+function formatScoreValue(value: unknown): string {
+  return formatAIScoreValue(value, locale.value)
+}
+
+function dimensionEntries(score: PromptTestOutputScore | null | undefined) {
+  return formatDimensionEntries(score, locale.value)
+}
+
+function formatUnitAverageScore(unit: PromptTestResultUnit): string {
+  if (unit.averageScore !== null) {
+    return t('promptTestResult.aiScoring.averageScore', {
+      score: formatScoreValue(unit.averageScore)
+    })
+  }
+  if (unit.scoreTotal > 0) {
+    return t('promptTestResult.aiScoring.status.pending')
+  }
+  return t('promptTestResult.aiScoring.status.idle')
+}
+
 function goBack() {
   router.push({ name: 'test-job-management' })
+}
+
+function openOptimizationPage() {
+  const currentTask = task.value
+  if (!currentTask) return
+  router.push({ name: 'prompt-test-optimization', params: { taskId: currentTask.id } })
 }
 
 function exportUnitsCsv() {
@@ -2122,15 +2493,82 @@ async function fetchAnalysisModulesList() {
   }
 }
 
-async function loadTaskResult(taskId: number) {
-  loading.value = true
-  errorMessage.value = null
+async function fetchProviders() {
   try {
-    const [taskData, unitList] = await Promise.all([
+    providers.value = await listLLMProviders()
+    initializeScoringModelFromTask()
+  } catch (error) {
+    console.error('加载评分模型失败', error)
+  }
+}
+
+function initializeScoringModelFromTask() {
+  const config = toRecord(task.value?.config ?? null)
+  const aiScoring = toRecord(config?.ai_scoring)
+  const providerId = Number(aiScoring?.evaluator_provider_id)
+  const modelId = Number(aiScoring?.evaluator_model_id)
+  if (Number.isFinite(providerId) && Number.isFinite(modelId)) {
+    const key = `${providerId}:${modelId}`
+    if (scoringModelMap.value.has(key)) {
+      scoringModelKey.value = key
+    }
+  }
+}
+
+function attachScoresToUnits(
+  sourceUnits: PromptTestResultUnit[],
+  summary: PromptTestAIScoreSummary | null
+): PromptTestResultUnit[] {
+  return attachScoresToResultUnits(sourceUnits, summary)
+}
+
+async function refreshAIScores(taskId: number, options: { silent?: boolean } = {}) {
+  try {
+    scoringSummary.value = await getPromptTestAIScores(taskId)
+    units.value = attachScoresToUnits(units.value, scoringSummary.value)
+  } catch (error) {
+    console.error('加载 AI 评分失败', error)
+    scoringSummary.value = null
+    if (!options.silent) {
+      ElMessage.warning(t('promptTestResult.aiScoring.messages.loadFailed'))
+    }
+  }
+}
+
+async function refreshLatestRecommendation(taskId: number) {
+  try {
+    recommendation.value = await getLatestPromptTestOptimizationRecommendation(taskId)
+  } catch (error) {
+    console.error('加载优化建议失败', error)
+    recommendation.value = null
+  }
+}
+
+async function loadTaskResult(taskId: number, options: { silent?: boolean } = {}) {
+  const silent = options.silent === true
+  if (!silent) {
+    loading.value = true
+  }
+  if (!silent) {
+    errorMessage.value = null
+  }
+  try {
+    const [taskData, unitList, scoreResult, recommendationResult] = await Promise.all([
       getPromptTestTask(taskId),
-      listPromptTestUnits(taskId)
+      listPromptTestUnits(taskId),
+      getPromptTestAIScores(taskId).catch((error) => {
+        console.error('加载 AI 评分失败', error)
+        return null
+      }),
+      getLatestPromptTestOptimizationRecommendation(taskId).catch((error) => {
+        console.error('加载优化建议失败', error)
+        return null
+      })
     ])
     task.value = taskData
+    scoringSummary.value = scoreResult
+    recommendation.value = recommendationResult
+    initializeScoringModelFromTask()
     const experimentResults = await Promise.allSettled(
       unitList.map((unit) => listPromptTestExperiments(unit.id))
     )
@@ -2144,24 +2582,64 @@ async function loadTaskResult(taskId: number) {
       console.error(`加载测试单元 ${unit.id} 的实验数据失败`, experiment.reason)
       return buildPromptTestResultUnit(unit, [])
     })
-    units.value = resultUnits
+    units.value = attachScoresToUnits(resultUnits, scoreResult)
+    errorMessage.value = null
     if (hasExperimentError) {
       const message = t('promptTestResult.messages.partialFailed')
       errorMessage.value = message
-      ElMessage.warning(message)
+      if (!silent) {
+        ElMessage.warning(message)
+      }
     }
   } catch (error) {
     console.error('加载测试任务结果失败', error)
-    task.value = null
-    units.value = []
-    columnConfigs.value = []
-    columnUid = 0
     const message = t('promptTestResult.messages.loadFailed')
     errorMessage.value = message
-    ElMessage.error(message)
+    if (!silent) {
+      task.value = null
+      units.value = []
+      columnConfigs.value = []
+      columnUid = 0
+      ElMessage.error(message)
+    }
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
+}
+
+function stopResultPolling() {
+  if (resultPollTimer !== null) {
+    window.clearInterval(resultPollTimer)
+    resultPollTimer = null
+  }
+}
+
+async function pollTaskResult() {
+  if (resultPollingInFlight) return
+  const id = extractTaskId(route.params.taskId)
+  if (id === null) {
+    stopResultPolling()
+    return
+  }
+  resultPollingInFlight = true
+  try {
+    await loadTaskResult(id, { silent: true })
+  } finally {
+    resultPollingInFlight = false
+  }
+}
+
+function updateResultPolling() {
+  if (!shouldPollTaskResult(task.value?.status)) {
+    stopResultPolling()
+    return
+  }
+  if (resultPollTimer !== null) return
+  resultPollTimer = window.setInterval(() => {
+    void pollTaskResult()
+  }, RESULT_POLL_INTERVAL_MS)
 }
 
 async function refreshTask() {
@@ -2176,22 +2654,39 @@ async function refreshTask() {
     return
   }
   await loadTaskResult(id)
+  updateResultPolling()
 }
 
 onMounted(() => {
   window.addEventListener('resize', handleWindowResize)
-  void Promise.all([refreshTask(), fetchAnalysisModulesList()])
+  void Promise.all([refreshTask(), fetchAnalysisModulesList(), fetchProviders()])
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleWindowResize)
+  stopResultPolling()
   Object.keys(moduleStates).forEach((moduleId) => disposeModuleChart(moduleId))
 })
 
 watch(
   () => route.params.taskId,
   () => {
+    stopResultPolling()
     void refreshTask()
+  }
+)
+
+watch(
+  () => task.value?.status,
+  () => {
+    updateResultPolling()
+  }
+)
+
+watch(
+  () => scoringSummary.value?.status?.status,
+  () => {
+    updateResultPolling()
   }
 )
 </script>
@@ -2289,6 +2784,87 @@ watch(
   color: var(--text-weak-color);
 }
 
+.ai-assist-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--el-color-primary-light-8);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--el-color-primary-light-9), var(--el-fill-color-blank));
+}
+
+.ai-assist-panel__header,
+.ai-assist-panel__body,
+.ai-assist-panel__status,
+.ai-assist-panel__actions,
+.ai-assist-panel__buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-assist-panel__header h4,
+.ai-assist-panel__header p {
+  margin: 0;
+}
+
+.ai-assist-panel__header p {
+  margin-top: 4px;
+  color: var(--text-weak-color);
+  font-size: 13px;
+}
+
+.ai-assist-panel__body {
+  justify-content: space-between;
+}
+
+.ai-assist-panel__status {
+  flex: 1 1 360px;
+}
+
+.ai-assist-panel__actions {
+  justify-content: flex-end;
+}
+
+.ai-assist-panel__progress {
+  font-size: 13px;
+  color: var(--text-weak-color);
+}
+
+.ai-assist-panel__select {
+  width: min(360px, 100%);
+}
+
+.ai-assist-panel__buttons {
+  justify-content: flex-end;
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.recommendation-item {
+  min-width: 0;
+}
+
+.recommendation-item h5 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.recommendation-item pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+
 .result-grid {
   display: flex;
   flex-direction: column;
@@ -2361,6 +2937,40 @@ watch(
   font-size: 12px;
   color: var(--el-color-primary);
   font-weight: 600;
+}
+
+.output-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.score-tooltip__content {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-tooltip__title {
+  font-weight: 600;
+}
+
+.score-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.score-tooltip__reason,
+.score-tooltip__error {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.score-tooltip__error {
+  color: var(--el-color-danger-light-3);
 }
 
 .output-content {
@@ -2694,7 +3304,20 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.unit-card__header h4 {
+  min-width: 0;
+}
+
+.unit-card__badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .unit-card__meta {

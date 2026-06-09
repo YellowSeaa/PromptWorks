@@ -5,6 +5,7 @@
         <el-header class="app-header" height="64px">
           <div class="header-left">
             <span class="app-title">{{ t('app.title') }}</span>
+            <span class="app-version">{{ APP_VERSION }}</span>
           </div>
           <div class="header-right">
             <el-button type="primary" :icon="Setting" text @click="handleOpenSettings">
@@ -45,7 +46,7 @@
     <el-dialog
       v-model="settingsDialogVisible"
       :title="t('app.settingsDialogTitle')"
-      width="420px"
+      width="460px"
       :close-on-click-modal="false"
       :destroy-on-close="true"
     >
@@ -79,6 +80,23 @@
               :min="TIMEOUT_MIN"
               :max="TIMEOUT_MAX"
               :step="5"
+              :precision="0"
+              :disabled="settingsSaving"
+              controls-position="right"
+            />
+            <span class="settings-input-unit">{{ t('app.settingsSecondsUnit') }}</span>
+          </div>
+        </el-form-item>
+        <el-form-item
+          :label="t('app.settingsAiOptimizationTimeoutLabel')"
+          prop="aiOptimizationTimeout"
+        >
+          <div class="settings-input-row">
+            <el-input-number
+              v-model="settingsForm.aiOptimizationTimeout"
+              :min="TIMEOUT_MIN"
+              :max="TIMEOUT_MAX"
+              :step="30"
               :precision="0"
               :disabled="settingsSaving"
               controls-position="right"
@@ -126,7 +144,11 @@ import { setLocale } from './i18n'
 import type { SupportedLocale } from './i18n/messages'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { useTestingSettings, DEFAULT_TIMEOUT_SECONDS } from './composables/useTestingSettings'
+import {
+  useTestingSettings,
+  DEFAULT_AI_OPTIMIZATION_TIMEOUT_SECONDS,
+  DEFAULT_TIMEOUT_SECONDS
+} from './composables/useTestingSettings'
 
 interface MenuItem {
   index: string
@@ -146,6 +168,7 @@ const isDark = ref(false)
 const {
   quickTestTimeout,
   testTaskTimeout,
+  aiOptimizationTimeout,
   timeoutUpdatedAt,
   fetchTimeouts,
   saveTimeouts
@@ -157,11 +180,13 @@ const settingsSaving = ref(false)
 const settingsFormRef = ref<FormInstance>()
 const settingsForm = reactive({
   quickTestTimeout: DEFAULT_TIMEOUT_SECONDS,
-  testTaskTimeout: DEFAULT_TIMEOUT_SECONDS
+  testTaskTimeout: DEFAULT_TIMEOUT_SECONDS,
+  aiOptimizationTimeout: DEFAULT_AI_OPTIMIZATION_TIMEOUT_SECONDS
 })
 
 const TIMEOUT_MIN = 1
 const TIMEOUT_MAX = 600
+const APP_VERSION = 'v0.7.1'
 
 function validateTimeout(
   _: unknown,
@@ -205,6 +230,17 @@ const settingsRules: FormRules = {
       validator: validateTimeout,
       trigger: ['change', 'blur']
     }
+  ],
+  aiOptimizationTimeout: [
+    {
+      required: true,
+      message: t('app.settingsTimeoutRequired'),
+      trigger: 'blur'
+    },
+    {
+      validator: validateTimeout,
+      trigger: ['change', 'blur']
+    }
   ]
 }
 
@@ -235,6 +271,8 @@ function syncSettingsFormFromRefs() {
     quickTestTimeout.value ?? DEFAULT_TIMEOUT_SECONDS
   settingsForm.testTaskTimeout =
     testTaskTimeout.value ?? DEFAULT_TIMEOUT_SECONDS
+  settingsForm.aiOptimizationTimeout =
+    aiOptimizationTimeout.value ?? DEFAULT_AI_OPTIMIZATION_TIMEOUT_SECONDS
 }
 
 const menuItems = computed<MenuItem[]>(() => [
@@ -256,7 +294,11 @@ watch(language, (value) => {
 watch(isDark, (value) => toggleTheme(value), { immediate: true })
 
 watch(
-  () => [quickTestTimeout.value, testTaskTimeout.value],
+  () => [
+    quickTestTimeout.value,
+    testTaskTimeout.value,
+    aiOptimizationTimeout.value
+  ],
   () => {
     if (!settingsDialogVisible.value || settingsLoading.value) {
       return
@@ -315,7 +357,8 @@ async function handleSettingsConfirm() {
   try {
     await saveTimeouts({
       quickTestTimeout: settingsForm.quickTestTimeout,
-      testTaskTimeout: settingsForm.testTaskTimeout
+      testTaskTimeout: settingsForm.testTaskTimeout,
+      aiOptimizationTimeout: settingsForm.aiOptimizationTimeout
     })
     ElMessage.success(t('app.settingsSaveSuccess'))
     settingsDialogVisible.value = false
@@ -376,6 +419,16 @@ function handleMenuSelect(index: string) {
 .app-title {
   font-size: 20px;
   font-weight: 600;
+}
+
+.app-version {
+  padding: 2px 8px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 999px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--el-fill-color-light);
 }
 
 .header-right {

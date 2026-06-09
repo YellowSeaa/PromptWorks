@@ -12,6 +12,7 @@ from app.models.system_setting import SystemSetting
 TESTING_TIMEOUT_SETTING_KEY = "testing_timeout"
 DEFAULT_QUICK_TEST_TIMEOUT = 30.0
 DEFAULT_TEST_TASK_TIMEOUT = 30.0
+DEFAULT_AI_OPTIMIZATION_TIMEOUT = 180.0
 
 
 @dataclass(slots=True)
@@ -20,6 +21,7 @@ class TestingTimeoutConfig:
 
     quick_test_timeout: float
     test_task_timeout: float
+    ai_optimization_timeout: float
     updated_at: datetime | None = None
 
 
@@ -48,6 +50,7 @@ def get_testing_timeout_config(db: Session) -> TestingTimeoutConfig:
         return TestingTimeoutConfig(
             quick_test_timeout=DEFAULT_QUICK_TEST_TIMEOUT,
             test_task_timeout=DEFAULT_TEST_TASK_TIMEOUT,
+            ai_optimization_timeout=DEFAULT_AI_OPTIMIZATION_TIMEOUT,
             updated_at=None,
         )
 
@@ -60,9 +63,14 @@ def get_testing_timeout_config(db: Session) -> TestingTimeoutConfig:
         value.get("test_task_timeout", DEFAULT_TEST_TASK_TIMEOUT),
         DEFAULT_TEST_TASK_TIMEOUT,
     )
+    ai_optimization_timeout = _coerce_timeout(
+        value.get("ai_optimization_timeout", DEFAULT_AI_OPTIMIZATION_TIMEOUT),
+        DEFAULT_AI_OPTIMIZATION_TIMEOUT,
+    )
     return TestingTimeoutConfig(
         quick_test_timeout=quick_timeout,
         test_task_timeout=task_timeout,
+        ai_optimization_timeout=ai_optimization_timeout,
         updated_at=record.updated_at,
     )
 
@@ -72,14 +80,19 @@ def update_testing_timeout_config(
     *,
     quick_test_timeout: float,
     test_task_timeout: float,
+    ai_optimization_timeout: float | None = None,
 ) -> TestingTimeoutConfig:
     """更新快速测试与测试任务的超时配置。"""
 
     sanitized_quick = _coerce_timeout(quick_test_timeout, DEFAULT_QUICK_TEST_TIMEOUT)
     sanitized_task = _coerce_timeout(test_task_timeout, DEFAULT_TEST_TASK_TIMEOUT)
+    sanitized_ai_optimization = _coerce_timeout(
+        ai_optimization_timeout, DEFAULT_AI_OPTIMIZATION_TIMEOUT
+    )
     payload = {
         "quick_test_timeout": sanitized_quick,
         "test_task_timeout": sanitized_task,
+        "ai_optimization_timeout": sanitized_ai_optimization,
     }
 
     record = db.get(SystemSetting, TESTING_TIMEOUT_SETTING_KEY)
@@ -100,12 +113,14 @@ def update_testing_timeout_config(
     return TestingTimeoutConfig(
         quick_test_timeout=sanitized_quick,
         test_task_timeout=sanitized_task,
+        ai_optimization_timeout=sanitized_ai_optimization,
         updated_at=record.updated_at,
     )
 
 
 __all__ = [
     "TestingTimeoutConfig",
+    "DEFAULT_AI_OPTIMIZATION_TIMEOUT",
     "DEFAULT_QUICK_TEST_TIMEOUT",
     "DEFAULT_TEST_TASK_TIMEOUT",
     "get_testing_timeout_config",

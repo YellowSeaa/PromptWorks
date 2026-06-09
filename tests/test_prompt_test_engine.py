@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -12,6 +14,8 @@ from app.models.prompt import Prompt, PromptClass, PromptVersion
 from app.models.prompt_test import (
     PromptTestExperiment,
     PromptTestExperimentStatus,
+    PromptTestOutputScore,
+    PromptTestOutputScoreStatus,
     PromptTestTask,
     PromptTestTaskStatus,
     PromptTestUnit,
@@ -167,6 +171,54 @@ def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatc
     latest_log = recent_logs[0]
     assert latest_log.model_name == model.name
     assert latest_log.prompt_tokens is not None or latest_log.total_tokens is not None
+
+
+def test_execute_prompt_test_experiment_truncates_messages_by_model_context_length(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.context_length = 12
+    provider = model.provider
+    db_session.commit()
+
+    captured_payloads: list[dict[str, Any]] = []
+
+    def fake_post(*_, **kwargs):
+        payload = kwargs.get("json") or {}
+        captured_payloads.append(payload)
+        response = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"total_tokens": 3},
+        }
+        return DummyResponse(response, elapsed_ms=12)
+
+    monkeypatch.setattr("app.services.prompt_test_engine.httpx.post", fake_post)
+
+    long_text = "前置内容" * 40 + "保留结尾"
+    task = PromptTestTask(name="上下文截断任务", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="截断单元",
+        model_name=model.name,
+        llm_provider_id=provider.id,
+        rounds=1,
+        prompt_template="{text}",
+        variables={"text": long_text},
+        parameters={"max_tokens": 2},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    messages = captured_payloads[0]["messages"]
+    user_message = messages[-1]["content"]
+    assert user_message.endswith("保留结尾")
+    assert len(user_message) < len(long_text)
 
 
 def test_prompt_test_engine_uses_custom_timeout(db_session, monkeypatch):
@@ -343,6 +395,557 @@ def test_execute_prompt_test_experiment_continues_after_run_failure(
     assert refreshed.metrics["failed_runs"] == 1
 
 
+def test_execute_prompt_test_experiment_persists_outputs_after_each_run(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 1
+    db_session.commit()
+
+    task = PromptTestTask(name="运行中结果可见", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="多轮单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    observed_outputs: list[list[dict[str, Any]]] = []
+
+    def capture_progress(_amount: int) -> None:
+        observed_outputs.append(list(experiment.outputs or []))
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment, capture_progress)
+
+    assert observed_outputs
+    assert observed_outputs[0][0]["output_text"] == "结果 1"
+    assert len(observed_outputs[-1]) == 2
+
+
+def test_execute_prompt_test_experiment_resumes_from_existing_outputs(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+
+    task = PromptTestTask(name="断点续传", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="续跑单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.RUNNING,
+        outputs=[
+            {
+                "run_index": 1,
+                "messages": [],
+                "parameters": {"max_tokens": 16},
+                "variables": {"run_index": 1},
+                "output_text": "已有结果",
+                "parsed_output": None,
+                "prompt_tokens": 4,
+                "completion_tokens": 4,
+                "total_tokens": 8,
+                "latency_ms": 15,
+                "raw_response": {"choices": []},
+            }
+        ],
+    )
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    executed_indexes: list[int] = []
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        executed_indexes.append(run_index)
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"续跑结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 5,
+            "completion_tokens": 5,
+            "total_tokens": 10,
+            "latency_ms": 20,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert executed_indexes == [2]
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert [item["output_text"] for item in refreshed.outputs or []] == [
+        "已有结果",
+        "续跑结果 2",
+    ]
+
+
+def test_execute_prompt_test_experiment_respects_model_concurrency_limit(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 2
+    db_session.commit()
+
+    task = PromptTestTask(name="并发限制验证", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="并发单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=4,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    active_calls = 0
+    max_active_calls = 0
+    lock = threading.Lock()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        nonlocal active_calls, max_active_calls
+        with lock:
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+        time.sleep(0.03)
+        with lock:
+            active_calls -= 1
+
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert [item["run_index"] for item in refreshed.outputs or []] == [1, 2, 3, 4]
+    assert max_active_calls == 2
+
+
+def test_execute_prompt_test_experiment_scores_outputs_concurrently(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 2
+    evaluator_provider = LLMProvider(
+        provider_name="Judge",
+        provider_key=None,
+        api_key="judge-key",
+        is_custom=True,
+        base_url="https://judge.fake/api",
+    )
+    evaluator_model = LLMModel(
+        provider=evaluator_provider, name="judge-pro", concurrency_limit=2
+    )
+    db_session.add_all([evaluator_provider, evaluator_model])
+    db_session.flush()
+
+    task = PromptTestTask(
+        name="并发评分任务",
+        prompt_version_id=prompt_version.id,
+        config={
+            "ai_scoring": {
+                "enabled": True,
+                "evaluator_provider_id": evaluator_provider.id,
+                "evaluator_model_id": evaluator_model.id,
+                "evaluator_model_name": evaluator_model.name,
+                "language": "zh-CN",
+            }
+        },
+    )
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="评分并发单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=4,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    active_scores = 0
+    max_active_scores = 0
+    completed_scores = 0
+    test_started_while_scoring = False
+    lock = threading.Lock()
+    score_started = threading.Event()
+    all_scores_done = threading.Event()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        nonlocal test_started_while_scoring
+        if run_index > 2:
+            score_started.wait(timeout=0.2)
+            with lock:
+                test_started_while_scoring = (
+                    test_started_while_scoring or active_scores > 0
+                )
+        time.sleep(0.01)
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    def fake_score_output(*_, **__):
+        nonlocal active_scores, max_active_scores, completed_scores
+        with lock:
+            active_scores += 1
+            max_active_scores = max(max_active_scores, active_scores)
+            score_started.set()
+        try:
+            time.sleep(0.08)
+        finally:
+            with lock:
+                active_scores -= 1
+                completed_scores += 1
+                if completed_scores == 4:
+                    all_scores_done.set()
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine.score_experiment_output", fake_score_output
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    assert all_scores_done.wait(timeout=1)
+    assert test_started_while_scoring is True
+    assert max_active_scores <= 2
+
+
+def test_execute_prompt_test_experiment_creates_pending_score_rows_before_async_scoring(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 4
+    evaluator_provider = LLMProvider(
+        provider_name="Pending Judge",
+        provider_key=None,
+        api_key="judge-key",
+        is_custom=True,
+        base_url="https://judge.fake/api",
+    )
+    evaluator_model = LLMModel(
+        provider=evaluator_provider, name="judge-pro", concurrency_limit=4
+    )
+    db_session.add_all([evaluator_provider, evaluator_model])
+    db_session.flush()
+
+    task = PromptTestTask(
+        name="预创建评分记录任务",
+        prompt_version_id=prompt_version.id,
+        config={
+            "ai_scoring": {
+                "enabled": True,
+                "evaluator_provider_id": evaluator_provider.id,
+                "evaluator_model_id": evaluator_model.id,
+                "evaluator_model_name": evaluator_model.name,
+                "language": "zh-CN",
+            }
+        },
+    )
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="预创建评分记录单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=4,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    release_scores = threading.Event()
+    score_calls = 0
+    finished_score_calls = 0
+    all_scores_started = threading.Event()
+    all_scores_done = threading.Event()
+    lock = threading.Lock()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    def fake_score_output(*_, **__):
+        nonlocal score_calls, finished_score_calls
+        with lock:
+            score_calls += 1
+            if score_calls == 4:
+                all_scores_started.set()
+        release_scores.wait(timeout=1)
+        with lock:
+            finished_score_calls += 1
+            if finished_score_calls == 4:
+                all_scores_done.set()
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine.score_experiment_output", fake_score_output
+    )
+
+    try:
+        execute_prompt_test_experiment(db_session, experiment)
+        db_session.expire_all()
+
+        scores = list(
+            db_session.scalars(
+                select(PromptTestOutputScore).where(
+                    PromptTestOutputScore.experiment_id == experiment.id
+                )
+            )
+        )
+
+        assert len(scores) == 4
+        assert {score.run_index for score in scores} == {1, 2, 3, 4}
+        assert {score.status for score in scores} == {
+            PromptTestOutputScoreStatus.PENDING
+        }
+        assert all_scores_started.wait(timeout=1)
+    finally:
+        release_scores.set()
+        all_scores_done.wait(timeout=1)
+
+
+def test_execute_prompt_test_experiment_splits_shared_scoring_model_concurrency(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    model.concurrency_limit = 4
+    db_session.flush()
+
+    task = PromptTestTask(
+        name="共享模型并发任务",
+        prompt_version_id=prompt_version.id,
+        config={
+            "ai_scoring": {
+                "enabled": True,
+                "evaluator_provider_id": model.provider_id,
+                "evaluator_model_id": model.id,
+                "evaluator_model_name": model.name,
+                "language": "zh-CN",
+            }
+        },
+    )
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="共享模型单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=4,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    active_calls = 0
+    max_active_calls = 0
+    completed_scores = 0
+    lock = threading.Lock()
+    all_scores_done = threading.Event()
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        nonlocal active_calls, max_active_calls
+        with lock:
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+        time.sleep(0.03)
+        with lock:
+            active_calls -= 1
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"结果 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 4,
+            "completion_tokens": 4,
+            "total_tokens": 8,
+            "latency_ms": 15,
+            "raw_response": {"choices": []},
+        }
+
+    def fake_score_output(*_, **__):
+        nonlocal completed_scores
+        time.sleep(0.01)
+        with lock:
+            completed_scores += 1
+            if completed_scores == 4:
+                all_scores_done.set()
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine.score_experiment_output", fake_score_output
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    assert all_scores_done.wait(timeout=1)
+    assert max_active_calls == 2
+
+
 def test_prompt_test_task_queue_executes_task_and_persists_results(
     client, db_session, monkeypatch
 ):
@@ -454,6 +1057,53 @@ def test_soft_delete_prompt_test_task_hides_from_list(client, db_session):
 
     delete_again = client.delete(f"/api/v1/prompt-test/tasks/{task_id}")
     assert delete_again.status_code == 404
+
+
+def test_delete_running_prompt_test_task_cancels_unfinished_experiments(
+    client, db_session
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    task = PromptTestTask(
+        name="取消运行中任务",
+        prompt_version_id=prompt_version.id,
+        status=PromptTestTaskStatus.RUNNING,
+    )
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="运行单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+    )
+    running_experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.RUNNING,
+        outputs=[{"run_index": 1, "output_text": "已有结果"}],
+    )
+    pending_experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=2,
+        status=PromptTestExperimentStatus.PENDING,
+    )
+    db_session.add_all([task, unit, running_experiment, pending_experiment])
+    db_session.commit()
+
+    delete_resp = client.delete(f"/api/v1/prompt-test/tasks/{task.id}")
+    assert delete_resp.status_code == 204
+
+    db_session.expire_all()
+    refreshed_running = db_session.get(PromptTestExperiment, running_experiment.id)
+    refreshed_pending = db_session.get(PromptTestExperiment, pending_experiment.id)
+    refreshed_task = db_session.get(PromptTestTask, task.id)
+    assert refreshed_task is not None and refreshed_task.is_deleted
+    assert refreshed_running is not None
+    assert refreshed_pending is not None
+    assert refreshed_running.status == PromptTestExperimentStatus.CANCELLED
+    assert refreshed_running.outputs == [{"run_index": 1, "output_text": "已有结果"}]
+    assert refreshed_pending.status == PromptTestExperimentStatus.CANCELLED
 
 
 def test_list_prompt_test_tasks_supports_status_filter(client, db_session):

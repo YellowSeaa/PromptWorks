@@ -17,6 +17,10 @@ class TestingTimeoutsBase(BaseModel):
         ...,
         description="测试任务的超时时间，单位：秒",
     )
+    ai_optimization_timeout: TimeoutSecondsType = Field(
+        180,
+        description="AI 优化建议的超时时间，单位：秒",
+    )
 
 
 class TestingTimeoutsUpdate(TestingTimeoutsBase):
