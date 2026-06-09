@@ -5,8 +5,10 @@ import random
 import statistics
 import time
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 from sqlalchemy import select
@@ -22,6 +24,7 @@ from app.models.prompt_test import (
 from app.models.usage import LLMUsageLog
 from app.services.llm_context import truncate_messages_for_context
 from app.services.test_run import (
+    DEFAULT_CONCURRENCY_LIMIT,
     REQUEST_SLEEP_RANGE,
     _format_error_detail,
     _try_parse_json,
@@ -103,84 +106,160 @@ def execute_prompt_test_experiment(
     rounds_per_case = max(1, int(unit.rounds or 1))
     case_count = _count_variable_cases(context_template)
     total_runs = rounds_per_case * max(case_count, 1)
+    concurrency_limit = DEFAULT_CONCURRENCY_LIMIT
+    if model and isinstance(model.concurrency_limit, int):
+        concurrency_limit = max(1, model.concurrency_limit)
+    worker_count = max(1, min(concurrency_limit, total_runs))
+    provider_for_call = cast(
+        LLMProvider,
+        SimpleNamespace(
+            id=provider.id,
+            provider_key=provider.provider_key,
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+        ),
+    )
+    model_for_call = (
+        cast(
+            LLMModel,
+            SimpleNamespace(
+                id=model.id,
+                provider_id=model.provider_id,
+                name=model.name,
+                context_length=model.context_length,
+            ),
+        )
+        if model
+        else None
+    )
+    unit_for_call = cast(
+        PromptTestUnit,
+        SimpleNamespace(
+            id=unit.id,
+            model_name=unit.model_name,
+            parameters=unit.parameters,
+            prompt_template=unit.prompt_template,
+        ),
+    )
 
-    for run_index in range(1, total_runs + 1):
-        if run_index in completed_indexes:
-            continue
-        if cancellation_callback is not None and cancellation_callback():
-            _persist_experiment_state(
-                db,
-                experiment,
-                run_records,
-                status=PromptTestExperimentStatus.CANCELLED,
-                error="测试任务已取消",
-                finished=True,
-            )
-            return experiment
-
+    def _execute_run(run_index: int) -> dict[str, Any]:
         context = _resolve_context(context_template, run_index)
-        try:
-            run_record = _execute_single_round(
-                provider=provider,
-                model=model,
-                unit=unit,
-                prompt_snapshot=prompt_snapshot,
-                base_parameters=parameters,
-                context=context,
-                run_index=run_index,
-                request_timeout=request_timeout,
-            )
-        except PromptTestExecutionError as exc:
-            failure_record: dict[str, Any] = {
-                "run_index": run_index,
-                "status": "failed",
-                "error": str(exc),
-                "variables": _extract_variables(context) or None,
-            }
-            if exc.status_code is not None:
-                failure_record["status_code"] = exc.status_code
-            run_records.append(failure_record)
-            completed_indexes.add(run_index)
-            _persist_experiment_state(
-                db,
-                experiment,
-                run_records,
-                status=PromptTestExperimentStatus.RUNNING,
-                error=str(exc),
-            )
-            if progress_callback is not None:
-                try:
-                    progress_callback(1)
-                except Exception:  # pragma: no cover - 防御性兜底
-                    logger.exception("更新 Prompt 测试进度时出现异常")
-            logger.warning(
-                "Prompt 测试单元 %s 的第 %s 次调用失败: %s", unit.id, run_index, exc
-            )
-            continue
+        return _execute_single_round(
+            provider=provider_for_call,
+            model=model_for_call,
+            unit=unit_for_call,
+            prompt_snapshot=prompt_snapshot,
+            base_parameters=parameters,
+            context=context,
+            run_index=run_index,
+            request_timeout=request_timeout,
+        )
 
-        run_records.append(run_record)
-        completed_indexes.add(run_index)
+    records_by_index = {
+        int(record["run_index"]): dict(record)
+        for record in run_records
+        if isinstance(record.get("run_index"), (int, float))
+    }
+
+    def _ordered_records() -> list[dict[str, Any]]:
+        return [
+            records_by_index[run_index]
+            for run_index in range(1, total_runs + 1)
+            if run_index in records_by_index
+        ]
+
+    def _persist_running_state(error: str | None) -> None:
         _persist_experiment_state(
             db,
             experiment,
-            run_records,
+            _ordered_records(),
             status=PromptTestExperimentStatus.RUNNING,
-            error=None,
+            error=error,
         )
-        if progress_callback is not None:
-            try:
-                progress_callback(1)
-            except Exception:  # pragma: no cover - 防御性兜底
-                logger.exception("更新 Prompt 测试进度时出现异常")
-        usage_log = _build_usage_log(
-            provider=provider,
-            model=model,
-            unit=unit,
-            run_record=run_record,
-        )
-        db.add(usage_log)
 
-    if cancellation_callback is not None and cancellation_callback():
+    pending_indexes = [
+        run_index
+        for run_index in range(1, total_runs + 1)
+        if run_index not in completed_indexes
+    ]
+    next_pending = 0
+    futures: dict[Future[dict[str, Any]], int] = {}
+    cancelled = False
+
+    def _submit_available(executor: ThreadPoolExecutor) -> None:
+        nonlocal next_pending
+        while len(futures) < worker_count and next_pending < len(pending_indexes):
+            if cancellation_callback is not None and cancellation_callback():
+                return
+            run_index = pending_indexes[next_pending]
+            next_pending += 1
+            futures[executor.submit(_execute_run, run_index)] = run_index
+
+    executor = ThreadPoolExecutor(max_workers=worker_count)
+    try:
+        _submit_available(executor)
+        while futures:
+            if cancellation_callback is not None and cancellation_callback():
+                cancelled = True
+                for future in futures:
+                    future.cancel()
+                break
+
+            done, _pending = wait(
+                futures.keys(), timeout=0.1, return_when=FIRST_COMPLETED
+            )
+            if not done:
+                continue
+
+            for future in done:
+                run_index = futures.pop(future)
+                try:
+                    run_record = future.result()
+                except PromptTestExecutionError as exc:
+                    run_record = {
+                        "run_index": run_index,
+                        "status": "failed",
+                        "error": str(exc),
+                        "variables": _extract_variables(
+                            _resolve_context(context_template, run_index)
+                        )
+                        or None,
+                    }
+                    if exc.status_code is not None:
+                        run_record["status_code"] = exc.status_code
+                    records_by_index[run_index] = run_record
+                    completed_indexes.add(run_index)
+                    _persist_running_state(str(exc))
+                    logger.warning(
+                        "Prompt 测试单元 %s 的第 %s 次调用失败: %s",
+                        unit.id,
+                        run_index,
+                        exc,
+                    )
+                else:
+                    records_by_index[run_index] = run_record
+                    completed_indexes.add(run_index)
+                    _persist_running_state(None)
+                    usage_log = _build_usage_log(
+                        provider=provider,
+                        model=model,
+                        unit=unit,
+                        run_record=run_record,
+                    )
+                    db.add(usage_log)
+
+                if progress_callback is not None:
+                    try:
+                        progress_callback(1)
+                    except Exception:  # pragma: no cover - 防御性兜底
+                        logger.exception("更新 Prompt 测试进度时出现异常")
+
+            _submit_available(executor)
+    finally:
+        executor.shutdown(wait=not cancelled, cancel_futures=True)
+
+    run_records = _ordered_records()
+    if cancelled or (cancellation_callback is not None and cancellation_callback()):
         _persist_experiment_state(
             db,
             experiment,
