@@ -797,7 +797,7 @@ import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
-import * as echarts from 'echarts'
+import { init, type ECharts, type EChartsOption } from '../utils/echarts'
 import { listAnalysisModules, executeAnalysisModule } from '../api/analysis'
 import type {
   AnalysisModuleDefinition,
@@ -845,7 +845,7 @@ interface AnalysisModuleState {
   errorMessage: string | null
   chartColumn: string | null
   chartType: string | null
-  chartInstance: echarts.ECharts | null
+  chartInstance: ECharts | null
   charts: AnalysisChartConfig[]
   unitLinks: AnalysisUnitLink[]
   unitLinkMapById: Map<string, AnalysisUnitLink>
@@ -995,7 +995,7 @@ const selectedAnalysisModules = ref<string[]>([])
 const moduleStates = reactive<Record<string, AnalysisModuleState>>({})
 const autoSelectedModuleIds = ref<string[]>([])
 const chartRefs = new Map<string, HTMLElement | null>()
-const prebuiltChartInstances = new Map<string, Map<string, echarts.ECharts>>()
+const prebuiltChartInstances = new Map<string, Map<string, ECharts>>()
 const chartRenderRetryCount = new Map<string, number>()
 const restoredModuleIds = new Set<string>()
 const MAX_CHART_RENDER_RETRY = 5
@@ -1868,7 +1868,7 @@ function renderModuleChart(moduleId: string) {
   }
   chartRenderRetryCount.delete(retryKey)
   if (!state.chartInstance) {
-    state.chartInstance = echarts.init(container)
+    state.chartInstance = init(container)
   }
 
   const dimensionMeta = resolveDimensionColumn(state)
@@ -1894,7 +1894,7 @@ function renderModuleChart(moduleId: string) {
     return
   }
 
-  let option: echarts.EChartsOption
+  let option: EChartsOption
   if (chartType === 'pie') {
     option = {
       tooltip: { trigger: 'item' },
@@ -1998,13 +1998,13 @@ function handlePrebuiltChartRef(
 
   let chartMap = prebuiltChartInstances.get(moduleId)
   if (!chartMap) {
-    chartMap = new Map<string, echarts.ECharts>()
+    chartMap = new Map<string, ECharts>()
     prebuiltChartInstances.set(moduleId, chartMap)
   }
 
   let instance = chartMap.get(chartId)
   if (!instance) {
-    instance = echarts.init(el)
+    instance = init(el)
     chartMap.set(chartId, instance)
   }
 
@@ -2033,7 +2033,7 @@ function handlePrebuiltChartRef(
     }
   }
 
-  instance.setOption(finalOption as echarts.EChartsOption, true)
+  instance.setOption(finalOption as EChartsOption, true)
   instance.resize()
 }
 
