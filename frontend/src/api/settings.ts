@@ -3,12 +3,14 @@ import { request } from './http'
 export interface TestingTimeoutsResponse {
   quick_test_timeout: number
   test_task_timeout: number
+  ai_optimization_timeout: number
   updated_at: string | null
 }
 
 export interface TestingTimeoutsPayload {
   quick_test_timeout: number
   test_task_timeout: number
+  ai_optimization_timeout: number
 }
 
 export function getTestingTimeouts(): Promise<TestingTimeoutsResponse> {

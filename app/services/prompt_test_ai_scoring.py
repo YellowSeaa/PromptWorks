@@ -25,6 +25,7 @@ from app.models.prompt_test import (
     PromptTestUnit,
 )
 from app.services.system_settings import (
+    DEFAULT_AI_OPTIMIZATION_TIMEOUT,
     DEFAULT_TEST_TASK_TIMEOUT,
     get_testing_timeout_config,
 )
@@ -540,12 +541,16 @@ def _invoke_recommendation_llm(
             "content": _build_recommendation_prompt(task, summary, language),
         },
     ]
+    timeout_config = get_testing_timeout_config(db)
     raw_response = _post_chat_completion(
         db,
         provider=provider,
         model_name=model.name or evaluator_model_name,
         messages=messages,
         parameters={"temperature": 0.2, "response_format": {"type": "json_object"}},
+        timeout_seconds=float(
+            timeout_config.ai_optimization_timeout or DEFAULT_AI_OPTIMIZATION_TIMEOUT
+        ),
     )
     return _parse_json_object(_extract_output_text(raw_response)), raw_response
 
@@ -557,10 +562,15 @@ def _post_chat_completion(
     model_name: str,
     messages: list[dict[str, Any]],
     parameters: dict[str, Any],
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     base_url = _resolve_base_url(provider)
     timeout_config = get_testing_timeout_config(db)
-    timeout = float(timeout_config.test_task_timeout or DEFAULT_TEST_TASK_TIMEOUT)
+    timeout = float(
+        timeout_seconds
+        if timeout_seconds is not None
+        else timeout_config.test_task_timeout or DEFAULT_TEST_TASK_TIMEOUT
+    )
     try:
         response = httpx.post(
             f"{base_url}/chat/completions",

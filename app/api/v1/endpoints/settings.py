@@ -23,6 +23,7 @@ def get_testing_timeouts(*, db: Session = Depends(get_db)) -> TestingTimeoutsRea
     return TestingTimeoutsRead(
         quick_test_timeout=int(config.quick_test_timeout),
         test_task_timeout=int(config.test_task_timeout),
+        ai_optimization_timeout=int(config.ai_optimization_timeout),
         updated_at=config.updated_at,
     )
 
@@ -41,10 +42,12 @@ def update_testing_timeouts(
         db,
         quick_test_timeout=payload.quick_test_timeout,
         test_task_timeout=payload.test_task_timeout,
+        ai_optimization_timeout=payload.ai_optimization_timeout,
     )
     return TestingTimeoutsRead(
         quick_test_timeout=int(config.quick_test_timeout),
         test_task_timeout=int(config.test_task_timeout),
+        ai_optimization_timeout=int(config.ai_optimization_timeout),
         updated_at=config.updated_at,
     )
 

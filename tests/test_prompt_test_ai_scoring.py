@@ -18,6 +18,7 @@ from app.models.prompt_test import (
     PromptTestTask,
     PromptTestUnit,
 )
+from app.models.system_setting import SystemSetting
 from app.services import prompt_test_ai_scoring
 
 
@@ -478,6 +479,69 @@ def test_create_optimization_recommendation_success(db_session, monkeypatch):
     assert recommendation.status == PromptTestOptimizationRecommendationStatus.COMPLETED
     assert recommendation.content["prompt_revision"] == "请分步骤回答。"
     assert latest is recommendation
+
+
+def test_create_optimization_recommendation_uses_ai_optimization_timeout(
+    db_session, monkeypatch
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add_all(
+        [
+            SystemSetting(
+                key="testing_timeout",
+                value={
+                    "quick_test_timeout": 30,
+                    "test_task_timeout": 45,
+                    "ai_optimization_timeout": 240,
+                },
+            ),
+            PromptTestOutputScore(
+                task_id=experiment.unit.task_id,
+                unit_id=experiment.unit_id,
+                experiment_id=experiment.id,
+                run_index=1,
+                status=PromptTestOutputScoreStatus.COMPLETED,
+                evaluator_provider_id=model.provider_id,
+                evaluator_model_id=model.id,
+                evaluator_model_name=model.name,
+                language="zh-CN",
+                overall_score=72,
+                dimension_scores={"准确性": 72},
+                reason="回答略简略。",
+            ),
+        ]
+    )
+    db_session.commit()
+    captured: dict[str, Any] = {}
+
+    def fake_post(*_, **kwargs):
+        captured["timeout"] = kwargs["timeout"]
+        return DummyResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"overall_advice": "补充步骤说明。", "temperature_advice": "保持 0.7。", "model_advice": "当前模型可继续使用。", "prompt_revision": "请分步骤回答。", "validation_plan": "用退款问题重测。"}'
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("app.services.prompt_test_ai_scoring.httpx.post", fake_post)
+
+    recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
+        db_session,
+        task_id=experiment.unit.task_id,
+        evaluator_provider_id=model.provider_id,
+        evaluator_model_id=model.id,
+        evaluator_model_name=model.name,
+        language="zh-CN",
+    )
+
+    assert recommendation.status == PromptTestOptimizationRecommendationStatus.COMPLETED
+    assert captured["timeout"] == 240
 
 
 def test_create_optimization_recommendation_handles_read_timeout(
