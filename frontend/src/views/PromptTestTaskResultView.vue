@@ -97,46 +97,47 @@
         </div>
 
         <div class="ai-scoring-panel">
-          <div class="ai-scoring-panel__main">
-            <el-tag size="small" type="info">{{ scoringStatusText }}</el-tag>
-            <span class="ai-scoring-panel__progress">{{ scoringProgressText }}</span>
-            <el-select
-              v-model="scoringModelKey"
-              size="small"
-              filterable
-              clearable
-              class="ai-scoring-panel__select"
-              :placeholder="t('promptTestResult.aiScoring.modelPlaceholder')"
-            >
-              <el-option-group
-                v-for="group in modelOptionGroups"
-                :key="`result-score-${group.providerId}`"
-                :label="group.label"
-              >
-                <el-option
-                  v-for="option in group.options"
-                  :key="`result-score-${option.value}`"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </el-option-group>
-            </el-select>
+          <div class="ai-scoring-panel__header">
+            <div>
+              <h4>{{ t('promptTestResult.aiScoring.title') }}</h4>
+              <p>{{ t('promptTestResult.aiScoring.subtitle') }}</p>
+            </div>
           </div>
-          <div class="ai-scoring-panel__actions">
+          <div class="ai-scoring-panel__control">
+            <div class="ai-scoring-panel__main">
+              <el-tag size="small" type="info">{{ scoringStatusText }}</el-tag>
+              <span class="ai-scoring-panel__progress">{{ scoringProgressText }}</span>
+              <el-select
+                v-model="scoringModelKey"
+                size="small"
+                filterable
+                clearable
+                class="ai-scoring-panel__select"
+                :disabled="scoringControlDisabled"
+                :placeholder="t('promptTestResult.aiScoring.modelPlaceholder')"
+              >
+                <el-option-group
+                  v-for="group in modelOptionGroups"
+                  :key="`result-score-${group.providerId}`"
+                  :label="group.label"
+                >
+                  <el-option
+                    v-for="option in group.options"
+                    :key="`result-score-${option.value}`"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-option-group>
+              </el-select>
+            </div>
             <el-button
               size="small"
               type="primary"
               :loading="scoringLoading"
-              @click="handleRunAIScoring(false)"
+              :disabled="scoringActionDisabled"
+              @click="handleRunAIScoringAction"
             >
-              {{ t('promptTestResult.aiScoring.actions.run') }}
-            </el-button>
-            <el-button
-              size="small"
-              :loading="scoringLoading"
-              @click="handleRunAIScoring(true)"
-            >
-              {{ t('promptTestResult.aiScoring.actions.rerun') }}
+              {{ scoringActionText }}
             </el-button>
           </div>
         </div>
@@ -970,9 +971,30 @@ const selectedScoringModel = computed<ModelInfo | null>(() => {
   return scoringModelMap.value.get(scoringModelKey.value) ?? null
 })
 
+const taskAIScoringConfig = computed(() => {
+  const config = toRecord(task.value?.config ?? null)
+  return toRecord(config?.ai_scoring)
+})
+
+const taskAIScoringEnabled = computed(() => Boolean(taskAIScoringConfig.value?.enabled))
+const taskIsRunning = computed(() => task.value?.status === 'running')
+const taskAutoScoringInProgress = computed(
+  () => taskIsRunning.value && taskAIScoringEnabled.value
+)
+
+const rawScoringStatus = computed(() =>
+  String(scoringSummary.value?.status?.status ?? 'idle')
+)
+
+const effectiveScoringStatus = computed(() => {
+  if (taskAutoScoringInProgress.value) {
+    return 'running'
+  }
+  return rawScoringStatus.value
+})
+
 const scoringStatusText = computed(() => {
-  const status = String(scoringSummary.value?.status?.status ?? 'idle')
-  return t(`promptTestResult.aiScoring.status.${status}`)
+  return t(`promptTestResult.aiScoring.status.${effectiveScoringStatus.value}`)
 })
 
 const scoringProgressText = computed(() => {
@@ -988,6 +1010,31 @@ const scoringProgressText = computed(() => {
     total
   })
 })
+
+const scoringActionIsBusy = computed(() =>
+  ['pending', 'running'].includes(effectiveScoringStatus.value)
+)
+
+const scoringActionForce = computed(
+  () => effectiveScoringStatus.value === 'completed' || effectiveScoringStatus.value === 'failed'
+)
+
+const scoringActionText = computed(() => {
+  if (scoringActionIsBusy.value) {
+    return t('promptTestResult.aiScoring.actions.scoring')
+  }
+  if (scoringActionForce.value) {
+    return t('promptTestResult.aiScoring.actions.rerun')
+  }
+  return t('promptTestResult.aiScoring.actions.run')
+})
+
+const scoringActionDisabled = computed(
+  () => !task.value || scoringActionIsBusy.value || scoringLoading.value
+)
+const scoringControlDisabled = computed(
+  () => !task.value || scoringActionIsBusy.value || scoringLoading.value
+)
 
 const analysisModules = ref<AnalysisModuleDefinition[]>([])
 const analysisModulesLoading = ref(false)
@@ -2309,6 +2356,11 @@ async function handleRunAIScoring(force = false) {
   }
 }
 
+async function handleRunAIScoringAction() {
+  if (scoringActionDisabled.value) return
+  await handleRunAIScoring(scoringActionForce.value)
+}
+
 async function handleRetryScore(score: PromptTestOutputScore | null | undefined) {
   if (!score) return
   scoringLoading.value = true
@@ -2771,7 +2823,8 @@ watch(
 }
 
 .ai-scoring-panel__main,
-.ai-scoring-panel__actions,
+.ai-scoring-panel__header,
+.ai-scoring-panel__control,
 .recommendation-panel__header {
   display: flex;
   align-items: center;
@@ -2779,11 +2832,26 @@ watch(
   flex-wrap: wrap;
 }
 
+.ai-scoring-panel__header h4,
+.ai-scoring-panel__header p,
+.recommendation-panel__header h4,
+.recommendation-panel__header p {
+  margin: 0;
+}
+
+.ai-scoring-panel__header p,
+.recommendation-panel__header p {
+  margin-top: 4px;
+  color: var(--text-weak-color);
+  font-size: 13px;
+}
+
 .ai-scoring-panel__main {
+  flex: 1 1 480px;
   justify-content: flex-start;
 }
 
-.ai-scoring-panel__actions,
+.ai-scoring-panel__control,
 .recommendation-panel__header {
   justify-content: space-between;
 }
@@ -2795,17 +2863,6 @@ watch(
 
 .ai-scoring-panel__select {
   width: min(360px, 100%);
-}
-
-.recommendation-panel__header h4,
-.recommendation-panel__header p {
-  margin: 0;
-}
-
-.recommendation-panel__header p {
-  margin-top: 4px;
-  color: var(--text-weak-color);
-  font-size: 13px;
 }
 
 .recommendation-grid {

@@ -1003,6 +1003,8 @@ export const messages = {
         tooltip: '开启后以 Markdown 方式展示模型输出'
       },
       aiScoring: {
+        title: 'AI 评分',
+        subtitle: '使用指定模型对当前测试结果逐条评分，并在结果卡片中展示分数、维度明细与评分理由。',
         modelPlaceholder: '选择评分模型',
         progress: '评分进度：{completed}/{total}',
         noScores: '暂无评分',
@@ -1015,7 +1017,8 @@ export const messages = {
           failed: '评分失败'
         },
         actions: {
-          run: '开启评分',
+          run: '开始评分',
+          scoring: '评分中',
           rerun: '重新评分',
           retry: '重试评分'
         },
@@ -2109,6 +2112,8 @@ export const messages = {
         tooltip: 'Render model outputs with Markdown formatting'
       },
       aiScoring: {
+        title: 'AI Scoring',
+        subtitle: 'Score each current test output with the selected model, then show scores, dimension details, and reasoning on result cards.',
         modelPlaceholder: 'Select scoring model',
         progress: 'Scoring: {completed}/{total}',
         noScores: 'No scores yet',
@@ -2122,6 +2127,7 @@ export const messages = {
         },
         actions: {
           run: 'Start Scoring',
+          scoring: 'Scoring',
           rerun: 'Rescore',
           retry: 'Retry Score'
         },

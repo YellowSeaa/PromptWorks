@@ -5,6 +5,7 @@
         <el-header class="app-header" height="64px">
           <div class="header-left">
             <span class="app-title">{{ t('app.title') }}</span>
+            <span class="app-version">{{ APP_VERSION }}</span>
           </div>
           <div class="header-right">
             <el-button type="primary" :icon="Setting" text @click="handleOpenSettings">
@@ -162,6 +163,7 @@ const settingsForm = reactive({
 
 const TIMEOUT_MIN = 1
 const TIMEOUT_MAX = 600
+const APP_VERSION = 'v0.7.0'
 
 function validateTimeout(
   _: unknown,
@@ -376,6 +378,16 @@ function handleMenuSelect(index: string) {
 .app-title {
   font-size: 20px;
   font-weight: 600;
+}
+
+.app-version {
+  padding: 2px 8px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 999px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  background: var(--el-fill-color-light);
 }
 
 .header-right {
