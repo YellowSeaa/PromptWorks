@@ -1009,6 +1009,7 @@ export const messages = {
         progress: '评分进度：{completed}/{total}',
         noScores: '暂无评分',
         score: '评分',
+        averageScore: '平均分 {score}',
         status: {
           idle: '未评分',
           pending: '待评分',
@@ -2118,6 +2119,7 @@ export const messages = {
         progress: 'Scoring: {completed}/{total}',
         noScores: 'No scores yet',
         score: 'Score',
+        averageScore: 'Avg {score}',
         status: {
           idle: 'Not scored',
           pending: 'Pending',

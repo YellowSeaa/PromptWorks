@@ -446,7 +446,15 @@
           >
             <div class="unit-card__header">
               <h4>{{ unit.name }}</h4>
-              <el-tag size="small">{{ unit.outputs.length }} {{ t('promptTestResult.labels.outputs') }}</el-tag>
+              <div class="unit-card__badges">
+                <el-tag size="small">{{ unit.outputs.length }} {{ t('promptTestResult.labels.outputs') }}</el-tag>
+                <el-tag
+                  size="small"
+                  :type="unit.averageScore !== null ? 'success' : unit.scoreTotal > 0 ? 'warning' : 'info'"
+                >
+                  {{ formatUnitAverageScore(unit) }}
+                </el-tag>
+              </div>
             </div>
             <div class="unit-card__meta">
               <div>{{ t('promptTestResult.fields.version') }}: {{ unit.promptVersion }}</div>
@@ -796,7 +804,13 @@ import type {
 } from '../types/promptTest'
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
-import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
+import {
+  attachScoresToResultUnits,
+  buildPromptTestResultUnit,
+  detectMissingOutput,
+  dimensionEntries as formatDimensionEntries,
+  formatScoreValue as formatAIScoreValue
+} from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
 import { init, type ECharts, type EChartsOption } from '../utils/echarts'
 import { listAnalysisModules, executeAnalysisModule } from '../api/analysis'
@@ -2420,18 +2434,23 @@ async function handleGenerateRecommendation() {
 }
 
 function formatScoreValue(value: unknown): string {
-  const numeric = Number(value)
-  if (!Number.isFinite(numeric)) return '-'
-  return numeric.toLocaleString(locale.value, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 1
-  })
+  return formatAIScoreValue(value, locale.value)
 }
 
 function dimensionEntries(score: PromptTestOutputScore | null | undefined) {
-  const dimensions = score?.dimension_scores
-  if (!dimensions || typeof dimensions !== 'object') return []
-  return Object.entries(dimensions).map(([key, value]) => [key, formatScoreValue(value)])
+  return formatDimensionEntries(score, locale.value)
+}
+
+function formatUnitAverageScore(unit: PromptTestResultUnit): string {
+  if (unit.averageScore !== null) {
+    return t('promptTestResult.aiScoring.averageScore', {
+      score: formatScoreValue(unit.averageScore)
+    })
+  }
+  if (unit.scoreTotal > 0) {
+    return t('promptTestResult.aiScoring.status.pending')
+  }
+  return t('promptTestResult.aiScoring.status.idle')
 }
 
 function recommendationText(key: string): string {
@@ -2550,17 +2569,7 @@ function attachScoresToUnits(
   sourceUnits: PromptTestResultUnit[],
   summary: PromptTestAIScoreSummary | null
 ): PromptTestResultUnit[] {
-  const scoreMap = new Map<string, PromptTestOutputScore>()
-  ;(summary?.scores ?? []).forEach((score) => {
-    scoreMap.set(`${score.unit_id}:${score.run_index}`, score)
-  })
-  return sourceUnits.map((unit) => ({
-    ...unit,
-    outputs: unit.outputs.map((output) => ({
-      ...output,
-      score: scoreMap.get(`${unit.id}:${output.runIndex}`) ?? null
-    }))
-  }))
+  return attachScoresToResultUnits(sourceUnits, summary)
 }
 
 async function refreshAIScores(taskId: number, options: { silent?: boolean } = {}) {
@@ -3342,7 +3351,20 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.unit-card__header h4 {
+  min-width: 0;
+}
+
+.unit-card__badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .unit-card__meta {
