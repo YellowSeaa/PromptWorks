@@ -146,9 +146,11 @@ def run_ai_scoring_for_task(
         language=payload.language,
     )
     update_task_ai_scoring_status(task, scoring_config=scoring_config, status="running")
-    db.flush()
+    db.commit()
     try:
-        summary = score_task_outputs(db, task_id, force=payload.force)
+        summary = score_task_outputs(
+            db, task_id, force=payload.force, commit_progress=True
+        )
     except PromptTestAIScoringError as exc:
         update_task_ai_scoring_status(
             task, scoring_config=scoring_config, status="failed", last_error=str(exc)

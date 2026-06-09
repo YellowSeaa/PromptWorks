@@ -279,6 +279,49 @@ def test_build_task_score_summary_marks_pending_scores_as_pending(db_session):
     assert summary["status"]["pending"] == 1
 
 
+def test_build_task_score_summary_prefers_running_task_progress(db_session):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            retry_count=0,
+            overall_score=90,
+            dimension_scores={"准确性": 90},
+        )
+    )
+    prompt_test_ai_scoring.update_task_ai_scoring_status(
+        experiment.unit.task,
+        scoring_config=prompt_test_ai_scoring.AIScoringConfig(
+            enabled=True,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+        ),
+        status="running",
+        progress={"current": 1, "total": 3, "percentage": 33},
+    )
+    db_session.commit()
+
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+
+    assert summary["status"]["status"] == "running"
+    assert summary["status"]["current"] == 1
+    assert summary["status"]["total"] == 3
+    assert summary["status"]["percentage"] == 33
+
+
 def test_parse_ai_scoring_config_and_update_task_status(db_session):
     model = _create_provider_and_model(db_session)
     task = PromptTestTask(name="配置任务", config={})
@@ -442,7 +485,7 @@ def test_prompt_test_ai_scoring_api_triggers_and_retries_score(
     model = _create_provider_and_model(db_session)
     experiment = _create_completed_experiment(db_session, model)
 
-    def fake_score_task(session, task_id, *, force=False):
+    def fake_score_task(session, task_id, *, force=False, commit_progress=False):
         score = PromptTestOutputScore(
             task_id=task_id,
             unit_id=experiment.unit_id,

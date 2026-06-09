@@ -158,7 +158,7 @@ def update_task_ai_scoring_status(
 
 
 def score_task_outputs(
-    db: Session, task_id: int, *, force: bool = False
+    db: Session, task_id: int, *, force: bool = False, commit_progress: bool = False
 ) -> dict[str, Any]:
     """对任务最新实验中的已有成功输出执行补评分。"""
 
@@ -175,6 +175,8 @@ def score_task_outputs(
         progress={"current": 0, "total": len(candidates), "percentage": 0},
     )
     db.flush()
+    if commit_progress:
+        db.commit()
 
     completed = 0
     for experiment, output in candidates:
@@ -202,6 +204,8 @@ def score_task_outputs(
             },
         )
         db.flush()
+        if commit_progress:
+            db.commit()
 
     update_task_ai_scoring_status(
         task,
@@ -214,6 +218,8 @@ def score_task_outputs(
         },
     )
     db.flush()
+    if commit_progress:
+        db.commit()
     return build_task_score_summary(db, task_id)
 
 
@@ -396,7 +402,9 @@ def build_task_score_summary(db: Session, task_id: int) -> dict[str, Any]:
             "dimension_stats": _build_dimension_stats(unit_scores),
         }
 
+    task = db.get(PromptTestTask, task_id)
     status = _build_status_from_scores(scores)
+    status = _merge_task_scoring_status(status, task)
     return {"status": status, "scores": scores, "unit_summaries": unit_summaries}
 
 
@@ -837,6 +845,36 @@ def _build_status_from_scores(
         "percentage": int(round(((completed + failed) / total) * 100)) if total else 0,
         "language": scores[0].language if scores else DEFAULT_SCORE_LANGUAGE,
     }
+
+
+def _merge_task_scoring_status(
+    status: dict[str, Any], task: PromptTestTask | None
+) -> dict[str, Any]:
+    if task is None or not isinstance(task.config, Mapping):
+        return status
+    ai_scoring = task.config.get("ai_scoring")
+    if not isinstance(ai_scoring, Mapping):
+        return status
+    task_status = _safe_str(ai_scoring.get("status"))
+    if task_status not in {"running", "pending"}:
+        return status
+    progress = ai_scoring.get("progress")
+    progress_map = progress if isinstance(progress, Mapping) else {}
+    merged = dict(status)
+    current = _safe_int(progress_map.get("current"))
+    total = _safe_int(progress_map.get("total"))
+    percentage = _safe_int(progress_map.get("percentage"))
+    merged["status"] = task_status
+    if current is not None:
+        merged["current"] = current
+    if total is not None:
+        merged["total"] = total
+    if percentage is not None:
+        merged["percentage"] = max(0, min(100, percentage))
+    merged["language"] = _safe_str(ai_scoring.get("language")) or merged.get(
+        "language", DEFAULT_SCORE_LANGUAGE
+    )
+    return merged
 
 
 def _resolve_base_url(provider: LLMProvider) -> str:

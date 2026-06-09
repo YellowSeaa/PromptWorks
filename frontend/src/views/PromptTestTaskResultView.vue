@@ -1025,6 +1025,7 @@ const scoringStatusText = computed(() => {
 
 const scoringProgressText = computed(() => {
   const status = scoringSummary.value?.status ?? {}
+  const current = Number(status.current)
   const completed = Number(status.completed ?? 0)
   const failed = Number(status.failed ?? 0)
   const total = Number(status.total ?? 0)
@@ -1032,7 +1033,7 @@ const scoringProgressText = computed(() => {
     return t('promptTestResult.aiScoring.noScores')
   }
   return t('promptTestResult.aiScoring.progress', {
-    completed: completed + failed,
+    completed: Number.isFinite(current) ? current : completed + failed,
     total
   })
 })
