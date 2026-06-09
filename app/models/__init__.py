@@ -11,6 +11,10 @@ from app.models.prompt_test import (
     PromptTestUnit,
     PromptTestExperiment,
     PromptTestExperimentStatus,
+    PromptTestOutputScore,
+    PromptTestOutputScoreStatus,
+    PromptTestOptimizationRecommendation,
+    PromptTestOptimizationRecommendationStatus,
 )
 from app.models.system_setting import SystemSetting
 
@@ -32,5 +36,9 @@ __all__ = [
     "PromptTestUnit",
     "PromptTestExperiment",
     "PromptTestExperimentStatus",
+    "PromptTestOutputScore",
+    "PromptTestOutputScoreStatus",
+    "PromptTestOptimizationRecommendation",
+    "PromptTestOptimizationRecommendationStatus",
     "SystemSetting",
 ]

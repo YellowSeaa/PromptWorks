@@ -4,7 +4,11 @@ import type {
   PromptTestTaskCreatePayload,
   PromptTestExperiment,
   PromptTestExperimentCreatePayload,
-  PromptTestUnit
+  PromptTestUnit,
+  PromptTestAIScoringConfig,
+  PromptTestAIScoreSummary,
+  PromptTestOutputScore,
+  PromptTestOptimizationRecommendation
 } from '../types/promptTest'
 
 const BASE_PATH = '/prompt-test'
@@ -60,4 +64,50 @@ export function listPromptTestExperiments(unitId: number): Promise<PromptTestExp
   return request<PromptTestExperiment[]>(`${BASE_PATH}/units/${unitId}/experiments`, {
     method: 'GET'
   })
+}
+
+export function runPromptTestAIScoring(
+  taskId: number,
+  payload: PromptTestAIScoringConfig & { force?: boolean }
+): Promise<PromptTestAIScoreSummary> {
+  return request<PromptTestAIScoreSummary>(`${BASE_PATH}/tasks/${taskId}/ai-scoring`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function getPromptTestAIScores(taskId: number): Promise<PromptTestAIScoreSummary> {
+  return request<PromptTestAIScoreSummary>(`${BASE_PATH}/tasks/${taskId}/ai-scores`, {
+    method: 'GET'
+  })
+}
+
+export function retryPromptTestOutputScore(scoreId: number): Promise<PromptTestOutputScore> {
+  return request<PromptTestOutputScore>(`${BASE_PATH}/output-scores/${scoreId}/retry`, {
+    method: 'POST'
+  })
+}
+
+export function createPromptTestOptimizationRecommendation(
+  taskId: number,
+  payload: Omit<PromptTestAIScoringConfig, 'enabled'>
+): Promise<PromptTestOptimizationRecommendation> {
+  return request<PromptTestOptimizationRecommendation>(
+    `${BASE_PATH}/tasks/${taskId}/optimization-recommendations`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  )
+}
+
+export function getLatestPromptTestOptimizationRecommendation(
+  taskId: number
+): Promise<PromptTestOptimizationRecommendation | null> {
+  return request<PromptTestOptimizationRecommendation | null>(
+    `${BASE_PATH}/tasks/${taskId}/optimization-recommendations/latest`,
+    {
+      method: 'GET'
+    }
+  )
 }

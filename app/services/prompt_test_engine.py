@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.llm_provider_registry import get_provider_defaults
+from app.db import session as db_session_module
 from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.prompt_test import (
     PromptTestExperiment,
@@ -32,6 +33,11 @@ from app.services.test_run import (
 from app.services.system_settings import (
     DEFAULT_TEST_TASK_TIMEOUT,
     get_testing_timeout_config,
+)
+from app.services.prompt_test_ai_scoring import (
+    parse_ai_scoring_config,
+    resolve_parallel_limits,
+    score_experiment_output,
 )
 
 logger = logging.getLogger("promptworks.prompt_test_engine")
@@ -109,7 +115,27 @@ def execute_prompt_test_experiment(
     concurrency_limit = DEFAULT_CONCURRENCY_LIMIT
     if model and isinstance(model.concurrency_limit, int):
         concurrency_limit = max(1, model.concurrency_limit)
+    scoring_config = parse_ai_scoring_config(unit.task.config if unit.task else None)
+    scoring_limit = DEFAULT_CONCURRENCY_LIMIT
+    shared_single_lane = False
+    if scoring_config is not None and model is not None:
+        evaluator_model = db.get(LLMModel, scoring_config.evaluator_model_id)
+        evaluator_limit = (
+            evaluator_model.concurrency_limit
+            if evaluator_model and isinstance(evaluator_model.concurrency_limit, int)
+            else DEFAULT_CONCURRENCY_LIMIT
+        )
+        limits = resolve_parallel_limits(
+            test_model_id=model.id,
+            evaluator_model_id=scoring_config.evaluator_model_id,
+            test_concurrency_limit=concurrency_limit,
+            evaluator_concurrency_limit=evaluator_limit,
+        )
+        concurrency_limit = limits.test_limit
+        scoring_limit = limits.scoring_limit
+        shared_single_lane = limits.shared_single_lane
     worker_count = max(1, min(concurrency_limit, total_runs))
+    scoring_worker_count = max(1, scoring_limit)
     provider_for_call = cast(
         LLMProvider,
         SimpleNamespace(
@@ -195,6 +221,62 @@ def execute_prompt_test_experiment(
             next_pending += 1
             futures[executor.submit(_execute_run, run_index)] = run_index
 
+    scoring_executor: ThreadPoolExecutor | None = None
+    if scoring_config is not None and not shared_single_lane:
+        scoring_executor = ThreadPoolExecutor(max_workers=scoring_worker_count)
+
+    def _score_output_with_new_session(output: dict[str, Any]) -> None:
+        if scoring_config is None:
+            raise PromptTestExecutionError("测试任务未配置 AI 评分模型。")
+        scoring_db = db_session_module.SessionLocal()
+        try:
+            scoring_experiment = scoring_db.get(PromptTestExperiment, experiment.id)
+            if scoring_experiment is None:
+                raise PromptTestExecutionError("AI 评分关联的实验不存在。")
+            score_experiment_output(
+                scoring_db,
+                experiment=scoring_experiment,
+                output=output,
+                scoring_config=scoring_config,
+            )
+            scoring_db.commit()
+        except Exception:
+            scoring_db.rollback()
+            raise
+        finally:
+            scoring_db.close()
+
+    def _log_scoring_failure(future: Future[None]) -> None:
+        if future.cancelled():
+            return
+        try:
+            future.result()
+        except Exception:
+            logger.exception("Prompt 测试输出 AI 评分后台任务失败")
+
+    def _submit_scoring(run_index: int, run_record: dict[str, Any]) -> None:
+        if scoring_config is None or not run_record.get("output_text"):
+            return
+        if scoring_executor is None:
+            try:
+                score_experiment_output(
+                    db,
+                    experiment=experiment,
+                    output=run_record,
+                    scoring_config=scoring_config,
+                )
+            except Exception:  # pragma: no cover - 评分失败不影响测试任务
+                logger.exception(
+                    "Prompt 测试单元 %s 的第 %s 次 AI 评分失败",
+                    unit.id,
+                    run_index,
+                )
+            return
+        future = scoring_executor.submit(
+            _score_output_with_new_session, dict(run_record)
+        )
+        future.add_done_callback(_log_scoring_failure)
+
     executor = ThreadPoolExecutor(max_workers=worker_count)
     try:
         _submit_available(executor)
@@ -247,6 +329,7 @@ def execute_prompt_test_experiment(
                         run_record=run_record,
                     )
                     db.add(usage_log)
+                    _submit_scoring(run_index, run_record)
 
                 if progress_callback is not None:
                     try:
@@ -257,6 +340,8 @@ def execute_prompt_test_experiment(
             _submit_available(executor)
     finally:
         executor.shutdown(wait=not cancelled, cancel_futures=True)
+        if scoring_executor is not None:
+            scoring_executor.shutdown(wait=False, cancel_futures=cancelled)
 
     run_records = _ordered_records()
     if cancelled or (cancellation_callback is not None and cancellation_callback()):

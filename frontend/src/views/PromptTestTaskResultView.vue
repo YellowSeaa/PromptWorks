@@ -96,6 +96,89 @@
           </div>
         </div>
 
+        <div class="ai-scoring-panel">
+          <div class="ai-scoring-panel__main">
+            <el-tag size="small" type="info">{{ scoringStatusText }}</el-tag>
+            <span class="ai-scoring-panel__progress">{{ scoringProgressText }}</span>
+            <el-select
+              v-model="scoringModelKey"
+              size="small"
+              filterable
+              clearable
+              class="ai-scoring-panel__select"
+              :placeholder="t('promptTestResult.aiScoring.modelPlaceholder')"
+            >
+              <el-option-group
+                v-for="group in modelOptionGroups"
+                :key="`result-score-${group.providerId}`"
+                :label="group.label"
+              >
+                <el-option
+                  v-for="option in group.options"
+                  :key="`result-score-${option.value}`"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-option-group>
+            </el-select>
+          </div>
+          <div class="ai-scoring-panel__actions">
+            <el-button
+              size="small"
+              type="primary"
+              :loading="scoringLoading"
+              @click="handleRunAIScoring(false)"
+            >
+              {{ t('promptTestResult.aiScoring.actions.run') }}
+            </el-button>
+            <el-button
+              size="small"
+              :loading="scoringLoading"
+              @click="handleRunAIScoring(true)"
+            >
+              {{ t('promptTestResult.aiScoring.actions.rerun') }}
+            </el-button>
+          </div>
+        </div>
+
+        <div class="recommendation-panel">
+          <div class="recommendation-panel__header">
+            <div>
+              <h4>{{ t('promptTestResult.recommendation.title') }}</h4>
+              <p>{{ t('promptTestResult.recommendation.subtitle') }}</p>
+            </div>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="recommendationLoading"
+              @click="handleGenerateRecommendation"
+            >
+              {{
+                recommendation
+                  ? t('promptTestResult.recommendation.actions.regenerate')
+                  : t('promptTestResult.recommendation.actions.generate')
+              }}
+            </el-button>
+          </div>
+          <el-alert
+            v-if="recommendation?.status === 'failed'"
+            type="error"
+            show-icon
+            :closable="false"
+            :title="recommendation.error || t('promptTestResult.recommendation.messages.failed')"
+          />
+          <div v-else-if="recommendation?.content" class="recommendation-grid">
+            <div
+              v-for="key in ['overall_advice', 'temperature_advice', 'model_advice', 'prompt_revision', 'validation_plan']"
+              :key="key"
+              class="recommendation-item"
+            >
+              <h5>{{ t(`promptTestResult.recommendation.fields.${key}`) }}</h5>
+              <pre>{{ recommendationText(key) || '-' }}</pre>
+            </div>
+          </div>
+        </div>
+
         <div class="result-grid">
           <div class="result-grid-scroll" :style="{ width: gridWidth, minWidth: '100%' }">
             <div
@@ -150,7 +233,56 @@
                   :key="cellIndex"
                   class="grid-cell"
                 >
-                  <div class="output-badge">#{{ row.index }}</div>
+                  <div class="output-card-top">
+                    <div class="output-badge">#{{ row.index }}</div>
+                    <el-tooltip
+                      v-if="cell?.score"
+                      placement="left"
+                      popper-class="score-tooltip"
+                    >
+                      <template #content>
+                        <div class="score-tooltip__content">
+                          <div class="score-tooltip__title">
+                            {{ t('promptTestResult.aiScoring.score') }}:
+                            {{ formatScoreValue(cell.score.overall_score) }}
+                          </div>
+                          <div
+                            v-for="[key, value] in dimensionEntries(cell.score)"
+                            :key="key"
+                            class="score-tooltip__row"
+                          >
+                            <span>{{ key }}</span>
+                            <strong>{{ value }}</strong>
+                          </div>
+                          <p v-if="cell.score.reason" class="score-tooltip__reason">
+                            {{ cell.score.reason }}
+                          </p>
+                          <p v-if="cell.score.error" class="score-tooltip__error">
+                            {{ cell.score.error }}
+                          </p>
+                          <el-button
+                            v-if="cell.score.status === 'failed'"
+                            size="small"
+                            type="primary"
+                            link
+                            @click.stop="handleRetryScore(cell.score)"
+                          >
+                            {{ t('promptTestResult.aiScoring.actions.retry') }}
+                          </el-button>
+                        </div>
+                      </template>
+                      <el-tag
+                        size="small"
+                        :type="cell.score.status === 'completed' ? 'success' : cell.score.status === 'failed' ? 'danger' : 'warning'"
+                      >
+                        {{
+                          cell.score.status === 'completed'
+                            ? formatScoreValue(cell.score.overall_score)
+                            : t(`promptTestResult.aiScoring.status.${cell.score.status}`)
+                        }}
+                      </el-tag>
+                    </el-tooltip>
+                  </div>
                     <template v-if="cell">
                       <div v-if="cell.errorMessage" class="output-warning">
                         <el-alert
@@ -644,8 +776,24 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { getPromptTestTask, listPromptTestUnits, listPromptTestExperiments } from '../api/promptTest'
-import type { PromptTestTask } from '../types/promptTest'
+import {
+  createPromptTestOptimizationRecommendation,
+  getLatestPromptTestOptimizationRecommendation,
+  getPromptTestAIScores,
+  getPromptTestTask,
+  listPromptTestExperiments,
+  listPromptTestUnits,
+  retryPromptTestOutputScore,
+  runPromptTestAIScoring
+} from '../api/promptTest'
+import { listLLMProviders } from '../api/llmProvider'
+import type {
+  PromptTestAIScoreSummary,
+  PromptTestOptimizationRecommendation,
+  PromptTestOutputScore,
+  PromptTestTask
+} from '../types/promptTest'
+import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import { buildPromptTestResultUnit, detectMissingOutput } from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
@@ -678,6 +826,13 @@ interface MissingOutputInfo {
   type: 'info' | 'warning' | 'error'
   title: string
   description?: string
+}
+
+interface ModelInfo {
+  providerId: number
+  providerName: string
+  modelId: number
+  modelName: string
 }
 
 type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
@@ -731,6 +886,12 @@ const units = ref<PromptTestResultUnit[]>([])
 const loading = ref(false)
 const errorMessage = ref<string | null>(null)
 const resultMarkdownEnabled = ref(false)
+const providers = ref<LLMProvider[]>([])
+const scoringModelKey = ref('')
+const scoringSummary = ref<PromptTestAIScoreSummary | null>(null)
+const scoringLoading = ref(false)
+const recommendation = ref<PromptTestOptimizationRecommendation | null>(null)
+const recommendationLoading = ref(false)
 const RESULT_POLL_INTERVAL_MS = 3000
 let resultPollTimer: ReturnType<typeof window.setInterval> | null = null
 let resultPollingInFlight = false
@@ -769,6 +930,63 @@ const taskFailureReason = computed(() => {
     }
   }
   return null
+})
+
+const modelOptionGroups = computed(() =>
+  providers.value
+    .filter((provider) => !provider.is_archived)
+    .map((provider) => ({
+      providerId: provider.id,
+      label: provider.provider_name,
+      options: provider.models.map((model) => ({
+        value: `${provider.id}:${model.id}`,
+        label: model.name,
+        providerId: provider.id,
+        providerName: provider.provider_name,
+        modelId: model.id,
+        modelName: model.name
+      }))
+    }))
+    .filter((group) => group.options.length > 0)
+)
+
+const scoringModelMap = computed<Map<string, ModelInfo>>(() => {
+  const map = new Map<string, ModelInfo>()
+  modelOptionGroups.value.forEach((group) => {
+    group.options.forEach((option) => {
+      map.set(option.value, {
+        providerId: option.providerId,
+        providerName: option.providerName,
+        modelId: option.modelId,
+        modelName: option.modelName
+      })
+    })
+  })
+  return map
+})
+
+const selectedScoringModel = computed<ModelInfo | null>(() => {
+  if (!scoringModelKey.value) return null
+  return scoringModelMap.value.get(scoringModelKey.value) ?? null
+})
+
+const scoringStatusText = computed(() => {
+  const status = String(scoringSummary.value?.status?.status ?? 'idle')
+  return t(`promptTestResult.aiScoring.status.${status}`)
+})
+
+const scoringProgressText = computed(() => {
+  const status = scoringSummary.value?.status ?? {}
+  const completed = Number(status.completed ?? 0)
+  const failed = Number(status.failed ?? 0)
+  const total = Number(status.total ?? 0)
+  if (!total) {
+    return t('promptTestResult.aiScoring.noScores')
+  }
+  return t('promptTestResult.aiScoring.progress', {
+    completed: completed + failed,
+    total
+  })
 })
 
 const analysisModules = ref<AnalysisModuleDefinition[]>([])
@@ -1132,7 +1350,13 @@ const taskStatusTag = computed(() => {
 })
 
 function shouldPollTaskResult(status: string | null | undefined) {
-  return status === 'ready' || status === 'running'
+  const scoringStatus = String(scoringSummary.value?.status?.status ?? 'idle')
+  return (
+    status === 'ready' ||
+    status === 'running' ||
+    scoringStatus === 'running' ||
+    scoringStatus === 'pending'
+  )
 }
 
 const dateTimeFormatter = computed(
@@ -2051,6 +2275,111 @@ function handleRetryTask() {
   })
 }
 
+function requireScoringModel(): ModelInfo | null {
+  const model = selectedScoringModel.value
+  if (!model) {
+    ElMessage.warning(t('promptTestResult.aiScoring.messages.modelRequired'))
+    return null
+  }
+  return model
+}
+
+async function handleRunAIScoring(force = false) {
+  const currentTask = task.value
+  if (!currentTask) return
+  const model = requireScoringModel()
+  if (!model) return
+  scoringLoading.value = true
+  try {
+    scoringSummary.value = await runPromptTestAIScoring(currentTask.id, {
+      enabled: true,
+      evaluator_provider_id: model.providerId,
+      evaluator_model_id: model.modelId,
+      evaluator_model_name: model.modelName,
+      language: locale.value,
+      force
+    })
+    units.value = attachScoresToUnits(units.value, scoringSummary.value)
+    ElMessage.success(t('promptTestResult.aiScoring.messages.runSuccess'))
+  } catch (error: any) {
+    console.error('执行 AI 评分失败', error)
+    ElMessage.error(error?.message ?? t('promptTestResult.aiScoring.messages.runFailed'))
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+async function handleRetryScore(score: PromptTestOutputScore | null | undefined) {
+  if (!score) return
+  scoringLoading.value = true
+  try {
+    await retryPromptTestOutputScore(score.id)
+    const id = task.value?.id
+    if (id) {
+      await refreshAIScores(id, { silent: true })
+    }
+    ElMessage.success(t('promptTestResult.aiScoring.messages.retrySuccess'))
+  } catch (error: any) {
+    console.error('重试 AI 评分失败', error)
+    ElMessage.error(error?.message ?? t('promptTestResult.aiScoring.messages.retryFailed'))
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+async function handleGenerateRecommendation() {
+  const currentTask = task.value
+  if (!currentTask) return
+  const model = requireScoringModel()
+  if (!model) return
+  recommendationLoading.value = true
+  try {
+    recommendation.value = await createPromptTestOptimizationRecommendation(currentTask.id, {
+      evaluator_provider_id: model.providerId,
+      evaluator_model_id: model.modelId,
+      evaluator_model_name: model.modelName,
+      language: locale.value
+    })
+    if (recommendation.value.status === 'failed') {
+      ElMessage.error(recommendation.value.error || t('promptTestResult.recommendation.messages.failed'))
+    } else {
+      ElMessage.success(t('promptTestResult.recommendation.messages.success'))
+    }
+  } catch (error: any) {
+    console.error('生成优化建议失败', error)
+    ElMessage.error(error?.message ?? t('promptTestResult.recommendation.messages.failed'))
+  } finally {
+    recommendationLoading.value = false
+  }
+}
+
+function formatScoreValue(value: unknown): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '-'
+  return numeric.toLocaleString(locale.value, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  })
+}
+
+function dimensionEntries(score: PromptTestOutputScore | null | undefined) {
+  const dimensions = score?.dimension_scores
+  if (!dimensions || typeof dimensions !== 'object') return []
+  return Object.entries(dimensions).map(([key, value]) => [key, formatScoreValue(value)])
+}
+
+function recommendationText(key: string): string {
+  const content = recommendation.value?.content
+  const value = content?.[key]
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
 function goBack() {
   router.push({ name: 'test-job-management' })
 }
@@ -2129,6 +2458,67 @@ async function fetchAnalysisModulesList() {
   }
 }
 
+async function fetchProviders() {
+  try {
+    providers.value = await listLLMProviders()
+    initializeScoringModelFromTask()
+  } catch (error) {
+    console.error('加载评分模型失败', error)
+  }
+}
+
+function initializeScoringModelFromTask() {
+  const config = toRecord(task.value?.config ?? null)
+  const aiScoring = toRecord(config?.ai_scoring)
+  const providerId = Number(aiScoring?.evaluator_provider_id)
+  const modelId = Number(aiScoring?.evaluator_model_id)
+  if (Number.isFinite(providerId) && Number.isFinite(modelId)) {
+    const key = `${providerId}:${modelId}`
+    if (scoringModelMap.value.has(key)) {
+      scoringModelKey.value = key
+    }
+  }
+}
+
+function attachScoresToUnits(
+  sourceUnits: PromptTestResultUnit[],
+  summary: PromptTestAIScoreSummary | null
+): PromptTestResultUnit[] {
+  const scoreMap = new Map<string, PromptTestOutputScore>()
+  ;(summary?.scores ?? []).forEach((score) => {
+    scoreMap.set(`${score.unit_id}:${score.run_index}`, score)
+  })
+  return sourceUnits.map((unit) => ({
+    ...unit,
+    outputs: unit.outputs.map((output) => ({
+      ...output,
+      score: scoreMap.get(`${unit.id}:${output.runIndex}`) ?? null
+    }))
+  }))
+}
+
+async function refreshAIScores(taskId: number, options: { silent?: boolean } = {}) {
+  try {
+    scoringSummary.value = await getPromptTestAIScores(taskId)
+    units.value = attachScoresToUnits(units.value, scoringSummary.value)
+  } catch (error) {
+    console.error('加载 AI 评分失败', error)
+    scoringSummary.value = null
+    if (!options.silent) {
+      ElMessage.warning(t('promptTestResult.aiScoring.messages.loadFailed'))
+    }
+  }
+}
+
+async function refreshLatestRecommendation(taskId: number) {
+  try {
+    recommendation.value = await getLatestPromptTestOptimizationRecommendation(taskId)
+  } catch (error) {
+    console.error('加载优化建议失败', error)
+    recommendation.value = null
+  }
+}
+
 async function loadTaskResult(taskId: number, options: { silent?: boolean } = {}) {
   const silent = options.silent === true
   if (!silent) {
@@ -2138,11 +2528,22 @@ async function loadTaskResult(taskId: number, options: { silent?: boolean } = {}
     errorMessage.value = null
   }
   try {
-    const [taskData, unitList] = await Promise.all([
+    const [taskData, unitList, scoreResult, recommendationResult] = await Promise.all([
       getPromptTestTask(taskId),
-      listPromptTestUnits(taskId)
+      listPromptTestUnits(taskId),
+      getPromptTestAIScores(taskId).catch((error) => {
+        console.error('加载 AI 评分失败', error)
+        return null
+      }),
+      getLatestPromptTestOptimizationRecommendation(taskId).catch((error) => {
+        console.error('加载优化建议失败', error)
+        return null
+      })
     ])
     task.value = taskData
+    scoringSummary.value = scoreResult
+    recommendation.value = recommendationResult
+    initializeScoringModelFromTask()
     const experimentResults = await Promise.allSettled(
       unitList.map((unit) => listPromptTestExperiments(unit.id))
     )
@@ -2156,7 +2557,7 @@ async function loadTaskResult(taskId: number, options: { silent?: boolean } = {}
       console.error(`加载测试单元 ${unit.id} 的实验数据失败`, experiment.reason)
       return buildPromptTestResultUnit(unit, [])
     })
-    units.value = resultUnits
+    units.value = attachScoresToUnits(resultUnits, scoreResult)
     errorMessage.value = null
     if (hasExperimentError) {
       const message = t('promptTestResult.messages.partialFailed')
@@ -2233,7 +2634,7 @@ async function refreshTask() {
 
 onMounted(() => {
   window.addEventListener('resize', handleWindowResize)
-  void Promise.all([refreshTask(), fetchAnalysisModulesList()])
+  void Promise.all([refreshTask(), fetchAnalysisModulesList(), fetchProviders()])
 })
 
 onBeforeUnmount(() => {
@@ -2252,6 +2653,13 @@ watch(
 
 watch(
   () => task.value?.status,
+  () => {
+    updateResultPolling()
+  }
+)
+
+watch(
+  () => scoringSummary.value?.status?.status,
   () => {
     updateResultPolling()
   }
@@ -2351,6 +2759,79 @@ watch(
   color: var(--text-weak-color);
 }
 
+.ai-scoring-panel,
+.recommendation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--el-color-info-light-8);
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+}
+
+.ai-scoring-panel__main,
+.ai-scoring-panel__actions,
+.recommendation-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-scoring-panel__main {
+  justify-content: flex-start;
+}
+
+.ai-scoring-panel__actions,
+.recommendation-panel__header {
+  justify-content: space-between;
+}
+
+.ai-scoring-panel__progress {
+  font-size: 13px;
+  color: var(--text-weak-color);
+}
+
+.ai-scoring-panel__select {
+  width: min(360px, 100%);
+}
+
+.recommendation-panel__header h4,
+.recommendation-panel__header p {
+  margin: 0;
+}
+
+.recommendation-panel__header p {
+  margin-top: 4px;
+  color: var(--text-weak-color);
+  font-size: 13px;
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.recommendation-item {
+  min-width: 0;
+}
+
+.recommendation-item h5 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.recommendation-item pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+
 .result-grid {
   display: flex;
   flex-direction: column;
@@ -2423,6 +2904,40 @@ watch(
   font-size: 12px;
   color: var(--el-color-primary);
   font-weight: 600;
+}
+
+.output-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.score-tooltip__content {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-tooltip__title {
+  font-weight: 600;
+}
+
+.score-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.score-tooltip__reason,
+.score-tooltip__error {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.score-tooltip__error {
+  color: var(--el-color-danger-light-3);
 }
 
 .output-content {

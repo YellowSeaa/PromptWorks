@@ -245,6 +245,39 @@
               {{ t('promptTestCreate.form.tips.analysisModules') }}
             </p>
           </el-form-item>
+          <el-form-item :label="t('promptTestCreate.form.fields.aiScoring')">
+            <div class="ai-scoring-config">
+              <el-switch
+                v-model="taskForm.aiScoringEnabled"
+                :active-text="t('promptTestCreate.form.aiScoring.enabled')"
+                :inactive-text="t('promptTestCreate.form.aiScoring.disabled')"
+              />
+              <el-select
+                v-model="taskForm.aiScoringModelKey"
+                filterable
+                clearable
+                :disabled="!taskForm.aiScoringEnabled"
+                :loading="providerLoading"
+                :placeholder="t('promptTestCreate.form.placeholders.aiScoringModel')"
+              >
+                <el-option-group
+                  v-for="group in modelOptionGroups"
+                  :key="`score-${group.providerId}`"
+                  :label="group.label"
+                >
+                  <el-option
+                    v-for="option in group.options"
+                    :key="`score-${option.value}`"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-option-group>
+              </el-select>
+            </div>
+            <p class="form-tip">
+              {{ t('promptTestCreate.form.tips.aiScoring') }}
+            </p>
+          </el-form-item>
         </section>
 
         <el-divider />
@@ -365,7 +398,7 @@ import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 interface ModelOption {
   value: string
@@ -436,7 +469,9 @@ const taskForm = reactive({
   promptId: null as number | null,
   promptVersionIds: [] as number[],
   autoExecute: true,
-  analysisModules: [] as string[]
+  analysisModules: [] as string[],
+  aiScoringEnabled: false,
+  aiScoringModelKey: ''
 })
 
 const unitForm = reactive({
@@ -536,6 +571,10 @@ const selectedModelInfos = computed<ModelInfo[]>(() =>
     .map((key) => modelOptionMap.value.get(key))
     .filter((info): info is ModelInfo => Boolean(info))
 )
+const selectedScoringModel = computed<ModelInfo | null>(() => {
+  if (!taskForm.aiScoringEnabled || !taskForm.aiScoringModelKey) return null
+  return modelOptionMap.value.get(taskForm.aiScoringModelKey) ?? null
+})
 const baseNameCustomized = ref(false)
 let syncingBaseName = false
 
@@ -664,6 +703,9 @@ watch(
       unitForm.selectedModels = unitForm.selectedModels.filter((key) =>
         validKeys.has(key)
       )
+    }
+    if (taskForm.aiScoringModelKey && !validKeys.has(taskForm.aiScoringModelKey)) {
+      taskForm.aiScoringModelKey = ''
     }
   },
   { deep: true }
@@ -896,6 +938,12 @@ async function hydrateFormFromTask(taskData: PromptTestTask, unitList: PromptTes
     typeof autoExecuteConfig === 'boolean' ? autoExecuteConfig : true
   const analysisModules = extractStringArray(configRecord['analysis_modules'])
   taskForm.analysisModules = [...analysisModules]
+  const aiScoring = toRecord(configRecord['ai_scoring'])
+  taskForm.aiScoringEnabled = Boolean(aiScoring?.enabled)
+  const evaluatorProviderId = toPositiveInteger(aiScoring?.evaluator_provider_id)
+  const evaluatorModelId = toPositiveInteger(aiScoring?.evaluator_model_id)
+  taskForm.aiScoringModelKey =
+    evaluatorProviderId && evaluatorModelId ? `${evaluatorProviderId}:${evaluatorModelId}` : ''
 
   suppressPromptWatcher = true
   taskForm.promptId = promptId
@@ -1403,6 +1451,10 @@ async function handleSubmit() {
     ElMessage.warning(t('promptTestCreate.messages.modelRequired'))
     return
   }
+  if (taskForm.aiScoringEnabled && !selectedScoringModel.value) {
+    ElMessage.warning(t('promptTestCreate.messages.aiScoringModelRequired'))
+    return
+  }
   if (!parameterSets.value.length) {
     ElMessage.warning(t('promptTestCreate.messages.parameterSetRequired'))
     return
@@ -1503,6 +1555,18 @@ async function handleSubmit() {
   }
 
   submitting.value = true
+  const aiScoringConfig = taskForm.aiScoringEnabled && selectedScoringModel.value
+    ? {
+        enabled: true,
+        evaluator_provider_id: selectedScoringModel.value.providerId,
+        evaluator_model_id: selectedScoringModel.value.modelId,
+        evaluator_model_name: selectedScoringModel.value.modelName,
+        language: locale.value
+      }
+    : {
+        enabled: false
+      }
+
   try {
     const payload = {
       name: taskForm.name.trim(),
@@ -1522,7 +1586,8 @@ async function handleSubmit() {
         })),
         variable_headers: unitForm.variableHeaders,
         variable_source: unitForm.variableInputMode,
-        analysis_modules: taskForm.analysisModules
+        analysis_modules: taskForm.analysisModules,
+        ai_scoring: aiScoringConfig
       },
       auto_execute: taskForm.autoExecute,
       units: unitsPayload.map((unit) => ({
@@ -1707,6 +1772,14 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-weak-color);
   white-space: normal;
+}
+
+.ai-scoring-config {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 360px);
+  gap: 12px;
+  align-items: center;
+  width: 100%;
 }
 
 .add-parameter-set {

@@ -6,7 +6,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.prompt_test import (
+    PromptTestOptimizationRecommendationStatus,
     PromptTestExperimentStatus,
+    PromptTestOutputScoreStatus,
     PromptTestTaskStatus,
 )
 
@@ -156,6 +158,90 @@ class PromptTestExperimentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PromptTestAIScoringRequest(BaseModel):
+    """开启或重新执行 AI 评分的请求结构。"""
+
+    __test__ = False
+
+    enabled: bool = True
+    evaluator_provider_id: int = Field(..., ge=1)
+    evaluator_model_id: int = Field(..., ge=1)
+    evaluator_model_name: str = Field(..., min_length=1, max_length=150)
+    language: str = Field(default="zh-CN", max_length=20)
+    force: bool = False
+
+
+class PromptTestOutputScoreRead(BaseModel):
+    """单条测试输出的评分结果。"""
+
+    __test__ = False
+
+    id: int
+    task_id: int
+    unit_id: int
+    experiment_id: int
+    run_index: int
+    status: PromptTestOutputScoreStatus
+    evaluator_provider_id: int | None = None
+    evaluator_model_id: int | None = None
+    evaluator_model_name: str | None = None
+    language: str
+    overall_score: float | None = None
+    dimension_scores: dict[str, Any] | None = None
+    reason: str | None = None
+    retry_count: int
+    error: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PromptTestAIScoreSummaryRead(BaseModel):
+    """测试任务评分汇总。"""
+
+    __test__ = False
+
+    status: dict[str, Any]
+    scores: list[PromptTestOutputScoreRead]
+    unit_summaries: dict[str, Any]
+
+
+class PromptTestOptimizationRecommendationRequest(BaseModel):
+    """生成优化建议的请求结构。"""
+
+    __test__ = False
+
+    evaluator_provider_id: int = Field(..., ge=1)
+    evaluator_model_id: int = Field(..., ge=1)
+    evaluator_model_name: str = Field(..., min_length=1, max_length=150)
+    language: str = Field(default="zh-CN", max_length=20)
+
+
+class PromptTestOptimizationRecommendationRead(BaseModel):
+    """测试任务优化建议结果。"""
+
+    __test__ = False
+
+    id: int
+    task_id: int
+    status: PromptTestOptimizationRecommendationStatus
+    evaluator_provider_id: int | None = None
+    evaluator_model_id: int | None = None
+    evaluator_model_name: str | None = None
+    language: str
+    content: dict[str, Any] | None = None
+    error: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 PromptTestTaskRead.model_rebuild()
 PromptTestUnitRead.model_rebuild()
 PromptTestExperimentRead.model_rebuild()
@@ -169,4 +255,9 @@ __all__ = [
     "PromptTestUnitRead",
     "PromptTestExperimentCreate",
     "PromptTestExperimentRead",
+    "PromptTestAIScoringRequest",
+    "PromptTestOutputScoreRead",
+    "PromptTestAIScoreSummaryRead",
+    "PromptTestOptimizationRecommendationRequest",
+    "PromptTestOptimizationRecommendationRead",
 ]

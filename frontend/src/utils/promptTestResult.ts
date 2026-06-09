@@ -1,4 +1,8 @@
-import type { PromptTestExperiment, PromptTestUnit } from '../types/promptTest'
+import type {
+  PromptTestExperiment,
+  PromptTestOutputScore,
+  PromptTestUnit
+} from '../types/promptTest'
 
 export interface PromptTestResultOutput {
   runIndex: number
@@ -7,6 +11,7 @@ export interface PromptTestResultOutput {
   variables: Record<string, string>
   rawResponse: string | null
   errorMessage: string | null
+  score: PromptTestOutputScore | null
 }
 
 export interface PromptTestResultUnit {
@@ -159,7 +164,8 @@ function buildOutputs(experiment: PromptTestExperiment | null): PromptTestResult
       meta,
       variables,
       rawResponse,
-      errorMessage
+      errorMessage,
+      score: null
     }
   })
 }

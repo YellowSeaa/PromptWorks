@@ -845,7 +845,8 @@ export const messages = {
           rounds: '执行轮次',
           extraParameters: '附加参数（JSON）',
           inputSamples: '输入样本',
-          analysisModules: '分析模块'
+          analysisModules: '分析模块',
+          aiScoring: 'AI 评分'
         },
         placeholders: {
           taskName: '请输入任务名称',
@@ -857,7 +858,8 @@ export const messages = {
           parameterSetName: '参数集 {index}',
           extraParameters: '如需覆盖 max_tokens、stop 等参数，请输入 JSON 对象',
           inputSamples: '每行一个样本，例如：\n你好\n请介绍 PromptWorks',
-          analysisModules: '请选择需要自动执行的分析模块'
+          analysisModules: '请选择需要自动执行的分析模块',
+          aiScoringModel: '请选择评分模型'
         },
         tips: {
           noVersions: '该 Prompt 暂无版本，请先在 Prompt 详情中创建版本。',
@@ -871,7 +873,12 @@ export const messages = {
           datasetTooltip:
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
           combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
-          analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。'
+          analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。',
+          aiScoring: '开启后，每条测试结果生成时会立即使用所选模型评分，评分理由语言跟随当前界面语言。'
+        },
+        aiScoring: {
+          enabled: '开启评分',
+          disabled: '关闭评分'
         },
         actions: {
           addParameterSet: '新增参数组合',
@@ -895,6 +902,7 @@ export const messages = {
         taskNameRequired: '请填写任务名称',
         promptRequired: '请选择 Prompt 及版本',
         modelRequired: '请选择要调用的模型',
+        aiScoringModelRequired: '请选择 AI 评分模型',
         roundsInvalid: '轮次必须是大于 0 的整数',
         parameterSetRequired: '请至少配置一套参数组合',
         parameterSetRemoveLimit: '至少保留一套参数组合',
@@ -993,6 +1001,51 @@ export const messages = {
         on: '开',
         off: '关',
         tooltip: '开启后以 Markdown 方式展示模型输出'
+      },
+      aiScoring: {
+        modelPlaceholder: '选择评分模型',
+        progress: '评分进度：{completed}/{total}',
+        noScores: '暂无评分',
+        score: '评分',
+        status: {
+          idle: '未评分',
+          pending: '待评分',
+          running: '评分中',
+          completed: '评分完成',
+          failed: '评分失败'
+        },
+        actions: {
+          run: '开启评分',
+          rerun: '重新评分',
+          retry: '重试评分'
+        },
+        messages: {
+          modelRequired: '请选择评分模型',
+          loadFailed: '加载 AI 评分失败',
+          runSuccess: 'AI 评分已完成',
+          runFailed: 'AI 评分失败，请稍后重试',
+          retrySuccess: '评分重试完成',
+          retryFailed: '评分重试失败'
+        }
+      },
+      recommendation: {
+        title: '优化建议',
+        subtitle: '基于 AI 评分生成参数、模型与 Prompt 迭代建议。',
+        actions: {
+          generate: '生成建议',
+          regenerate: '重新生成'
+        },
+        fields: {
+          overall_advice: '总体建议',
+          temperature_advice: '温度建议',
+          model_advice: '模型建议',
+          prompt_revision: 'Prompt 改写',
+          validation_plan: '验证计划'
+        },
+        messages: {
+          success: '优化建议已生成',
+          failed: '优化建议生成失败'
+        }
       },
       labels: {
         outputs: '条结果'
@@ -1898,7 +1951,8 @@ export const messages = {
           rounds: 'Rounds',
           extraParameters: 'Extra Parameters (JSON)',
           inputSamples: 'Input Samples',
-          analysisModules: 'Analysis Modules'
+          analysisModules: 'Analysis Modules',
+          aiScoring: 'AI Scoring'
         },
         placeholders: {
           taskName: 'Enter a friendly name for this task',
@@ -1910,7 +1964,8 @@ export const messages = {
           parameterSetName: 'Parameter Set {index}',
           extraParameters: 'Override max_tokens, stop, etc. using a JSON object',
           inputSamples: 'One sample per line, e.g.\nHello\nWhat is PromptWorks?',
-          analysisModules: 'Select analysis modules to auto-run after completion'
+          analysisModules: 'Select analysis modules to auto-run after completion',
+          aiScoringModel: 'Select a scoring model'
         },
         tips: {
           noVersions: 'No versions available. Create a prompt version first.',
@@ -1924,7 +1979,12 @@ export const messages = {
           datasetTooltip:
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
           combinationCount: '{count} minimal test units will be generated.',
-          analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.'
+          analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.',
+          aiScoring: 'When enabled, each output is scored immediately by the selected model. Reason language follows the current UI language.'
+        },
+        aiScoring: {
+          enabled: 'Enable scoring',
+          disabled: 'Disable scoring'
         },
         actions: {
           addParameterSet: 'Add Parameter Set',
@@ -1948,6 +2008,7 @@ export const messages = {
         taskNameRequired: 'Task name is required.',
         promptRequired: 'Please select a prompt and version.',
         modelRequired: 'Please select a model.',
+        aiScoringModelRequired: 'Please select an AI scoring model.',
         roundsInvalid: 'Rounds must be a positive integer.',
         parameterSetRequired: 'Configure at least one parameter set.',
         parameterSetRemoveLimit: 'Keep at least one parameter set.',
@@ -2046,6 +2107,51 @@ export const messages = {
         on: 'On',
         off: 'Off',
         tooltip: 'Render model outputs with Markdown formatting'
+      },
+      aiScoring: {
+        modelPlaceholder: 'Select scoring model',
+        progress: 'Scoring: {completed}/{total}',
+        noScores: 'No scores yet',
+        score: 'Score',
+        status: {
+          idle: 'Not scored',
+          pending: 'Pending',
+          running: 'Scoring',
+          completed: 'Scored',
+          failed: 'Failed'
+        },
+        actions: {
+          run: 'Start Scoring',
+          rerun: 'Rescore',
+          retry: 'Retry Score'
+        },
+        messages: {
+          modelRequired: 'Please select a scoring model.',
+          loadFailed: 'Failed to load AI scores.',
+          runSuccess: 'AI scoring completed.',
+          runFailed: 'AI scoring failed. Please retry later.',
+          retrySuccess: 'Score retry completed.',
+          retryFailed: 'Score retry failed.'
+        }
+      },
+      recommendation: {
+        title: 'Optimization Recommendations',
+        subtitle: 'Generate parameter, model, and prompt iteration advice from AI scores.',
+        actions: {
+          generate: 'Generate',
+          regenerate: 'Regenerate'
+        },
+        fields: {
+          overall_advice: 'Overall Advice',
+          temperature_advice: 'Temperature Advice',
+          model_advice: 'Model Advice',
+          prompt_revision: 'Prompt Revision',
+          validation_plan: 'Validation Plan'
+        },
+        messages: {
+          success: 'Recommendations generated.',
+          failed: 'Failed to generate recommendations.'
+        }
       },
       labels: {
         outputs: 'outputs'

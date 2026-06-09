@@ -12,6 +12,8 @@ from app.db.session import get_db
 from app.models.prompt_test import (
     PromptTestExperiment,
     PromptTestExperimentStatus,
+    PromptTestOptimizationRecommendation,
+    PromptTestOutputScore,
     PromptTestTask,
     PromptTestTaskStatus,
     PromptTestUnit,
@@ -19,6 +21,11 @@ from app.models.prompt_test import (
 from app.schemas.prompt_test import (
     PromptTestExperimentCreate,
     PromptTestExperimentRead,
+    PromptTestAIScoreSummaryRead,
+    PromptTestAIScoringRequest,
+    PromptTestOptimizationRecommendationRead,
+    PromptTestOptimizationRecommendationRequest,
+    PromptTestOutputScoreRead,
     PromptTestTaskCreate,
     PromptTestTaskRead,
     PromptTestTaskUpdate,
@@ -29,6 +36,16 @@ from app.schemas.prompt_test import (
 from app.services.prompt_test_engine import (
     PromptTestExecutionError,
     execute_prompt_test_experiment,
+)
+from app.services.prompt_test_ai_scoring import (
+    AIScoringConfig,
+    PromptTestAIScoringError,
+    build_task_score_summary,
+    create_optimization_recommendation,
+    get_latest_recommendation,
+    retry_output_score,
+    score_task_outputs,
+    update_task_ai_scoring_status,
 )
 
 router = APIRouter(prefix="/prompt-test", tags=["prompt-test"])
@@ -106,6 +123,122 @@ def create_prompt_test_task(
         enqueue_prompt_test_task(task.id)
 
     return task
+
+
+@router.post(
+    "/tasks/{task_id}/ai-scoring",
+    response_model=PromptTestAIScoreSummaryRead,
+)
+def run_ai_scoring_for_task(
+    *,
+    db: Session = Depends(get_db),
+    task_id: int,
+    payload: PromptTestAIScoringRequest,
+) -> dict:
+    """开启、补跑或重新执行测试任务 AI 评分。"""
+
+    task = _get_task_or_404(db, task_id)
+    scoring_config = AIScoringConfig(
+        enabled=payload.enabled,
+        evaluator_provider_id=payload.evaluator_provider_id,
+        evaluator_model_id=payload.evaluator_model_id,
+        evaluator_model_name=payload.evaluator_model_name,
+        language=payload.language,
+    )
+    update_task_ai_scoring_status(task, scoring_config=scoring_config, status="running")
+    db.flush()
+    try:
+        summary = score_task_outputs(db, task_id, force=payload.force)
+    except PromptTestAIScoringError as exc:
+        update_task_ai_scoring_status(
+            task, scoring_config=scoring_config, status="failed", last_error=str(exc)
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    db.commit()
+    return summary
+
+
+@router.get(
+    "/tasks/{task_id}/ai-scores",
+    response_model=PromptTestAIScoreSummaryRead,
+)
+def get_ai_scores_for_task(*, db: Session = Depends(get_db), task_id: int) -> dict:
+    """读取测试任务 AI 评分明细与汇总。"""
+
+    _get_task_or_404(db, task_id)
+    return build_task_score_summary(db, task_id)
+
+
+@router.post(
+    "/output-scores/{score_id}/retry",
+    response_model=PromptTestOutputScoreRead,
+)
+def retry_ai_output_score(
+    *, db: Session = Depends(get_db), score_id: int
+) -> PromptTestOutputScore:
+    """重试单条失败评分。"""
+
+    score = db.get(PromptTestOutputScore, score_id)
+    if score is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="评分记录不存在"
+        )
+    try:
+        refreshed = retry_output_score(db, score)
+    except PromptTestAIScoringError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    db.commit()
+    db.refresh(refreshed)
+    return refreshed
+
+
+@router.post(
+    "/tasks/{task_id}/optimization-recommendations",
+    response_model=PromptTestOptimizationRecommendationRead,
+)
+def create_task_optimization_recommendation(
+    *,
+    db: Session = Depends(get_db),
+    task_id: int,
+    payload: PromptTestOptimizationRecommendationRequest,
+) -> PromptTestOptimizationRecommendation:
+    """基于 AI 评分生成测试任务优化建议。"""
+
+    _get_task_or_404(db, task_id)
+    try:
+        recommendation = create_optimization_recommendation(
+            db,
+            task_id=task_id,
+            evaluator_provider_id=payload.evaluator_provider_id,
+            evaluator_model_id=payload.evaluator_model_id,
+            evaluator_model_name=payload.evaluator_model_name,
+            language=payload.language,
+        )
+    except PromptTestAIScoringError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    db.commit()
+    db.refresh(recommendation)
+    return recommendation
+
+
+@router.get(
+    "/tasks/{task_id}/optimization-recommendations/latest",
+    response_model=PromptTestOptimizationRecommendationRead | None,
+)
+def get_latest_task_optimization_recommendation(
+    *, db: Session = Depends(get_db), task_id: int
+) -> PromptTestOptimizationRecommendation | None:
+    """读取测试任务最近一次优化建议。"""
+
+    _get_task_or_404(db, task_id)
+    return get_latest_recommendation(db, task_id)
 
 
 @router.get("/tasks/{task_id}", response_model=PromptTestTaskRead)
