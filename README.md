@@ -1,6 +1,6 @@
 ﻿![PromptWorks 标志](docs/logo.jpg)
 
-中文 | [English](docs/README_en.md) | [更新记录](docs/UPDATES.md)
+中文 | [English](docs/README_en.md) | [更新记录](CHANGELOG.md)
 
 # PromptWorks 项目总览
 

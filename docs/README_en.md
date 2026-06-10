@@ -1,6 +1,6 @@
 ![PromptWorks Logo](logo.jpg)
 
-[中文](../README.md) | English | [Update](UPDATES.md)
+[中文](../README.md) | English | [Update](../CHANGELOG.md)
 
 # PromptWorks Overview
 

@@ -57,9 +57,25 @@ jobs:
     needs: quality-check
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    permissions:
+      contents: write
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 安装根目录依赖
+        run: npm ci
+
+      - name: 执行 semantic-release（仅 main）
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
 
       - name: 启用 QEMU
         uses: docker/setup-qemu-action@v3
