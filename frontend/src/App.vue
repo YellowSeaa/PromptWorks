@@ -144,6 +144,7 @@ import { setLocale } from './i18n'
 import type { SupportedLocale } from './i18n/messages'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { version as APP_VERSION } from '@/version.json'
 import {
   useTestingSettings,
   DEFAULT_AI_OPTIMIZATION_TIMEOUT_SECONDS,
@@ -186,8 +187,6 @@ const settingsForm = reactive({
 
 const TIMEOUT_MIN = 1
 const TIMEOUT_MAX = 600
-const APP_VERSION = 'v0.7.1'
-
 function validateTimeout(
   _: unknown,
   value: number,
