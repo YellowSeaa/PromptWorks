@@ -89,7 +89,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 
 import {
@@ -98,6 +97,7 @@ import {
   listModelUsage
 } from '../api/usage'
 import { useI18n } from 'vue-i18n'
+import { init, type ECharts, type EChartsOption } from '../utils/echarts'
 
 interface UsagePoint {
   date: string
@@ -363,12 +363,12 @@ function formatNumber(value?: number | null) {
 }
 
 const chartRef = ref<HTMLDivElement | null>(null)
-let chartInstance: echarts.ECharts | null = null
+let chartInstance: ECharts | null = null
 let chartContainerObserver: ResizeObserver | null = null
 
 function initChart() {
   if (chartRef.value) {
-    chartInstance = echarts.init(chartRef.value)
+    chartInstance = init(chartRef.value)
     if (chartContainerObserver) {
       chartContainerObserver.disconnect()
     }
@@ -389,7 +389,7 @@ function updateChart() {
   const legendOutput = t('usageManagement.chart.legend.output')
   const stackLabel = t('usageManagement.chart.stack')
 
-  const option: echarts.EChartsOption = {
+  const option: EChartsOption = {
     tooltip: {
       trigger: 'axis'
     },

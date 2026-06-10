@@ -11,4 +11,5 @@ PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决
 5. 每次开发任务完成并测试无误之后，将代码commit到本地git中（禁止：上传到云端和合并到dev或main），需要有简短的中文提交信息
 6. 若要求更新README.md，需要同步修改英文版的docs/README_en.md
 7. 编码统一要求utf-8
-8. 若要求git commit，需要带中文信息
+8. 若要求git commit，需要带中文信息，提交信息格式为：feat: 新增功能描述 / fix: 修复描述 / docs: 文档变更描述
+9. 每次提交需要更新更新记录，记录在docs/UPDATES.md中

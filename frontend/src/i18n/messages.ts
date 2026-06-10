@@ -21,7 +21,8 @@ export const messages = {
       settingsDialogTitle: '运行超时设置',
       settingsQuickTestTimeoutLabel: '快速测试超时时间（秒）',
       settingsTestTaskTimeoutLabel: '测试任务超时时间（秒）',
-      settingsTimeoutHint: '范围 {min}-{max} 秒，建议根据模型平均响应时长调整。',
+      settingsAiOptimizationTimeoutLabel: 'AI 优化建议超时时间（秒）',
+      settingsTimeoutHint: '范围 {min}-{max} 秒，AI 优化建议通常上下文更长，建议设置更长的等待时间。',
       settingsTimeoutRequired: '请输入超时时间',
       settingsTimeoutRange: '超时时间需在 {min} ~ {max} 秒之间',
       settingsSaveSuccess: '超时时间设置已保存',
@@ -357,8 +358,10 @@ export const messages = {
             capability: '能力标签',
             quota: '配额策略',
             concurrency: '并发数',
+            contextLength: '上下文长度',
             actions: '操作'
           },
+          unlimitedContext: '不限制',
           edit: '编辑',
           check: '检测',
           remove: '删除'
@@ -387,7 +390,9 @@ export const messages = {
         quotaLabel: '配额策略',
         quotaPlaceholder: '如 团队共享 100k tokens/日（可选）',
         concurrencyLabel: '测试并发数',
-        concurrencyPlaceholder: '并发请求上限，默认 5'
+        concurrencyPlaceholder: '并发请求上限，默认 5',
+        contextLengthLabel: '上下文长度',
+        contextLengthPlaceholder: '按 token 近似值填写，留空不截断'
       },
       confirmations: {
         removeModel: {
@@ -421,6 +426,7 @@ export const messages = {
         updateModelSuccess: '模型配置已更新',
         updateModelFailed: '更新模型失败，请稍后重试',
         concurrencyRequired: '请设置至少 1 的并发数',
+        contextLengthRequired: '上下文长度需大于 0，或留空表示不截断',
         baseUrlUpdated: '访问地址已更新',
         baseUrlUpdateFailed: '更新访问地址失败，请稍后重试',
         providerDeleted: '提供方已删除',
@@ -840,7 +846,8 @@ export const messages = {
           rounds: '执行轮次',
           extraParameters: '附加参数（JSON）',
           inputSamples: '输入样本',
-          analysisModules: '分析模块'
+          analysisModules: '分析模块',
+          aiScoring: 'AI 评分'
         },
         placeholders: {
           taskName: '请输入任务名称',
@@ -852,7 +859,8 @@ export const messages = {
           parameterSetName: '参数集 {index}',
           extraParameters: '如需覆盖 max_tokens、stop 等参数，请输入 JSON 对象',
           inputSamples: '每行一个样本，例如：\n你好\n请介绍 PromptWorks',
-          analysisModules: '请选择需要自动执行的分析模块'
+          analysisModules: '请选择需要自动执行的分析模块',
+          aiScoringModel: '请选择评分模型'
         },
         tips: {
           noVersions: '该 Prompt 暂无版本，请先在 Prompt 详情中创建版本。',
@@ -866,7 +874,12 @@ export const messages = {
           datasetTooltip:
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
           combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
-          analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。'
+          analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。',
+          aiScoring: '开启后，每条测试结果生成时会立即使用所选模型评分，评分理由语言跟随当前界面语言。'
+        },
+        aiScoring: {
+          enabled: '开启评分',
+          disabled: '关闭评分'
         },
         actions: {
           addParameterSet: '新增参数组合',
@@ -890,6 +903,7 @@ export const messages = {
         taskNameRequired: '请填写任务名称',
         promptRequired: '请选择 Prompt 及版本',
         modelRequired: '请选择要调用的模型',
+        aiScoringModelRequired: '请选择 AI 评分模型',
         roundsInvalid: '轮次必须是大于 0 的整数',
         parameterSetRequired: '请至少配置一套参数组合',
         parameterSetRemoveLimit: '至少保留一套参数组合',
@@ -989,6 +1003,63 @@ export const messages = {
         off: '关',
         tooltip: '开启后以 Markdown 方式展示模型输出'
       },
+      aiScoring: {
+        title: 'AI 评分',
+        subtitle: '使用指定模型对当前测试结果逐条评分，并在结果卡片中展示分数、维度明细与评分理由。',
+        combinedSubtitle: '统一管理 AI 评分与 Prompt 优化入口，评分后可进入独立页面生成改写建议。',
+        modelPlaceholder: '选择评分模型',
+        progress: '评分进度：{completed}/{total}',
+        noScores: '暂无评分',
+        score: '评分',
+        averageScore: '平均分 {score}',
+        status: {
+          idle: '未评分',
+          pending: '待评分',
+          running: '评分中',
+          completed: '评分完成',
+          failed: '评分失败'
+        },
+        actions: {
+          run: '开始评分',
+          scoring: '评分中',
+          rerun: '重新评分',
+          retry: '重试评分'
+        },
+        messages: {
+          modelRequired: '请选择评分模型',
+          loadFailed: '加载 AI 评分失败',
+          runSuccess: 'AI 评分已完成',
+          runFailed: 'AI 评分失败，请稍后重试',
+          retrySuccess: '评分重试完成',
+          retryFailed: '评分重试失败'
+        }
+      },
+      recommendation: {
+        title: '优化建议',
+        subtitle: '基于 AI 评分生成参数、模型与 Prompt 迭代建议。',
+        actions: {
+          generate: '生成建议',
+          regenerate: '重新生成',
+          optimize: '优化'
+        },
+        status: {
+          empty: '暂无优化建议',
+          running: '优化建议生成中',
+          completed: '已有优化建议',
+          failed: '优化建议失败'
+        },
+        fields: {
+          overall_advice: '总体建议',
+          temperature_advice: '温度建议',
+          model_advice: '模型建议',
+          prompt_revision: 'Prompt 改写',
+          validation_plan: '验证计划'
+        },
+        messages: {
+          success: '优化建议已生成',
+          failed: '优化建议生成失败'
+        }
+      },
       labels: {
         outputs: '条结果'
       },
@@ -1043,6 +1114,73 @@ export const messages = {
           unknownDescription: '可能因为模型响应为空或尚未开始执行。'
         }
       }
+    },
+    promptTestOptimization: {
+      title: 'AI 优化工作台',
+      subtitle: '基于 AI 评分定位问题，生成 Prompt 改写草稿，并一键沉淀为新的 Prompt 版本。',
+      breadcrumb: {
+        task: '测试任务',
+        current: 'AI 优化'
+      },
+      sections: {
+        summary: '评分摘要',
+        issue: '问题归因',
+        issueDesc: '优先展示低分输出中的评分理由',
+        currentPrompt: '当前 Prompt',
+        workbench: '优化工作台',
+        revision: 'Prompt 改写结果',
+        revisionDesc: '可在创建版本前人工调整内容'
+      },
+      labels: {
+        averageScore: '平均分',
+        scoreProgress: '已评分 {completed}/{total}',
+        recommendationMeta: '模型：{model} · 生成时间：{time}'
+      },
+      status: {
+        noRecommendation: '暂无优化建议',
+        running: '生成中',
+        completed: '已完成',
+        failed: '失败'
+      },
+      actions: {
+        backResult: '返回结果页',
+        generate: '生成优化',
+        regenerate: '重新生成',
+        copy: '复制改写',
+        createVersion: '新增版本'
+      },
+      placeholders: {
+        model: '选择优化模型',
+        revision: '生成优化建议后，这里会填入可编辑的 Prompt 改写结果'
+      },
+      versionDialog: {
+        title: '新增 Prompt 版本',
+        prompt: '目标 Prompt',
+        version: '版本号',
+        versionPlaceholder: '例如 v3',
+        content: '版本内容'
+      },
+      empty: {
+        noTask: '测试任务不存在',
+        noDimensions: '暂无维度评分',
+        noIssues: '暂无低分问题归因',
+        noPromptContent: '暂无 Prompt 内容',
+        promptUnknown: '无法识别 Prompt'
+      },
+      messages: {
+        invalidTask: '无效的测试任务编号',
+        loadFailed: '加载 AI 优化页失败，请稍后重试',
+        promptScopeInvalid: '无法解析该测试任务唯一归属的 Prompt，可继续生成和复制改写结果，但不能直接新增版本。',
+        modelRequired: '请选择优化模型',
+        generateSuccess: '优化建议已生成',
+        generateFailed: '优化建议生成失败',
+        copySuccess: '已复制 Prompt 改写结果',
+        copyFailed: '复制失败，请手动复制',
+        versionDisabled: '无法识别唯一 Prompt，暂不能新增版本。',
+        versionRequired: '请填写版本号和版本内容',
+        versionCreated: 'Prompt 新版本已创建并激活',
+        versionCreateFailed: '新增 Prompt 版本失败'
+      }
     }
   },
   'en-US': {
@@ -1067,7 +1205,8 @@ export const messages = {
       settingsDialogTitle: 'Timeout Settings',
       settingsQuickTestTimeoutLabel: 'Quick Test Timeout (seconds)',
       settingsTestTaskTimeoutLabel: 'Test Task Timeout (seconds)',
-      settingsTimeoutHint: 'Range {min}-{max} seconds. Adjust based on typical model latency.',
+      settingsAiOptimizationTimeoutLabel: 'AI Optimization Timeout (seconds)',
+      settingsTimeoutHint: 'Range {min}-{max} seconds. AI optimization usually has longer context and may need a longer timeout.',
       settingsTimeoutRequired: 'Timeout is required',
       settingsTimeoutRange: 'Timeout must be between {min} and {max} seconds',
       settingsSaveSuccess: 'Timeout settings saved',
@@ -1403,8 +1542,10 @@ export const messages = {
             capability: 'Capability Tags',
             quota: 'Quota Policy',
             concurrency: 'Concurrency',
+            contextLength: 'Context Length',
             actions: 'Actions'
           },
+          unlimitedContext: 'Unlimited',
           edit: 'Edit',
           check: 'Check',
           remove: 'Remove'
@@ -1433,7 +1574,9 @@ export const messages = {
         quotaLabel: 'Quota Policy',
         quotaPlaceholder: 'e.g. Team shared 100k tokens/day (optional)',
         concurrencyLabel: 'Test Concurrency',
-        concurrencyPlaceholder: 'Max concurrent requests (default 5)'
+        concurrencyPlaceholder: 'Max concurrent requests (default 5)',
+        contextLengthLabel: 'Context Length',
+        contextLengthPlaceholder: 'Approximate tokens; blank disables truncation'
       },
       confirmations: {
         removeModel: {
@@ -1467,6 +1610,7 @@ export const messages = {
         updateModelSuccess: 'Model settings updated.',
         updateModelFailed: 'Failed to update model. Try again later.',
         concurrencyRequired: 'Set concurrency to at least 1.',
+        contextLengthRequired: 'Context length must be greater than 0, or blank to disable truncation.',
         baseUrlUpdated: 'Endpoint updated.',
         baseUrlUpdateFailed: 'Failed to update endpoint. Try again later.',
         providerDeleted: 'Provider deleted.',
@@ -1888,7 +2032,8 @@ export const messages = {
           rounds: 'Rounds',
           extraParameters: 'Extra Parameters (JSON)',
           inputSamples: 'Input Samples',
-          analysisModules: 'Analysis Modules'
+          analysisModules: 'Analysis Modules',
+          aiScoring: 'AI Scoring'
         },
         placeholders: {
           taskName: 'Enter a friendly name for this task',
@@ -1900,7 +2045,8 @@ export const messages = {
           parameterSetName: 'Parameter Set {index}',
           extraParameters: 'Override max_tokens, stop, etc. using a JSON object',
           inputSamples: 'One sample per line, e.g.\nHello\nWhat is PromptWorks?',
-          analysisModules: 'Select analysis modules to auto-run after completion'
+          analysisModules: 'Select analysis modules to auto-run after completion',
+          aiScoringModel: 'Select a scoring model'
         },
         tips: {
           noVersions: 'No versions available. Create a prompt version first.',
@@ -1914,7 +2060,12 @@ export const messages = {
           datasetTooltip:
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
           combinationCount: '{count} minimal test units will be generated.',
-          analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.'
+          analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.',
+          aiScoring: 'When enabled, each output is scored immediately by the selected model. Reason language follows the current UI language.'
+        },
+        aiScoring: {
+          enabled: 'Enable scoring',
+          disabled: 'Disable scoring'
         },
         actions: {
           addParameterSet: 'Add Parameter Set',
@@ -1938,6 +2089,7 @@ export const messages = {
         taskNameRequired: 'Task name is required.',
         promptRequired: 'Please select a prompt and version.',
         modelRequired: 'Please select a model.',
+        aiScoringModelRequired: 'Please select an AI scoring model.',
         roundsInvalid: 'Rounds must be a positive integer.',
         parameterSetRequired: 'Configure at least one parameter set.',
         parameterSetRemoveLimit: 'Keep at least one parameter set.',
@@ -2037,6 +2189,63 @@ export const messages = {
         off: 'Off',
         tooltip: 'Render model outputs with Markdown formatting'
       },
+      aiScoring: {
+        title: 'AI Scoring',
+        subtitle: 'Score each current test output with the selected model, then show scores, dimension details, and reasoning on result cards.',
+        combinedSubtitle: 'Manage AI scoring and Prompt optimization from one entry, then open the dedicated workspace for rewritten drafts.',
+        modelPlaceholder: 'Select scoring model',
+        progress: 'Scoring: {completed}/{total}',
+        noScores: 'No scores yet',
+        score: 'Score',
+        averageScore: 'Avg {score}',
+        status: {
+          idle: 'Not scored',
+          pending: 'Pending',
+          running: 'Scoring',
+          completed: 'Scored',
+          failed: 'Failed'
+        },
+        actions: {
+          run: 'Start Scoring',
+          scoring: 'Scoring',
+          rerun: 'Rescore',
+          retry: 'Retry Score'
+        },
+        messages: {
+          modelRequired: 'Please select a scoring model.',
+          loadFailed: 'Failed to load AI scores.',
+          runSuccess: 'AI scoring completed.',
+          runFailed: 'AI scoring failed. Please retry later.',
+          retrySuccess: 'Score retry completed.',
+          retryFailed: 'Score retry failed.'
+        }
+      },
+      recommendation: {
+        title: 'Optimization Recommendations',
+        subtitle: 'Generate parameter, model, and prompt iteration advice from AI scores.',
+        actions: {
+          generate: 'Generate',
+          regenerate: 'Regenerate',
+          optimize: 'Optimize'
+        },
+        status: {
+          empty: 'No recommendation yet',
+          running: 'Generating recommendation',
+          completed: 'Recommendation available',
+          failed: 'Recommendation failed'
+        },
+        fields: {
+          overall_advice: 'Overall Advice',
+          temperature_advice: 'Temperature Advice',
+          model_advice: 'Model Advice',
+          prompt_revision: 'Prompt Revision',
+          validation_plan: 'Validation Plan'
+        },
+        messages: {
+          success: 'Recommendations generated.',
+          failed: 'Failed to generate recommendations.'
+        }
+      },
       labels: {
         outputs: 'outputs'
       },
@@ -2090,6 +2299,73 @@ export const messages = {
           unknownTitle: 'No output available',
           unknownDescription: 'The model may have returned an empty response or execution has not started yet.'
         }
+      }
+    },
+    promptTestOptimization: {
+      title: 'AI Optimization Workspace',
+      subtitle: 'Use AI scores to find issues, generate a rewritten prompt draft, and save it as a new Prompt version.',
+      breadcrumb: {
+        task: 'Test Task',
+        current: 'AI Optimization'
+      },
+      sections: {
+        summary: 'Score Summary',
+        issue: 'Issue Diagnosis',
+        issueDesc: 'Prioritizes reasoning from low-score outputs',
+        currentPrompt: 'Current Prompt',
+        workbench: 'Optimization Workspace',
+        revision: 'Prompt Revision',
+        revisionDesc: 'Edit the content before creating a new version'
+      },
+      labels: {
+        averageScore: 'Average Score',
+        scoreProgress: 'Scored {completed}/{total}',
+        recommendationMeta: 'Model: {model} · Generated: {time}'
+      },
+      status: {
+        noRecommendation: 'No recommendation yet',
+        running: 'Generating',
+        completed: 'Completed',
+        failed: 'Failed'
+      },
+      actions: {
+        backResult: 'Back to Results',
+        generate: 'Generate',
+        regenerate: 'Regenerate',
+        copy: 'Copy Revision',
+        createVersion: 'Create Version'
+      },
+      placeholders: {
+        model: 'Select optimization model',
+        revision: 'After generating recommendations, the editable prompt revision will appear here'
+      },
+      versionDialog: {
+        title: 'Create Prompt Version',
+        prompt: 'Target Prompt',
+        version: 'Version',
+        versionPlaceholder: 'e.g. v3',
+        content: 'Version Content'
+      },
+      empty: {
+        noTask: 'Test task not found',
+        noDimensions: 'No dimension scores',
+        noIssues: 'No low-score issue diagnosis',
+        noPromptContent: 'No Prompt content',
+        promptUnknown: 'Prompt unknown'
+      },
+      messages: {
+        invalidTask: 'Invalid test task id.',
+        loadFailed: 'Failed to load the AI optimization workspace. Please try again later.',
+        promptScopeInvalid: 'Unable to resolve a unique Prompt for this test task. You can still generate and copy revisions, but direct version creation is disabled.',
+        modelRequired: 'Please select an optimization model.',
+        generateSuccess: 'Recommendations generated.',
+        generateFailed: 'Failed to generate recommendations.',
+        copySuccess: 'Prompt revision copied.',
+        copyFailed: 'Copy failed. Please copy manually.',
+        versionDisabled: 'Unable to resolve a unique Prompt, so version creation is disabled.',
+        versionRequired: 'Please enter the version and content.',
+        versionCreated: 'New Prompt version created and activated.',
+        versionCreateFailed: 'Failed to create Prompt version.'
       }
     }
   }

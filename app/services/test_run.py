@@ -18,6 +18,7 @@ from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.result import Result
 from app.models.test_run import TestRun, TestRunStatus
 from app.models.usage import LLMUsageLog
+from app.services.llm_context import truncate_messages_for_context
 from app.services.system_settings import (
     DEFAULT_TEST_TASK_TIMEOUT,
     get_testing_timeout_config,
@@ -120,7 +121,7 @@ def execute_test_run(db: Session, test_run: TestRun) -> TestRun:
         messages = _build_messages(schema_data, prompt_snapshot, run_index)
         payload: dict[str, Any] = dict(parameters_template)
         payload["model"] = model.name if model else test_run.model_name
-        payload["messages"] = messages
+        payload["messages"] = truncate_messages_for_context(messages, model, payload)
 
         result, usage_log = _invoke_llm_once(
             provider=provider,

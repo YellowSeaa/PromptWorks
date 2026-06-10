@@ -1,4 +1,9 @@
-import type { PromptTestExperiment, PromptTestUnit } from '../types/promptTest'
+import type {
+  PromptTestAIScoreSummary,
+  PromptTestExperiment,
+  PromptTestOutputScore,
+  PromptTestUnit
+} from '../types/promptTest'
 
 export interface PromptTestResultOutput {
   runIndex: number
@@ -7,6 +12,7 @@ export interface PromptTestResultOutput {
   variables: Record<string, string>
   rawResponse: string | null
   errorMessage: string | null
+  score: PromptTestOutputScore | null
 }
 
 export interface PromptTestResultUnit {
@@ -20,6 +26,9 @@ export interface PromptTestResultUnit {
   status: PromptTestExperiment['status'] | null
   error: string | null
   metrics: PromptTestExperiment['metrics'] | null
+  averageScore: number | null
+  scoreCount: number
+  scoreTotal: number
   outputs: PromptTestResultOutput[]
 }
 
@@ -42,8 +51,55 @@ export function buildPromptTestResultUnit(
     status: latestExperiment?.status ?? null,
     error: normalizeError(latestExperiment?.error),
     metrics: latestExperiment?.metrics ?? null,
+    averageScore: null,
+    scoreCount: 0,
+    scoreTotal: 0,
     outputs: buildOutputs(latestExperiment)
   }
+}
+
+export function attachScoresToResultUnits(
+  sourceUnits: PromptTestResultUnit[],
+  summary: PromptTestAIScoreSummary | null
+): PromptTestResultUnit[] {
+  const scoreMap = new Map<string, PromptTestOutputScore>()
+  ;(summary?.scores ?? []).forEach((score) => {
+    scoreMap.set(`${score.unit_id}:${score.run_index}`, score)
+  })
+  return sourceUnits.map((unit) => {
+    const unitSummary = extractRecord(summary?.unit_summaries?.[String(unit.id)])
+    return {
+      ...unit,
+      averageScore: safeNumber(unitSummary.avg_score),
+      scoreCount: safeNumber(unitSummary.count) ?? 0,
+      scoreTotal: countUnitScores(summary, unit.id),
+      outputs: unit.outputs.map((output) => ({
+        ...output,
+        score: scoreMap.get(`${unit.id}:${output.runIndex}`) ?? null
+      }))
+    }
+  })
+}
+
+export function formatScoreValue(value: unknown, locale: string): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return '-'
+  return numeric.toLocaleString(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  })
+}
+
+export function dimensionEntries(
+  score: PromptTestOutputScore | null | undefined,
+  locale: string
+): Array<[string, string]> {
+  const dimensions = score?.dimension_scores
+  if (!dimensions || typeof dimensions !== 'object') return []
+  return Object.entries(dimensions).map(([key, value]) => [
+    key,
+    formatScoreValue(value, locale)
+  ])
 }
 
 export function extractLatestExperiment(
@@ -159,9 +215,14 @@ function buildOutputs(experiment: PromptTestExperiment | null): PromptTestResult
       meta,
       variables,
       rawResponse,
-      errorMessage
+      errorMessage,
+      score: null
     }
   })
+}
+
+function countUnitScores(summary: PromptTestAIScoreSummary | null, unitId: number): number {
+  return (summary?.scores ?? []).filter((score) => score.unit_id === unitId).length
 }
 
 function formatOutputMeta(record: Record<string, unknown>): string {

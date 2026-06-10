@@ -247,6 +247,50 @@ def test_execute_test_run_respects_custom_timeout(
     assert timeout_values and timeout_values[0] == custom_timeout
 
 
+def test_execute_test_run_truncates_messages_by_model_context_length(
+    db_session, prompt_version, provider_model, monkeypatch
+):
+    provider_model.context_length = 12
+    db_session.commit()
+
+    captured_payloads: list[dict[str, Any]] = []
+
+    def fake_post(*_, **kwargs):
+        payload = kwargs.get("json") or {}
+        captured_payloads.append(payload)
+        return DummyResponse(
+            {"choices": [{"message": {"content": "ok"}}]}, elapsed_ms=5
+        )
+
+    monkeypatch.setattr("app.services.test_run.httpx.post", fake_post)
+
+    long_input = "上文" * 40 + "保留结尾"
+    test_run = TestRun(
+        prompt_version_id=prompt_version.id,
+        model_name=provider_model.name,
+        repetitions=1,
+        schema={
+            "llm_provider_id": provider_model.provider_id,
+            "llm_model_id": provider_model.id,
+            "max_tokens": 2,
+            "conversation": [
+                {"role": "system", "content": "固定系统指令"},
+                {"role": "user", "content": long_input},
+            ],
+        },
+    )
+    test_run.prompt_version = prompt_version
+    db_session.add(test_run)
+    db_session.commit()
+
+    test_run_service.execute_test_run(db_session, test_run)
+
+    messages = captured_payloads[0]["messages"]
+    assert messages[0]["content"] == "固定系统指令"
+    assert messages[1]["content"].endswith("保留结尾")
+    assert len(messages[1]["content"]) < len(long_input)
+
+
 def test_resolve_provider_with_string_ids(db_session, prompt_version, provider_model):
     test_run = TestRun(
         prompt_version_id=prompt_version.id,

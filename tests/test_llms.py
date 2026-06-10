@@ -326,6 +326,99 @@ def test_update_model_concurrency_limit(client):
     assert invalid_resp.status_code == 422
 
 
+def test_create_and_update_model_context_length(client):
+    provider = create_provider(
+        client,
+        {
+            "provider_name": "ContextProvider",
+            "api_key": "context-secret",
+            "is_custom": True,
+            "base_url": "https://llm.context/api",
+        },
+    )
+
+    model = create_model(
+        client,
+        provider["id"],
+        {"name": "chat-context", "context_length": 128},
+    )
+    assert model["context_length"] == 128
+
+    update_resp = client.patch(
+        f"{API_PREFIX}/{provider['id']}/models/{model['id']}",
+        json={"context_length": 64},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["context_length"] == 64
+
+    detail = client.get(f"{API_PREFIX}/{provider['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["models"][0]["context_length"] == 64
+
+    invalid_resp = client.patch(
+        f"{API_PREFIX}/{provider['id']}/models/{model['id']}",
+        json={"context_length": 0},
+    )
+    assert invalid_resp.status_code == 422
+
+
+def test_invoke_llm_truncates_messages_by_model_context_length(client, monkeypatch):
+    provider = create_provider(
+        client,
+        {
+            "provider_name": "TruncateProvider",
+            "api_key": "truncate-secret",
+            "is_custom": True,
+            "base_url": "https://llm.truncate/api",
+        },
+    )
+    model = create_model(
+        client,
+        provider["id"],
+        {"name": "chat-truncate", "context_length": 12},
+    )
+
+    captured: dict[str, Any] = {}
+
+    class DummyResponse:
+        status_code = 200
+        elapsed = timedelta(milliseconds=5)
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": []}
+
+        @property
+        def text(self) -> str:
+            return ""
+
+    def fake_post(
+        url: str, headers: dict[str, str], json: dict[str, Any], timeout: float
+    ) -> DummyResponse:
+        captured.update({"json": json})
+        return DummyResponse()
+
+    monkeypatch.setattr("app.api.v1.endpoints.llms.httpx.post", fake_post)
+
+    long_text = "前缀" * 40 + "必须保留的结尾"
+    response = client.post(
+        f"{API_PREFIX}/{provider['id']}/invoke",
+        json={
+            "model_id": model["id"],
+            "messages": [
+                {"role": "system", "content": "固定系统指令"},
+                {"role": "user", "content": long_text},
+            ],
+            "parameters": {"max_tokens": 2},
+        },
+    )
+    assert response.status_code == 200
+
+    messages = captured["json"]["messages"]
+    assert messages[0]["content"] == "固定系统指令"
+    assert messages[1]["content"].endswith("必须保留的结尾")
+    assert len(messages[1]["content"]) < len(long_text)
+
+
 def test_invoke_llm_uses_known_base_url_when_missing(client, db_session, monkeypatch):
     provider = LLMProvider(
         provider_name="OpenAI",

@@ -12,7 +12,11 @@ PromptWorks is a full-stack solution focused on prompt asset management and larg
 - **Prompt Management**: Create prompts, iterate versions, organize them with tags, and retain a complete audit trail.
 - **Version Comparison**: Provide diff views to quickly identify content changes introduced by prompt updates.
 - **Model Operations**: Centrally manage available model services and invocation quotas to support A/B experiments.
+- **AI Scoring & Optimization**: Score test outputs on a 0-100 scale, summarize dimension scores and reasoning, then use the dedicated optimization workspace to generate prompt revisions and save them as new versions.
 - **Evaluation & Testing**: Expose experiment execution and metric recording capabilities on the backend, while the frontend ships with pre-configured testing panels ready for integration.
+
+### AI Scoring & Optimization Workspace
+![AI Scoring and Optimization Workspace](frontend-ai-en.png)
 
 ## 🧱 Tech Stack
 - **Backend**: Python 3.10+, FastAPI, SQLAlchemy, Alembic, Redis, Celery.

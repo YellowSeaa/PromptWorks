@@ -76,12 +76,13 @@
         <span class="variable-filter__label">
           {{ t('promptTestResult.unitDetail.variableFilterLabel') }}
         </span>
-        <el-space wrap>
+        <el-space wrap class="variable-filter__controls">
           <el-select
             v-model="variableFilter.key"
             clearable
             filterable
             size="small"
+            class="variable-filter__key"
             :placeholder="t('promptTestResult.unitDetail.variableKeyPlaceholder')"
           >
             <el-option
@@ -95,6 +96,7 @@
             v-model="variableFilter.value"
             clearable
             size="small"
+            class="variable-filter__value"
             :placeholder="t('promptTestResult.unitDetail.variableValuePlaceholder')"
           />
           <el-button
@@ -131,6 +133,47 @@
           placement="top"
         >
           <el-card shadow="hover">
+            <div class="output-card-top">
+              <div class="output-badge">#{{ output.runIndex }}</div>
+              <el-tooltip
+                v-if="output.score"
+                placement="left"
+                popper-class="score-tooltip"
+              >
+                <template #content>
+                  <div class="score-tooltip__content">
+                    <div class="score-tooltip__title">
+                      {{ t('promptTestResult.aiScoring.score') }}:
+                      {{ formatScoreValue(output.score.overall_score) }}
+                    </div>
+                    <div
+                      v-for="[key, value] in dimensionEntries(output.score)"
+                      :key="key"
+                      class="score-tooltip__row"
+                    >
+                      <span>{{ key }}</span>
+                      <strong>{{ value }}</strong>
+                    </div>
+                    <p v-if="output.score.reason" class="score-tooltip__reason">
+                      {{ output.score.reason }}
+                    </p>
+                    <p v-if="output.score.error" class="score-tooltip__error">
+                      {{ output.score.error }}
+                    </p>
+                  </div>
+                </template>
+                <el-tag
+                  size="small"
+                  :type="output.score.status === 'completed' ? 'success' : output.score.status === 'failed' ? 'danger' : 'warning'"
+                >
+                  {{
+                    output.score.status === 'completed'
+                      ? formatScoreValue(output.score.overall_score)
+                      : t(`promptTestResult.aiScoring.status.${output.score.status}`)
+                  }}
+                </el-tag>
+              </el-tooltip>
+            </div>
             <div v-if="output.errorMessage" class="output-warning">
               <el-alert
                 type="error"
@@ -208,14 +251,26 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { getPromptTestUnit, listPromptTestExperiments } from '../api/promptTest'
+import {
+  getPromptTestAIScores,
+  getPromptTestUnit,
+  listPromptTestExperiments
+} from '../api/promptTest'
+import type { PromptTestAIScoreSummary, PromptTestOutputScore } from '../types/promptTest'
 import type { PromptTestResultUnit, PromptTestResultOutput } from '../utils/promptTestResult'
-import { buildPromptTestResultUnit, buildParameterEntries, detectMissingOutput } from '../utils/promptTestResult'
+import {
+  attachScoresToResultUnits,
+  buildParameterEntries,
+  buildPromptTestResultUnit,
+  detectMissingOutput,
+  dimensionEntries as formatDimensionEntries,
+  formatScoreValue as formatAIScoreValue
+} from '../utils/promptTestResult'
 import MarkdownIt from 'markdown-it'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const unit = ref<PromptTestResultUnit | null>(null)
 const loading = ref(false)
@@ -435,6 +490,14 @@ function resetVariableFilter() {
   variableFilter.value = ''
 }
 
+function formatScoreValue(value: unknown): string {
+  return formatAIScoreValue(value, locale.value)
+}
+
+function dimensionEntries(score: PromptTestOutputScore | null | undefined) {
+  return formatDimensionEntries(score, locale.value)
+}
+
 function extractUnitId(value: unknown): number | null {
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value)
@@ -462,6 +525,7 @@ async function refreshUnit() {
   try {
     const unitData = await getPromptTestUnit(id)
     let experiments = []
+    let scoringSummary: PromptTestAIScoreSummary | null = null
     try {
       experiments = await listPromptTestExperiments(id)
     } catch (error) {
@@ -470,7 +534,17 @@ async function refreshUnit() {
       errorMessage.value = message
       ElMessage.warning(message)
     }
-    unit.value = buildPromptTestResultUnit(unitData, experiments)
+    const taskId = extractUnitId(routeTaskId.value)
+    if (taskId !== null) {
+      try {
+        scoringSummary = await getPromptTestAIScores(taskId)
+      } catch (error) {
+        console.error('加载测试单元评分数据失败', error)
+        ElMessage.warning(t('promptTestResult.aiScoring.messages.loadFailed'))
+      }
+    }
+    const resultUnit = buildPromptTestResultUnit(unitData, experiments)
+    unit.value = attachScoresToResultUnits([resultUnit], scoringSummary)[0] ?? resultUnit
   } catch (error) {
     console.error('加载测试单元失败', error)
     unit.value = null
@@ -614,12 +688,41 @@ watch(availableVariableKeys, (keys) => {
   align-items: center;
   gap: 12px;
   margin: 0 0 16px;
+  flex-wrap: wrap;
 }
 
 .variable-filter__label {
   font-size: 13px;
   color: var(--text-weak-color);
   white-space: nowrap;
+}
+
+.variable-filter__controls {
+  min-width: 0;
+}
+
+.variable-filter__key {
+  width: 180px;
+  max-width: 100%;
+}
+
+.variable-filter__value {
+  width: 320px;
+  max-width: 100%;
+}
+
+.output-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.output-badge {
+  color: var(--text-weak-color);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .output-content {
@@ -706,5 +809,44 @@ watch(availableVariableKeys, (keys) => {
 .variable-key {
   font-weight: 600;
   color: var(--el-color-primary);
+}
+
+.score-tooltip__content {
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-tooltip__title {
+  font-weight: 600;
+}
+
+.score-tooltip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.score-tooltip__reason,
+.score-tooltip__error {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.score-tooltip__error {
+  color: var(--el-color-danger-light-3);
+}
+
+@media (max-width: 768px) {
+  .variable-filter {
+    align-items: stretch;
+  }
+
+  .variable-filter__controls,
+  .variable-filter__key,
+  .variable-filter__value {
+    width: 100%;
+  }
 }
 </style>
