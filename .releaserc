@@ -1,0 +1,20 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    ["@semantic-release/commit-analyzer", {
+      "preset": "conventionalcommits"
+    }],
+    ["@semantic-release/release-notes-generator", {
+      "preset": "conventionalcommits"
+    }],
+    "@semantic-release/changelog",
+    ["@semantic-release/exec", {
+      "prepareCmd": "node -e \"const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.json'));fs.writeFileSync('frontend/src/version.json',JSON.stringify({version:'v'+pkg.version}))\""
+    }],
+    ["@semantic-release/git", {
+      "assets": ["CHANGELOG.md", "package.json", "frontend/src/version.json"],
+      "message": "chore(release): ${nextRelease.version}"
+    }],
+    "@semantic-release/github"
+  ]
+}
