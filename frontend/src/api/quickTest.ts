@@ -62,6 +62,20 @@ function parseSSEChunk(chunk: string): SSEMessage | null {
   return { event: eventName, data: dataLines.join('\n') }
 }
 
+function throwIfErrorEvent(message: SSEMessage): void {
+  if (message.event !== 'error') return
+  const error: HttpError = new Error('请求接口失败')
+  try {
+    const payload = JSON.parse(message.data)
+    error.status = typeof payload?.status_code === 'number' ? payload.status_code : undefined
+    error.payload = payload?.detail ?? payload
+  } catch (parseError) {
+    void parseError
+    error.payload = message.data
+  }
+  throw error
+}
+
 async function parseErrorPayload(response: Response): Promise<unknown> {
   const text = await response.text()
   if (!text) return null
@@ -132,6 +146,7 @@ export async function* streamQuickTest(
             // eslint-disable-next-line no-console
             console.debug('[QuickTest][SSE]', performance.now(), parsed)
           }
+          throwIfErrorEvent(parsed)
           yield parsed
         }
         separatorIndex = buffer.indexOf('\n\n')
@@ -146,6 +161,7 @@ export async function* streamQuickTest(
           // eslint-disable-next-line no-console
           console.debug('[QuickTest][SSE]', performance.now(), parsed)
         }
+        throwIfErrorEvent(parsed)
         yield parsed
       }
     }

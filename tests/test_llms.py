@@ -5,7 +5,6 @@ from typing import Any, Literal
 import anyio
 import httpx
 import pytest
-from fastapi import HTTPException
 
 from app.api.v1.endpoints import llms as llms_api
 from app.api.v1.endpoints.llms import ChatMessage, LLMStreamInvocationRequest
@@ -1054,12 +1053,15 @@ def test_stream_invoke_llm_handles_error_status(db_session, monkeypatch):
     response = anyio.run(invoke)
 
     async def consume():
+        chunks: list[bytes] = []
         async for _ in response.body_iterator:
-            pass
+            chunks.append(_)
+        return b"".join(chunks).decode("utf-8")
 
-    with pytest.raises(HTTPException) as exc:
-        anyio.run(consume)
-    assert exc.value.status_code == 502
+    body = anyio.run(consume)
+    assert "event: error" in body
+    assert '"status_code":502' in body
+    assert '"message":"bad"' in body
 
 
 def test_stream_invoke_llm_handles_http_exception(db_session, monkeypatch):
@@ -1108,13 +1110,15 @@ def test_stream_invoke_llm_handles_http_exception(db_session, monkeypatch):
     response = anyio.run(invoke)
 
     async def consume():
+        chunks: list[bytes] = []
         async for _ in response.body_iterator:
-            pass
+            chunks.append(_)
+        return b"".join(chunks).decode("utf-8")
 
-    with pytest.raises(HTTPException) as exc:
-        anyio.run(consume)
-
-    assert exc.value.status_code == 502
+    body = anyio.run(consume)
+    assert "event: error" in body
+    assert '"status_code":502' in body
+    assert "stream boom" in body
 
 
 def test_stream_invoke_llm_ignores_invalid_chunks(client, db_session, monkeypatch):
