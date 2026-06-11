@@ -148,6 +148,9 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
         "run_index",
         "latency_ms",
         "tokens_used",
+        "temperature",
+        "temperature_mode",
+        "parameter_set",
     ]
 
     rows: list[dict[str, Any]] = []
@@ -168,6 +171,15 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
                     (output.get("prompt_tokens") or 0)
                     + (output.get("completion_tokens") or 0)
                 )
+                parameters = output.get("parameters")
+                if not isinstance(parameters, dict):
+                    parameters = {}
+                temperature_mode = parameters.get("temperature_mode")
+                if temperature_mode not in {"llm_default", "explicit"}:
+                    temperature_mode = (
+                        "llm_default" if unit.temperature is None else "explicit"
+                    )
+                extra = unit.extra if isinstance(unit.extra, dict) else {}
                 rows.append(
                     {
                         "task_id": task.id,
@@ -177,6 +189,9 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
                         "run_index": _safe_int(run_index) or index,
                         "latency_ms": _safe_int(latency),
                         "tokens_used": _safe_int(total_tokens),
+                        "temperature": unit.temperature,
+                        "temperature_mode": temperature_mode,
+                        "parameter_set": extra.get("parameter_label"),
                     }
                 )
 

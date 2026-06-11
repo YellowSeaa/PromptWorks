@@ -23,7 +23,7 @@ export interface PromptTestUnitCreatePayload {
   description?: string | null
   model_name: string
   llm_provider_id?: number | null
-  temperature?: number
+  temperature?: number | null
   top_p?: number | null
   rounds?: number
   prompt_template?: string | null
@@ -62,7 +62,7 @@ export interface PromptTestUnit {
   description: string | null
   model_name: string
   llm_provider_id: number | null
-  temperature: number
+  temperature: number | null
   top_p: number | null
   rounds: number
   prompt_template: string | null

@@ -481,6 +481,54 @@ def test_create_optimization_recommendation_success(db_session, monkeypatch):
     assert latest is recommendation
 
 
+def test_score_prompt_marks_llm_default_temperature(db_session):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    unit = experiment.unit
+    unit.temperature = None
+    output = {
+        "run_index": 1,
+        "parameters": {"temperature_mode": "llm_default", "max_tokens": 32},
+        "messages": [{"role": "user", "content": "用户问题：如何退款？"}],
+        "variables": {"question": "如何退款？"},
+        "output_text": "您可以在订单详情页申请退款。",
+    }
+
+    prompt = prompt_test_ai_scoring._build_score_prompt(unit, output, "zh-CN")
+
+    assert '"temperature": null' in prompt
+    assert '"temperature_mode": "llm_default"' in prompt
+    assert (
+        '"parameters": {"temperature_mode": "llm_default", "max_tokens": 32}' in prompt
+    )
+
+
+def test_recommendation_prompt_marks_llm_default_temperature(db_session):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    unit = experiment.unit
+    unit.temperature = None
+    experiment.outputs = [
+        {
+            "run_index": 1,
+            "parameters": {"temperature_mode": "llm_default", "max_tokens": 32},
+            "output_text": "您可以在订单详情页申请退款。",
+        }
+    ]
+    db_session.commit()
+    task = prompt_test_ai_scoring._load_task_with_outputs(
+        db_session, experiment.unit.task_id
+    )
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+
+    prompt = prompt_test_ai_scoring._build_recommendation_prompt(task, summary, "zh-CN")
+
+    assert '"temperature": null' in prompt
+    assert '"temperature_mode": "llm_default"' in prompt
+
+
 def test_create_optimization_recommendation_uses_ai_optimization_timeout(
     db_session, monkeypatch
 ):

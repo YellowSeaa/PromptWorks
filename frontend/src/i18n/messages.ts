@@ -304,6 +304,7 @@ export const messages = {
         viewDetails: '查看详情',
         retry: '重试',
         delete: '删除',
+        defaultTemperature: 'LLM 默认',
         version: {
           new: '新版',
           legacy: '旧版'
@@ -849,6 +850,10 @@ export const messages = {
           analysisModules: '分析模块',
           aiScoring: 'AI 评分'
         },
+        temperatureModes: {
+          llmDefault: 'LLM 默认',
+          explicit: '指定温度'
+        },
         placeholders: {
           taskName: '请输入任务名称',
           taskDescription: '用于区分或备注的说明信息',
@@ -939,7 +944,11 @@ export const messages = {
       fields: {
         version: '版本',
         model: '模型',
+        temperature: '温度',
         parameters: '参数'
+      },
+      temperatureModes: {
+        llmDefault: 'LLM 默认'
       },
       filters: {
         keywordPlaceholder: '搜索单元名称 / 模型 / 版本',
@@ -1488,6 +1497,7 @@ export const messages = {
         viewDetails: 'View Details',
         retry: 'Retry',
         delete: 'Delete',
+        defaultTemperature: 'LLM Default',
         version: {
           new: 'New',
           legacy: 'Legacy'
@@ -2035,6 +2045,10 @@ export const messages = {
           analysisModules: 'Analysis Modules',
           aiScoring: 'AI Scoring'
         },
+        temperatureModes: {
+          llmDefault: 'LLM Default',
+          explicit: 'Custom'
+        },
         placeholders: {
           taskName: 'Enter a friendly name for this task',
           taskDescription: 'Optional notes about the scenario',
@@ -2125,7 +2139,11 @@ export const messages = {
       fields: {
         version: 'Version',
         model: 'Model',
+        temperature: 'Temperature',
         parameters: 'Parameters'
+      },
+      temperatureModes: {
+        llmDefault: 'LLM Default'
       },
       filters: {
         keywordPlaceholder: 'Search unit name / model / version',

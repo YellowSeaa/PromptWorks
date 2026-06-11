@@ -176,7 +176,7 @@ interface AggregatedJobRow {
   versionLabels: string[]
   modelName: string
   providerName: string | null
-  temperature: number
+  temperature: number | null
   repetitions: number
   status: string
   createdAt: string
@@ -638,7 +638,7 @@ function buildPromptTestTaskRows(tasks: PromptTestTask[]): AggregatedJobRow[] {
       versionLabels,
       modelName: modelNames.length ? modelNames.join(' / ') : '--',
       providerName: providerNames.length ? providerNames.join(' / ') : null,
-      temperature: temperatureValues.length ? temperatureValues[0] : Number.NaN,
+      temperature: temperatureValues.length ? temperatureValues[0] : null,
       repetitions: roundsValues.length ? Math.max(...roundsValues) : 1,
       status,
       createdAt: task.created_at,
@@ -860,7 +860,7 @@ function formatDateTime(value: string) {
 
 function formatTemperature(value: number | null | undefined) {
   if (typeof value !== 'number' || Number.isNaN(value)) {
-    return '--'
+    return t('testJobManagement.table.defaultTemperature')
   }
   return value.toFixed(2)
 }

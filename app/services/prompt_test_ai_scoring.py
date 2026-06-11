@@ -700,6 +700,9 @@ def _build_score_prompt(
         "unit_description": unit.description,
         "prompt_description": prompt_description,
         "prompt": prompt_text,
+        "temperature": unit.temperature,
+        "temperature_mode": _resolve_temperature_mode(unit, output),
+        "parameters": _resolve_output_parameters(unit, output),
         "messages": output.get("messages"),
         "variables": output.get("variables"),
         "llm_output": output.get("output_text"),
@@ -730,6 +733,7 @@ def _build_recommendation_prompt(
                 "unit_name": unit.name,
                 "model_name": unit.model_name,
                 "temperature": unit.temperature,
+                "temperature_mode": _resolve_temperature_mode(unit, None),
                 "top_p": unit.top_p,
                 "prompt": unit.prompt_template
                 or (unit.prompt_version.content if unit.prompt_version else ""),
@@ -751,6 +755,33 @@ def _build_recommendation_prompt(
         f"所有文本使用 {language} 对应语言。\n"
         f"{json.dumps(payload, ensure_ascii=False, default=str)}"
     )
+
+
+def _resolve_temperature_mode(
+    unit: PromptTestUnit, output: Mapping[str, Any] | None
+) -> str:
+    parameters = output.get("parameters") if isinstance(output, Mapping) else None
+    if isinstance(parameters, Mapping):
+        raw_mode = parameters.get("temperature_mode")
+        if raw_mode in {"llm_default", "explicit"}:
+            return str(raw_mode)
+        if "temperature" not in parameters and unit.temperature is None:
+            return "llm_default"
+    return "llm_default" if unit.temperature is None else "explicit"
+
+
+def _resolve_output_parameters(
+    unit: PromptTestUnit, output: Mapping[str, Any]
+) -> dict[str, Any]:
+    raw_parameters = output.get("parameters")
+    parameters = dict(raw_parameters) if isinstance(raw_parameters, Mapping) else {}
+    temperature_mode = _resolve_temperature_mode(unit, output)
+    parameters["temperature_mode"] = temperature_mode
+    if temperature_mode == "llm_default":
+        parameters.pop("temperature", None)
+    else:
+        parameters["temperature"] = unit.temperature
+    return parameters
 
 
 def _extract_output_text(payload: Mapping[str, Any]) -> str:
