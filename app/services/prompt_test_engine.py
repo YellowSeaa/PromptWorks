@@ -404,6 +404,8 @@ def _normalize_existing_outputs(outputs: Any) -> list[dict[str, Any]]:
 def _collect_completed_run_indexes(records: Sequence[Mapping[str, Any]]) -> set[int]:
     indexes: set[int] = set()
     for record in records:
+        if record.get("status") == "failed" or record.get("error"):
+            continue
         value = record.get("run_index")
         if isinstance(value, (int, float)) and int(value) > 0:
             indexes.add(int(value))

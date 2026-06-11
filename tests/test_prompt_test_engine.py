@@ -543,6 +543,97 @@ def test_execute_prompt_test_experiment_resumes_from_existing_outputs(
     ]
 
 
+def test_execute_prompt_test_experiment_retries_failed_existing_outputs(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+
+    task = PromptTestTask(name="重试失败轮次", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="失败续跑单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.FAILED,
+        outputs=[
+            {
+                "run_index": 1,
+                "status": "failed",
+                "error": "LLM 网络错误",
+                "variables": None,
+            },
+            {
+                "run_index": 2,
+                "messages": [],
+                "parameters": {"max_tokens": 16},
+                "variables": None,
+                "output_text": "已有成功结果",
+                "parsed_output": None,
+                "prompt_tokens": 4,
+                "completion_tokens": 4,
+                "total_tokens": 8,
+                "latency_ms": 15,
+                "raw_response": {"choices": []},
+            },
+        ],
+    )
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    executed_indexes: list[int] = []
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        executed_indexes.append(run_index)
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"重试成功 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 5,
+            "completion_tokens": 5,
+            "total_tokens": 10,
+            "latency_ms": 20,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert executed_indexes == [1]
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert [item["output_text"] for item in refreshed.outputs or []] == [
+        "重试成功 1",
+        "已有成功结果",
+    ]
+    assert refreshed.metrics["failed_runs"] == 0
+
+
 def test_execute_prompt_test_experiment_respects_model_concurrency_limit(
     db_session, monkeypatch
 ):
