@@ -15,9 +15,12 @@ export const messages = {
     app: {
       title: 'PromptWorks 控制台',
       settings: '设置',
+      language: '语言',
       languageCn: '中文',
       languageEn: 'English',
+      themeLight: '浅色模式',
       themeDark: '深色模式',
+      themeSystem: '跟随系统',
       settingsDialogTitle: '运行超时设置',
       settingsQuickTestTimeoutLabel: '快速测试超时时间（秒）',
       settingsTestTaskTimeoutLabel: '测试任务超时时间（秒）',
@@ -28,17 +31,15 @@ export const messages = {
       settingsSaveSuccess: '超时时间设置已保存',
       settingsSaveFailed: '保存超时时间失败，请稍后重试',
       settingsLoadFailed: '加载设置失败，请稍后重试',
-      settingsSecondsUnit: '秒',
-      settingsNeverUpdated: '尚未设置超时时间',
-      settingsLastUpdated: '上次更新时间：{time}'
+      settingsSecondsUnit: '秒'
     },
     menu: {
-      prompt: 'Prompt 管理',
+      prompt: '提示词管理',
       quickTest: '快速测试',
       testJob: '测试任务',
       class: '分类管理',
       tag: '标签管理',
-      llm: 'LLMs 管理',
+      llm: '模型管理',
       usage: '用量监控',
       projectInfo: '项目信息'
     },
@@ -1279,9 +1280,12 @@ export const messages = {
     app: {
       title: 'PromptWorks Console',
       settings: 'Settings',
-      languageCn: 'Chinese',
+      language: 'Language',
+      languageCn: '中文',
       languageEn: 'English',
+      themeLight: 'Light Mode',
       themeDark: 'Dark Mode',
+      themeSystem: 'Follow System',
       settingsDialogTitle: 'Timeout Settings',
       settingsQuickTestTimeoutLabel: 'Quick Test Timeout (seconds)',
       settingsTestTaskTimeoutLabel: 'Test Task Timeout (seconds)',
@@ -1292,9 +1296,7 @@ export const messages = {
       settingsSaveSuccess: 'Timeout settings saved',
       settingsSaveFailed: 'Failed to save timeout settings. Please try again later.',
       settingsLoadFailed: 'Failed to load settings. Please try again later.',
-      settingsSecondsUnit: 's',
-      settingsNeverUpdated: 'Timeout not configured yet',
-      settingsLastUpdated: 'Last updated at: {time}'
+      settingsSecondsUnit: 's'
     },
     menu: {
       prompt: 'Prompt Management',

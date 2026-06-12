@@ -2,45 +2,86 @@
   <el-config-provider :locale="elementLocale">
     <div class="app-shell">
       <el-container class="app-container">
-        <el-header class="app-header" height="64px">
-          <div class="header-left">
-            <span class="app-title">{{ t('app.title') }}</span>
-            <span class="app-version">{{ APP_VERSION }}</span>
+        <el-aside width="220px" class="side-nav">
+          <div class="brand-row">
+            <img src="/logo.png" alt="PromptWorks" class="brand-logo" />
+            <span class="app-title">PromptWorks</span>
           </div>
-          <div class="header-right">
-            <el-button type="primary" :icon="Setting" text @click="handleOpenSettings">
-              {{ t('app.settings') }}
-            </el-button>
-            <el-select v-model="language" size="small" class="language-select">
-              <el-option :label="t('app.languageCn')" value="zh-CN" />
-              <el-option :label="t('app.languageEn')" value="en-US" />
-            </el-select>
-            <el-switch
-              v-model="isDark"
-              inline-prompt
-              :active-icon="Moon"
-              :inactive-icon="Sunny"
-              active-color="#303133"
-              inactive-color="#409EFF"
-            />
-          </div>
-        </el-header>
-        <el-container>
-          <el-aside width="220px" class="side-nav">
-            <el-menu class="side-menu" :default-active="activeMenu" @select="handleMenuSelect">
-              <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
-                <el-icon>
-                  <component :is="item.icon" />
-                </el-icon>
-                <span>{{ item.label }}</span>
-              </el-menu-item>
-            </el-menu>
-          </el-aside>
-          <el-main class="main-view">
-            <router-view />
-          </el-main>
-        </el-container>
+          <div class="side-divider" />
+          <el-menu class="side-menu" :default-active="activeMenu" @select="handleMenuSelect">
+            <el-menu-item v-for="item in menuItems" :key="item.index" :index="item.index">
+              <el-icon>
+                <component :is="item.icon" />
+              </el-icon>
+              <span>{{ item.label }}</span>
+            </el-menu-item>
+          </el-menu>
+        </el-aside>
+        <el-main class="main-view">
+          <div class="main-toolbar-space" aria-hidden="true" />
+          <router-view />
+        </el-main>
       </el-container>
+
+      <div class="global-action-card" aria-label="全局操作">
+        <el-dropdown trigger="click" @command="handleLanguageCommand">
+          <el-button
+            :icon="Reading"
+            circle
+            text
+            class="global-action-button"
+            :title="t('app.language')"
+            :aria-label="t('app.language')"
+          />
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="zh-CN" :disabled="language === 'zh-CN'">
+                {{ t('app.languageCn') }}
+              </el-dropdown-item>
+              <el-dropdown-item command="en-US" :disabled="language === 'en-US'">
+                {{ t('app.languageEn') }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+
+        <el-dropdown trigger="click" @command="handleThemeCommand">
+          <el-button
+            :icon="themeIcon"
+            circle
+            text
+            class="global-action-button"
+            :title="themeTooltip"
+            :aria-label="themeTooltip"
+          />
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="system" :disabled="themeMode === 'system'">
+                <el-icon><Monitor /></el-icon>
+                <span>{{ t('app.themeSystem') }}</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="light" :disabled="themeMode === 'light'">
+                <el-icon><Sunny /></el-icon>
+                <span>{{ t('app.themeLight') }}</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="dark" :disabled="themeMode === 'dark'">
+                <el-icon><Moon /></el-icon>
+                <span>{{ t('app.themeDark') }}</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+
+        <el-tooltip :content="t('app.settings')" placement="bottom">
+          <el-button
+            :icon="Setting"
+            circle
+            text
+            class="global-action-button"
+            @click="handleOpenSettings"
+          />
+        </el-tooltip>
+      </div>
     </div>
 
     <el-dialog
@@ -107,7 +148,6 @@
         <p class="settings-hint">
           {{ t('app.settingsTimeoutHint', { min: TIMEOUT_MIN, max: TIMEOUT_MAX }) }}
         </p>
-        <p class="settings-updated">{{ settingsUpdatedText }}</p>
       </el-form>
       <template #footer>
         <el-button @click="handleSettingsCancel" :disabled="settingsSaving">
@@ -122,7 +162,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -136,7 +176,9 @@ import {
   Histogram,
   InfoFilled,
   Sunny,
-  Moon
+  Moon,
+  Monitor,
+  Reading
 } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import enUs from 'element-plus/es/locale/lang/en'
@@ -169,13 +211,22 @@ const route = useRoute()
 const { t, locale } = useI18n()
 const language = ref<SupportedLocale>(locale.value as SupportedLocale)
 const elementLocale = computed(() => (language.value === 'zh-CN' ? zhCn : enUs))
-const isDark = ref(false)
+type ThemeMode = 'system' | 'light' | 'dark'
+const themeMode = ref<ThemeMode>('system')
+const systemPrefersDark = ref(
+  typeof window !== 'undefined'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : false
+)
+let colorSchemeQuery: MediaQueryList | null = null
+function handleSystemThemeChange(event: MediaQueryListEvent) {
+  systemPrefersDark.value = event.matches
+}
 
 const {
   quickTestTimeout,
   testTaskTimeout,
   aiOptimizationTimeout,
-  timeoutUpdatedAt,
   fetchTimeouts,
   saveTimeouts
 } = useTestingSettings()
@@ -248,28 +299,6 @@ const settingsRules: FormRules = {
   ]
 }
 
-function formatSettingsTimestamp(value: string | null): string | null {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day} ${hour}:${minute}`
-}
-
-const settingsUpdatedText = computed(() => {
-  const formatted = formatSettingsTimestamp(timeoutUpdatedAt.value)
-  if (!formatted) {
-    return t('app.settingsNeverUpdated')
-  }
-  return t('app.settingsLastUpdated', { time: formatted })
-})
-
 function syncSettingsFormFromRefs() {
   settingsForm.quickTestTimeout =
     quickTestTimeout.value ?? DEFAULT_TIMEOUT_SECONDS
@@ -291,12 +320,29 @@ const menuItems = computed<MenuItem[]>(() => [
 ])
 
 const activeMenu = computed(() => (route.meta.menu as string | undefined) ?? 'prompt')
+const isDarkTheme = computed(() =>
+  themeMode.value === 'system'
+    ? systemPrefersDark.value
+    : themeMode.value === 'dark'
+)
+const themeIcon = computed(() => {
+  if (themeMode.value === 'system') {
+    return Monitor
+  }
+  return isDarkTheme.value ? Moon : Sunny
+})
+const themeTooltip = computed(() => {
+  if (themeMode.value === 'system') {
+    return t('app.themeSystem')
+  }
+  return isDarkTheme.value ? t('app.themeDark') : t('app.themeLight')
+})
 
 watch(language, (value) => {
   setLocale(value)
 })
 
-watch(isDark, (value) => toggleTheme(value), { immediate: true })
+watch(isDarkTheme, (value) => toggleTheme(value), { immediate: true })
 
 watch(
   () => [
@@ -340,6 +386,18 @@ async function handleOpenSettings() {
 
 function handleSettingsCancel() {
   settingsDialogVisible.value = false
+}
+
+function handleLanguageCommand(command: string | number | object) {
+  if (command === 'zh-CN' || command === 'en-US') {
+    language.value = command
+  }
+}
+
+function handleThemeCommand(command: string | number | object) {
+  if (command === 'system' || command === 'light' || command === 'dark') {
+    themeMode.value = command
+  }
 }
 
 async function handleSettingsConfirm() {
@@ -395,6 +453,10 @@ function handleMenuSelect(index: string) {
 }
 
 onMounted(() => {
+  colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  systemPrefersDark.value = colorSchemeQuery.matches
+  colorSchemeQuery.addEventListener('change', handleSystemThemeChange)
+
   checkProjectVersionOncePerDay().catch((error) => {
     if (import.meta.env.DEV) {
       console.warn('[project-version] daily check failed', error)
@@ -415,6 +477,10 @@ onMounted(() => {
     })
   })
 })
+
+onUnmounted(() => {
+  colorSchemeQuery?.removeEventListener('change', handleSystemThemeChange)
+})
 </script>
 
 <style scoped>
@@ -425,61 +491,89 @@ onMounted(() => {
 
 .app-container {
   min-height: 100vh;
+  padding-left: 220px;
 }
 
-.app-header {
+.brand-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  background: var(--header-bg-color);
-  color: var(--header-text-color);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 10%);
+  gap: 10px;
+  height: 64px;
+  padding: 0 20px;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .app-title {
   font-size: 20px;
   font-weight: 600;
+  line-height: 1;
 }
 
-.app-version {
-  padding: 2px 8px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 999px;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  line-height: 18px;
-  background: var(--el-fill-color-light);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.language-select {
-  width: 120px;
+.side-divider {
+  height: 1px;
+  margin: 0 16px 12px;
+  background: var(--side-border-color);
 }
 
 .side-nav {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 10;
+  height: 100vh;
   background: var(--side-bg-color);
   border-right: 1px solid var(--side-border-color);
+  overflow: hidden;
 }
 
 .side-menu {
   border-right: none;
+  background: transparent;
+}
+
+.side-menu :deep(.el-menu-item) {
+  height: 44px;
+  margin: 4px 10px;
+  border-radius: 8px;
+}
+
+.side-menu :deep(.el-menu-item.is-active) {
+  background: var(--el-color-primary-light-9);
 }
 
 .main-view {
-  padding: 24px;
+  min-height: 100vh;
+  padding: 0 24px 24px;
   background: var(--content-bg-color);
+}
+
+.main-toolbar-space {
+  height: 76px;
+}
+
+.global-action-card {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--header-bg-color);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.global-action-button {
+  width: 34px;
+  height: 34px;
 }
 
 .settings-form {
@@ -504,9 +598,42 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
 }
 
-.settings-updated {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+@media (max-width: 768px) {
+  .app-container {
+    padding-left: 72px;
+  }
+
+  .side-nav {
+    width: 72px !important;
+  }
+
+  .brand-row {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-title,
+  .side-menu :deep(.el-menu-item span) {
+    display: none;
+  }
+
+  .side-menu :deep(.el-menu-item) {
+    justify-content: center;
+    margin: 4px 8px;
+    padding: 0;
+  }
+
+  .main-view {
+    padding: 0 16px 20px;
+  }
+
+  .main-toolbar-space {
+    height: 72px;
+  }
+
+  .global-action-card {
+    top: 14px;
+    right: 16px;
+  }
 }
 </style>
