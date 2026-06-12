@@ -24,15 +24,29 @@
       </el-container>
 
       <div class="global-action-card" aria-label="全局操作">
-        <el-dropdown trigger="click" @command="handleLanguageCommand">
-          <el-button
-            :icon="Reading"
-            circle
-            text
-            class="global-action-button"
-            :title="t('app.language')"
-            :aria-label="t('app.language')"
-          />
+        <el-dropdown
+          trigger="click"
+          @command="handleLanguageCommand"
+        >
+          <span
+            class="global-action-trigger"
+            :data-tooltip="t('app.language')"
+            @pointerenter="showActionTooltip"
+            @pointerleave="hideActionTooltip"
+            @mouseover="showActionTooltip"
+            @mouseleave="hideActionTooltip"
+            @focusin="showActionTooltip"
+            @focusout="hideActionTooltip"
+          >
+            <el-button
+              :icon="Reading"
+              circle
+              text
+              class="global-action-button"
+              :title="t('app.language')"
+              :aria-label="t('app.language')"
+            />
+          </span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="zh-CN" :disabled="language === 'zh-CN'">
@@ -45,15 +59,29 @@
           </template>
         </el-dropdown>
 
-        <el-dropdown trigger="click" @command="handleThemeCommand">
-          <el-button
-            :icon="themeIcon"
-            circle
-            text
-            class="global-action-button"
-            :title="themeTooltip"
-            :aria-label="themeTooltip"
-          />
+        <el-dropdown
+          trigger="click"
+          @command="handleThemeCommand"
+        >
+          <span
+            class="global-action-trigger"
+            :data-tooltip="themeActionTooltip"
+            @pointerenter="showActionTooltip"
+            @pointerleave="hideActionTooltip"
+            @mouseover="showActionTooltip"
+            @mouseleave="hideActionTooltip"
+            @focusin="showActionTooltip"
+            @focusout="hideActionTooltip"
+          >
+            <el-button
+              :icon="themeIcon"
+              circle
+              text
+              class="global-action-button"
+              :title="themeActionTooltip"
+              :aria-label="themeActionTooltip"
+            />
+          </span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="system" :disabled="themeMode === 'system'">
@@ -68,6 +96,23 @@
                 <el-icon><Moon /></el-icon>
                 <span>{{ t('app.themeDark') }}</span>
               </el-dropdown-item>
+              <li class="theme-color-panel" role="presentation">
+                <div class="theme-color-panel__title">{{ t('app.themeColor') }}</div>
+                <div class="theme-color-options" role="group" :aria-label="t('app.themeColor')">
+                  <button
+                    v-for="item in themeColorOptions"
+                    :key="item.value"
+                    type="button"
+                    class="theme-color-option"
+                    :class="{ 'is-active': themeColor === item.value }"
+                    :style="{ '--theme-option-color': item.primary }"
+                    :aria-label="t(item.labelKey)"
+                    :aria-pressed="themeColor === item.value"
+                    :title="t(item.labelKey)"
+                    @click.stop="handleThemeColorSelect(item.value)"
+                  />
+                </div>
+              </li>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -78,6 +123,8 @@
             circle
             text
             class="global-action-button"
+            :title="t('app.settings')"
+            :aria-label="t('app.settings')"
             @click="handleOpenSettings"
           />
         </el-tooltip>
@@ -212,7 +259,101 @@ const { t, locale } = useI18n()
 const language = ref<SupportedLocale>(locale.value as SupportedLocale)
 const elementLocale = computed(() => (language.value === 'zh-CN' ? zhCn : enUs))
 type ThemeMode = 'system' | 'light' | 'dark'
-const themeMode = ref<ThemeMode>('system')
+type ThemeColor = 'blue' | 'green' | 'violet' | 'orange' | 'rose'
+interface ThemeColorOption {
+  value: ThemeColor
+  labelKey: string
+  primary: string
+  dark2: string
+  light3: string
+  light5: string
+  light7: string
+  light8: string
+  light9: string
+}
+
+const THEME_MODE_STORAGE_KEY = 'promptworks-theme-mode'
+const THEME_COLOR_STORAGE_KEY = 'promptworks-theme-color'
+const themeColorOptions: ThemeColorOption[] = [
+  {
+    value: 'blue',
+    labelKey: 'app.themeColorBlue',
+    primary: '#409eff',
+    dark2: '#337ecc',
+    light3: '#79bbff',
+    light5: '#a0cfff',
+    light7: '#c6e2ff',
+    light8: '#d9ecff',
+    light9: '#ecf5ff'
+  },
+  {
+    value: 'green',
+    labelKey: 'app.themeColorGreen',
+    primary: '#10b981',
+    dark2: '#0f8f69',
+    light3: '#5ed0aa',
+    light5: '#88dcc2',
+    light7: '#b7ead8',
+    light8: '#d1f3e8',
+    light9: '#ecfdf5'
+  },
+  {
+    value: 'violet',
+    labelKey: 'app.themeColorViolet',
+    primary: '#7c3aed',
+    dark2: '#6429c7',
+    light3: '#a377f3',
+    light5: '#bd9bf6',
+    light7: '#d7c4fa',
+    light8: '#e8ddfd',
+    light9: '#f3efff'
+  },
+  {
+    value: 'orange',
+    labelKey: 'app.themeColorOrange',
+    primary: '#f97316',
+    dark2: '#c75b12',
+    light3: '#fb9d5c',
+    light5: '#fdbc8a',
+    light7: '#fed8b8',
+    light8: '#fee8d5',
+    light9: '#fff4eb'
+  },
+  {
+    value: 'rose',
+    labelKey: 'app.themeColorRose',
+    primary: '#e11d48',
+    dark2: '#b91c3f',
+    light3: '#ea6380',
+    light5: '#f099a9',
+    light7: '#f5c2cc',
+    light8: '#fadce3',
+    light9: '#fff1f4'
+  }
+]
+
+function readStoredThemeMode(): ThemeMode {
+  if (typeof window === 'undefined') {
+    return 'system'
+  }
+  const stored = window.localStorage.getItem(THEME_MODE_STORAGE_KEY)
+  return stored === 'light' || stored === 'dark' || stored === 'system'
+    ? stored
+    : 'system'
+}
+
+function readStoredThemeColor(): ThemeColor {
+  if (typeof window === 'undefined') {
+    return 'blue'
+  }
+  const stored = window.localStorage.getItem(THEME_COLOR_STORAGE_KEY)
+  return themeColorOptions.some((item) => item.value === stored)
+    ? (stored as ThemeColor)
+    : 'blue'
+}
+
+const themeMode = ref<ThemeMode>(readStoredThemeMode())
+const themeColor = ref<ThemeColor>(readStoredThemeColor())
 const systemPrefersDark = ref(
   typeof window !== 'undefined'
     ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -331,18 +472,20 @@ const themeIcon = computed(() => {
   }
   return isDarkTheme.value ? Moon : Sunny
 })
-const themeTooltip = computed(() => {
-  if (themeMode.value === 'system') {
-    return t('app.themeSystem')
-  }
-  return isDarkTheme.value ? t('app.themeDark') : t('app.themeLight')
-})
+const themeActionTooltip = computed(() => t('app.themeSwitch'))
 
 watch(language, (value) => {
   setLocale(value)
 })
 
 watch(isDarkTheme, (value) => toggleTheme(value), { immediate: true })
+watch(themeMode, (value) => {
+  window.localStorage.setItem(THEME_MODE_STORAGE_KEY, value)
+})
+watch(themeColor, (value) => {
+  applyThemeColor(value)
+  window.localStorage.setItem(THEME_COLOR_STORAGE_KEY, value)
+}, { immediate: true })
 
 watch(
   () => [
@@ -400,6 +543,22 @@ function handleThemeCommand(command: string | number | object) {
   }
 }
 
+function handleThemeColorSelect(value: ThemeColor) {
+  themeColor.value = value
+}
+
+function showActionTooltip(event: Event) {
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.classList.add('is-tooltip-visible')
+  }
+}
+
+function hideActionTooltip(event: Event) {
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.classList.remove('is-tooltip-visible')
+  }
+}
+
 async function handleSettingsConfirm() {
   if (settingsSaving.value) {
     return
@@ -443,6 +602,19 @@ function toggleTheme(value: boolean) {
   } else {
     root.classList.remove('dark')
   }
+}
+
+function applyThemeColor(value: ThemeColor) {
+  const option =
+    themeColorOptions.find((item) => item.value === value) ?? themeColorOptions[0]
+  const root = document.documentElement
+  root.style.setProperty('--el-color-primary', option.primary)
+  root.style.setProperty('--el-color-primary-dark-2', option.dark2)
+  root.style.setProperty('--el-color-primary-light-3', option.light3)
+  root.style.setProperty('--el-color-primary-light-5', option.light5)
+  root.style.setProperty('--el-color-primary-light-7', option.light7)
+  root.style.setProperty('--el-color-primary-light-8', option.light8)
+  root.style.setProperty('--el-color-primary-light-9', option.light9)
 }
 
 function handleMenuSelect(index: string) {
@@ -574,6 +746,82 @@ onUnmounted(() => {
 .global-action-button {
   width: 34px;
   height: 34px;
+}
+
+.global-action-trigger {
+  position: relative;
+  display: inline-flex;
+  line-height: 1;
+}
+
+.global-action-trigger::after {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: 1000;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--el-text-color-primary);
+  color: var(--el-bg-color);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  white-space: nowrap;
+}
+
+.global-action-trigger:hover::after,
+.global-action-trigger:focus-within::after,
+.global-action-trigger.is-tooltip-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(2px);
+}
+
+.theme-color-panel {
+  margin: 4px 0 0;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  list-style: none;
+}
+
+.theme-color-panel__title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--el-text-color-secondary);
+}
+
+.theme-color-options {
+  display: grid;
+  grid-template-columns: repeat(5, 24px);
+  gap: 8px;
+}
+
+.theme-color-option {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--theme-option-color);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 58%);
+  cursor: pointer;
+}
+
+.theme-color-option:hover,
+.theme-color-option:focus-visible {
+  border-color: var(--el-color-primary-light-5);
+  outline: none;
+}
+
+.theme-color-option.is-active {
+  border-color: var(--el-color-primary);
+  box-shadow:
+    0 0 0 2px var(--el-color-primary-light-8),
+    inset 0 0 0 1px rgb(255 255 255 / 70%);
 }
 
 .settings-form {
