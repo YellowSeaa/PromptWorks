@@ -24,15 +24,29 @@
       </el-container>
 
       <div class="global-action-card" aria-label="全局操作">
-        <el-dropdown trigger="click" @command="handleLanguageCommand">
-          <el-button
-            :icon="Reading"
-            circle
-            text
-            class="global-action-button"
-            :title="t('app.language')"
-            :aria-label="t('app.language')"
-          />
+        <el-dropdown
+          trigger="click"
+          @command="handleLanguageCommand"
+        >
+          <span
+            class="global-action-trigger"
+            :data-tooltip="t('app.language')"
+            @pointerenter="showActionTooltip"
+            @pointerleave="hideActionTooltip"
+            @mouseover="showActionTooltip"
+            @mouseleave="hideActionTooltip"
+            @focusin="showActionTooltip"
+            @focusout="hideActionTooltip"
+          >
+            <el-button
+              :icon="Reading"
+              circle
+              text
+              class="global-action-button"
+              :title="t('app.language')"
+              :aria-label="t('app.language')"
+            />
+          </span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="zh-CN" :disabled="language === 'zh-CN'">
@@ -45,15 +59,29 @@
           </template>
         </el-dropdown>
 
-        <el-dropdown trigger="click" @command="handleThemeCommand">
-          <el-button
-            :icon="themeIcon"
-            circle
-            text
-            class="global-action-button"
-            :title="themeActionTooltip"
-            :aria-label="themeActionTooltip"
-          />
+        <el-dropdown
+          trigger="click"
+          @command="handleThemeCommand"
+        >
+          <span
+            class="global-action-trigger"
+            :data-tooltip="themeActionTooltip"
+            @pointerenter="showActionTooltip"
+            @pointerleave="hideActionTooltip"
+            @mouseover="showActionTooltip"
+            @mouseleave="hideActionTooltip"
+            @focusin="showActionTooltip"
+            @focusout="hideActionTooltip"
+          >
+            <el-button
+              :icon="themeIcon"
+              circle
+              text
+              class="global-action-button"
+              :title="themeActionTooltip"
+              :aria-label="themeActionTooltip"
+            />
+          </span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="system" :disabled="themeMode === 'system'">
@@ -519,6 +547,18 @@ function handleThemeColorSelect(value: ThemeColor) {
   themeColor.value = value
 }
 
+function showActionTooltip(event: Event) {
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.classList.add('is-tooltip-visible')
+  }
+}
+
+function hideActionTooltip(event: Event) {
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.classList.remove('is-tooltip-visible')
+  }
+}
+
 async function handleSettingsConfirm() {
   if (settingsSaving.value) {
     return
@@ -706,6 +746,38 @@ onUnmounted(() => {
 .global-action-button {
   width: 34px;
   height: 34px;
+}
+
+.global-action-trigger {
+  position: relative;
+  display: inline-flex;
+  line-height: 1;
+}
+
+.global-action-trigger::after {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: 1000;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--el-text-color-primary);
+  color: var(--el-bg-color);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  white-space: nowrap;
+}
+
+.global-action-trigger:hover::after,
+.global-action-trigger:focus-within::after,
+.global-action-trigger.is-tooltip-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(2px);
 }
 
 .theme-color-panel {
