@@ -134,6 +134,7 @@ import {
   Tickets,
   Cpu,
   Histogram,
+  InfoFilled,
   Sunny,
   Moon
 } from '@element-plus/icons-vue'
@@ -281,7 +282,8 @@ const menuItems = computed<MenuItem[]>(() => [
   { index: 'class', label: t('menu.class'), routeName: 'class-management', icon: Files },
   { index: 'tag', label: t('menu.tag'), routeName: 'tag-management', icon: Tickets },
   { index: 'llm', label: t('menu.llm'), routeName: 'llm-management', icon: Cpu },
-  { index: 'usage', label: t('menu.usage'), routeName: 'usage-management', icon: Histogram }
+  { index: 'usage', label: t('menu.usage'), routeName: 'usage-management', icon: Histogram },
+  { index: 'project-info', label: t('menu.projectInfo'), routeName: 'project-info', icon: InfoFilled }
 ])
 
 const activeMenu = computed(() => (route.meta.menu as string | undefined) ?? 'prompt')

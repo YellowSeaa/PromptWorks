@@ -39,7 +39,8 @@ export const messages = {
       class: '分类管理',
       tag: '标签管理',
       llm: 'LLMs 管理',
-      usage: '用量管理'
+      usage: '用量管理',
+      projectInfo: '项目信息'
     },
     promptManagement: {
       headerTitle: 'Prompt 管理',
@@ -487,6 +488,48 @@ export const messages = {
       messages: {
         usageLoadFailed: '加载用量数据失败，请稍后重试',
         trendLoadFailed: '加载趋势数据失败，请稍后重试'
+      }
+    },
+    projectInfo: {
+      kicker: '项目总览',
+      currentVersion: '当前版本',
+      tutorial: '使用教程',
+      tutorialComingSoon: '使用教程入口已预留，后续补充内容',
+      empty: '暂未获取到项目信息',
+      stats: {
+        providers: 'AI 供应商',
+        models: '模型',
+        prompts: 'Prompt',
+        promptVersions: 'Prompt 版本',
+        testTasks: '测试任务',
+        testUnits: '测试单元'
+      },
+      deployment: {
+        source: '源码部署',
+        docker: 'Docker 部署',
+        unknown: '未知部署'
+      },
+      version: {
+        title: '版本检查与更新',
+        subtitle: '检查 GitHub 最新 Release，并根据部署方式给出更新步骤。',
+        check: '检查新版本',
+        current: '当前版本',
+        latest: '最新版本',
+        deployment: '部署方式',
+        updateAvailable: '发现可用新版本，请按右侧步骤完成更新。',
+        upToDate: '当前已是最新版本。',
+        notChecked: '尚未检查远端最新版本。',
+        remoteUnknown: '未获取到',
+        remoteUnknownHint: '暂未获取到远端最新版本，可稍后重试或查看 GitHub Releases。',
+        releaseNotes: '查看发布说明',
+        statusUpdate: '可更新',
+        statusLatest: '已是最新',
+        statusRemoteUnknown: '远端未知'
+      },
+      messages: {
+        loadFailed: '加载项目信息失败，请稍后重试',
+        checkSuccess: '版本检查完成',
+        checkFailed: '检查版本失败，请稍后重试'
       }
     },
     promptVersionCreate: {
@@ -1232,7 +1275,8 @@ export const messages = {
       class: 'Class Management',
       tag: 'Tag Management',
       llm: 'LLM Management',
-      usage: 'Usage Management'
+      usage: 'Usage Management',
+      projectInfo: 'Project Info'
     },
     promptManagement: {
       headerTitle: 'Prompt Management',
@@ -1680,6 +1724,48 @@ export const messages = {
       messages: {
         usageLoadFailed: 'Failed to load usage data. Try again later.',
         trendLoadFailed: 'Failed to load trend data. Try again later.'
+      }
+    },
+    projectInfo: {
+      kicker: 'Project Overview',
+      currentVersion: 'Current Version',
+      tutorial: 'Tutorial',
+      tutorialComingSoon: 'Tutorial entry reserved. Content will be added later.',
+      empty: 'Project information is unavailable.',
+      stats: {
+        providers: 'AI Providers',
+        models: 'Models',
+        prompts: 'Prompts',
+        promptVersions: 'Prompt Versions',
+        testTasks: 'Test Tasks',
+        testUnits: 'Test Units'
+      },
+      deployment: {
+        source: 'Source Deployment',
+        docker: 'Docker Deployment',
+        unknown: 'Unknown Deployment'
+      },
+      version: {
+        title: 'Version Check and Update',
+        subtitle: 'Check the latest GitHub Release and show update steps for the current deployment.',
+        check: 'Check Version',
+        current: 'Current',
+        latest: 'Latest',
+        deployment: 'Deployment',
+        updateAvailable: 'A new version is available. Follow the steps on the right to update.',
+        upToDate: 'You are already on the latest version.',
+        notChecked: 'Latest remote version has not been checked yet.',
+        remoteUnknown: 'Unavailable',
+        remoteUnknownHint: 'Latest remote version is unavailable. Try again later or check GitHub Releases.',
+        releaseNotes: 'View Release Notes',
+        statusUpdate: 'Update Available',
+        statusLatest: 'Latest',
+        statusRemoteUnknown: 'Remote Unknown'
+      },
+      messages: {
+        loadFailed: 'Failed to load project information. Try again later.',
+        checkSuccess: 'Version check completed.',
+        checkFailed: 'Failed to check version. Try again later.'
       }
     },
     promptVersionCreate: {
