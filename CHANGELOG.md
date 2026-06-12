@@ -1,3 +1,16 @@
+## [1.2.0-beta.3](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.2...v1.2.0-beta.3) (2026-06-12)
+
+### Features
+
+* 优化前端主布局 ([84422b1](https://github.com/YellowSeaa/PromptWorks/commit/84422b18001a8e6c2505dca8a3ae8bc015fe4d82))
+* 优化前端主布局 ([067de80](https://github.com/YellowSeaa/PromptWorks/commit/067de80355a0883193820ccda8be8117ad64ff97))
+* 增加前端主题色切换 ([59d5070](https://github.com/YellowSeaa/PromptWorks/commit/59d50709831a6b54d91ddce9e12a8196aff89f30))
+
+### Bug Fixes
+
+* 修复顶部下拉按钮点击失效 ([b885770](https://github.com/YellowSeaa/PromptWorks/commit/b885770962afa6c204cc3c9a7f177dc9ce164c71))
+* 恢复顶部按钮悬浮提示 ([add3fd6](https://github.com/YellowSeaa/PromptWorks/commit/add3fd651ae4734f950bfbc430ed8eaf6ddb01fd))
+
 ## [1.2.0-beta.2](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2026-06-12)
 
 ### Bug Fixes
