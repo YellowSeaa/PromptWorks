@@ -1059,7 +1059,7 @@ export const messages = {
         },
         fields: {
           overall_advice: '总体建议',
-          temperature_advice: '温度建议',
+          parameter_advice: '参数建议',
           model_advice: '模型建议',
           prompt_revision: 'Prompt 改写',
           validation_plan: '验证计划'
@@ -1067,6 +1067,15 @@ export const messages = {
         messages: {
           success: '优化建议已生成',
           failed: '优化建议生成失败'
+        },
+        versionSelect: {
+          title: '选择优化目标版本',
+          description: '当前任务包含多个 Prompt 版本，请选择本次要优化的目标版本。',
+          recommended: '推荐',
+          avgScore: '平均分 {score}',
+          scoredCount: '已评分 {count} 条',
+          noScore: '暂无评分',
+          confirm: '进入优化'
         }
       },
       labels: {
@@ -1137,13 +1146,16 @@ export const messages = {
         issueDesc: '优先展示低分输出中的评分理由',
         currentPrompt: '当前 Prompt',
         workbench: '优化工作台',
+        history: '历史优化记录',
         revision: 'Prompt 改写结果',
         revisionDesc: '可在创建版本前人工调整内容'
       },
       labels: {
         averageScore: '平均分',
         scoreProgress: '已评分 {completed}/{total}',
-        recommendationMeta: '模型：{model} · 生成时间：{time}'
+        recommendationMeta: '模型：{model} · 生成时间：{time}',
+        targetVersion: '目标版本',
+        historyMeta: '{version} · {model} · {time}'
       },
       status: {
         noRecommendation: '暂无优化建议',
@@ -1156,7 +1168,8 @@ export const messages = {
         generate: '生成优化',
         regenerate: '重新生成',
         copy: '复制改写',
-        createVersion: '新增版本'
+        createVersion: '新增版本',
+        showAllHistory: '全部记录'
       },
       placeholders: {
         model: '选择优化模型',
@@ -1173,6 +1186,7 @@ export const messages = {
         noTask: '测试任务不存在',
         noDimensions: '暂无维度评分',
         noIssues: '暂无低分问题归因',
+        noHistory: '暂无历史优化记录',
         noPromptContent: '暂无 Prompt 内容',
         promptUnknown: '无法识别 Prompt'
       },
@@ -1180,6 +1194,7 @@ export const messages = {
         invalidTask: '无效的测试任务编号',
         loadFailed: '加载 AI 优化页失败，请稍后重试',
         promptScopeInvalid: '无法解析该测试任务唯一归属的 Prompt，可继续生成和复制改写结果，但不能直接新增版本。',
+        promptVersionRequired: '请选择要优化的 Prompt 版本',
         modelRequired: '请选择优化模型',
         generateSuccess: '优化建议已生成',
         generateFailed: '优化建议生成失败',
@@ -2254,7 +2269,7 @@ export const messages = {
         },
         fields: {
           overall_advice: 'Overall Advice',
-          temperature_advice: 'Temperature Advice',
+          parameter_advice: 'Parameter Advice',
           model_advice: 'Model Advice',
           prompt_revision: 'Prompt Revision',
           validation_plan: 'Validation Plan'
@@ -2262,6 +2277,15 @@ export const messages = {
         messages: {
           success: 'Recommendations generated.',
           failed: 'Failed to generate recommendations.'
+        },
+        versionSelect: {
+          title: 'Select Target Version',
+          description: 'This task contains multiple Prompt versions. Choose the version to optimize.',
+          recommended: 'Recommended',
+          avgScore: 'Average {score}',
+          scoredCount: '{count} scored',
+          noScore: 'No scores',
+          confirm: 'Open Optimization'
         }
       },
       labels: {
@@ -2332,13 +2356,16 @@ export const messages = {
         issueDesc: 'Prioritizes reasoning from low-score outputs',
         currentPrompt: 'Current Prompt',
         workbench: 'Optimization Workspace',
+        history: 'Optimization History',
         revision: 'Prompt Revision',
         revisionDesc: 'Edit the content before creating a new version'
       },
       labels: {
         averageScore: 'Average Score',
         scoreProgress: 'Scored {completed}/{total}',
-        recommendationMeta: 'Model: {model} · Generated: {time}'
+        recommendationMeta: 'Model: {model} · Generated: {time}',
+        targetVersion: 'Target Version',
+        historyMeta: '{version} · {model} · {time}'
       },
       status: {
         noRecommendation: 'No recommendation yet',
@@ -2351,7 +2378,8 @@ export const messages = {
         generate: 'Generate',
         regenerate: 'Regenerate',
         copy: 'Copy Revision',
-        createVersion: 'Create Version'
+        createVersion: 'Create Version',
+        showAllHistory: 'All Records'
       },
       placeholders: {
         model: 'Select optimization model',
@@ -2368,6 +2396,7 @@ export const messages = {
         noTask: 'Test task not found',
         noDimensions: 'No dimension scores',
         noIssues: 'No low-score issue diagnosis',
+        noHistory: 'No optimization history',
         noPromptContent: 'No Prompt content',
         promptUnknown: 'Prompt unknown'
       },
@@ -2375,6 +2404,7 @@ export const messages = {
         invalidTask: 'Invalid test task id.',
         loadFailed: 'Failed to load the AI optimization workspace. Please try again later.',
         promptScopeInvalid: 'Unable to resolve a unique Prompt for this test task. You can still generate and copy revisions, but direct version creation is disabled.',
+        promptVersionRequired: 'Please select the Prompt version to optimize.',
         modelRequired: 'Please select an optimization model.',
         generateSuccess: 'Recommendations generated.',
         generateFailed: 'Failed to generate recommendations.',

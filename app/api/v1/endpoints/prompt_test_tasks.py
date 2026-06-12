@@ -44,6 +44,7 @@ from app.services.prompt_test_ai_scoring import (
     build_task_score_summary,
     create_optimization_recommendation,
     get_latest_recommendation,
+    list_recommendations,
     retry_output_score,
     score_task_outputs,
     update_task_ai_scoring_status,
@@ -256,6 +257,7 @@ def create_task_optimization_recommendation(
         recommendation = create_optimization_recommendation(
             db,
             task_id=task_id,
+            prompt_version_id=payload.prompt_version_id,
             evaluator_provider_id=payload.evaluator_provider_id,
             evaluator_model_id=payload.evaluator_model_id,
             evaluator_model_name=payload.evaluator_model_name,
@@ -275,12 +277,31 @@ def create_task_optimization_recommendation(
     response_model=PromptTestOptimizationRecommendationRead | None,
 )
 def get_latest_task_optimization_recommendation(
-    *, db: Session = Depends(get_db), task_id: int
+    *,
+    db: Session = Depends(get_db),
+    task_id: int,
+    prompt_version_id: int | None = Query(default=None),
 ) -> PromptTestOptimizationRecommendation | None:
     """读取测试任务最近一次优化建议。"""
 
     _get_task_or_404(db, task_id)
-    return get_latest_recommendation(db, task_id)
+    return get_latest_recommendation(db, task_id, prompt_version_id=prompt_version_id)
+
+
+@router.get(
+    "/tasks/{task_id}/optimization-recommendations",
+    response_model=list[PromptTestOptimizationRecommendationRead],
+)
+def list_task_optimization_recommendations(
+    *,
+    db: Session = Depends(get_db),
+    task_id: int,
+    prompt_version_id: int | None = Query(default=None),
+) -> Sequence[PromptTestOptimizationRecommendation]:
+    """读取测试任务优化建议历史。"""
+
+    _get_task_or_404(db, task_id)
+    return list_recommendations(db, task_id, prompt_version_id=prompt_version_id)
 
 
 @router.get("/tasks/{task_id}", response_model=PromptTestTaskRead)

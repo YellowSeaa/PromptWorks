@@ -121,6 +121,7 @@ export interface PromptTestAIScoreSummary {
 export interface PromptTestOptimizationRecommendation {
   id: number
   task_id: number
+  prompt_version_id: number | null
   status: 'running' | 'completed' | 'failed'
   evaluator_provider_id: number | null
   evaluator_model_id: number | null

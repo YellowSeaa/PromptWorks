@@ -303,6 +303,11 @@ class PromptTestOptimizationRecommendation(Base):
         nullable=False,
         index=True,
     )
+    prompt_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("prompts_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[PromptTestOptimizationRecommendationStatus] = mapped_column(
         PgEnum(
             PromptTestOptimizationRecommendationStatus,

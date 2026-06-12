@@ -90,7 +90,7 @@ export function retryPromptTestOutputScore(scoreId: number): Promise<PromptTestO
 
 export function createPromptTestOptimizationRecommendation(
   taskId: number,
-  payload: Omit<PromptTestAIScoringConfig, 'enabled'>
+  payload: Omit<PromptTestAIScoringConfig, 'enabled'> & { prompt_version_id: number }
 ): Promise<PromptTestOptimizationRecommendation> {
   return request<PromptTestOptimizationRecommendation>(
     `${BASE_PATH}/tasks/${taskId}/optimization-recommendations`,
@@ -102,10 +102,25 @@ export function createPromptTestOptimizationRecommendation(
 }
 
 export function getLatestPromptTestOptimizationRecommendation(
-  taskId: number
+  taskId: number,
+  promptVersionId?: number | null
 ): Promise<PromptTestOptimizationRecommendation | null> {
+  const query = promptVersionId ? `?prompt_version_id=${promptVersionId}` : ''
   return request<PromptTestOptimizationRecommendation | null>(
-    `${BASE_PATH}/tasks/${taskId}/optimization-recommendations/latest`,
+    `${BASE_PATH}/tasks/${taskId}/optimization-recommendations/latest${query}`,
+    {
+      method: 'GET'
+    }
+  )
+}
+
+export function listPromptTestOptimizationRecommendations(
+  taskId: number,
+  promptVersionId?: number | null
+): Promise<PromptTestOptimizationRecommendation[]> {
+  const query = promptVersionId ? `?prompt_version_id=${promptVersionId}` : ''
+  return request<PromptTestOptimizationRecommendation[]>(
+    `${BASE_PATH}/tasks/${taskId}/optimization-recommendations${query}`,
     {
       method: 'GET'
     }
