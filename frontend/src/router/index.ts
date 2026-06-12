@@ -103,7 +103,7 @@ const router = createRouter({
       path: '/usage',
       name: 'usage-management',
       component: () => import('../views/UsageManagementView.vue'),
-      meta: { menu: 'usage', title: '用量管理' }
+      meta: { menu: 'usage', title: '用量监控' }
     },
     {
       path: '/project-info',

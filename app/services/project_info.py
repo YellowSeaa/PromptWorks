@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,9 @@ GITHUB_LATEST_RELEASE_API = (
 )
 DEFAULT_CONTACT_EMAIL = "hh81300889@gmail.com"
 DEFAULT_VERSION = "v0.0.0"
+VERSION_PATTERN = re.compile(
+    r"^v?(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?:-(?P<pre>[0-9A-Za-z.-]+))?$"
+)
 
 
 def read_current_version() -> str:
@@ -61,6 +65,28 @@ def normalize_version(value: str) -> str:
     return trimmed if trimmed.startswith("v") else f"v{trimmed}"
 
 
+def parse_version(value: str) -> tuple[int, int, int, tuple[int, str | None, str]]:
+    normalized = normalize_version(value)
+    match = VERSION_PATTERN.match(normalized)
+    if not match:
+        return (0, 0, 0, (0, None, normalized))
+
+    prerelease = match.group("pre")
+    prerelease_rank = (1, None, "") if prerelease is None else (0, prerelease, "")
+    return (
+        int(match.group("major")),
+        int(match.group("minor")),
+        int(match.group("patch")),
+        prerelease_rank,
+    )
+
+
+def is_newer_version(latest: str | None, current: str) -> bool:
+    if not latest:
+        return False
+    return parse_version(latest) > parse_version(current)
+
+
 def detect_deployment_type() -> str:
     explicit = os.getenv("PROMPTWORKS_DEPLOYMENT_TYPE")
     if explicit:
@@ -79,30 +105,39 @@ def build_update_guidance(deployment_type: str) -> ProjectUpdateGuidance:
     if deployment_type == "docker":
         return ProjectUpdateGuidance(
             deployment_type=deployment_type,
-            title="Docker 部署更新建议",
+            title="Docker 部署更新命令",
             steps=[
-                "拉取最新后端与前端镜像，例如 yellowseaa/promptworks:backend-main-latest 与 frontend-main-latest。",
-                "在部署目录执行 docker compose pull，再执行 docker compose up -d。",
-                "更新完成后检查后端 /api/v1/project-info/summary 返回的版本号。",
+                "在部署目录复制并执行以下命令，拉取最新镜像并重启服务。",
+                "更新完成后重新打开项目信息页，确认当前版本已变化。",
+            ],
+            commands=[
+                "docker compose pull",
+                "docker compose up -d",
             ],
         )
     if deployment_type == "source":
         return ProjectUpdateGuidance(
             deployment_type=deployment_type,
-            title="源码部署更新建议",
+            title="源码部署更新命令",
             steps=[
-                "在源码目录确认当前分支和未提交改动，必要时先备份或提交。",
-                "执行 git pull 获取最新代码，然后运行 uv sync 与 npm ci 安装依赖。",
-                "执行数据库迁移、后端测试和前端构建后，再重启服务。",
+                "在源码目录确认无未保存改动后，复制并执行以下命令更新代码与依赖。",
+                "更新完成后重启后端与前端服务，并再次检查版本。",
+            ],
+            commands=[
+                "git pull --ff-only",
+                "uv sync",
+                "npm --prefix frontend ci",
+                "uv run alembic upgrade head",
             ],
         )
     return ProjectUpdateGuidance(
         deployment_type=deployment_type,
-        title="未知部署方式更新建议",
+        title="更新命令待确认",
         steps=[
             "当前环境无法可靠识别源码部署或 Docker 部署。",
-            "请先确认实际部署方式，再参考 README 中对应的更新步骤。",
+            "请先确认实际部署方式，再查看发布说明中的更新步骤。",
         ],
+        commands=[],
     )
 
 
@@ -157,7 +192,7 @@ def get_project_version_info(
     return ProjectVersionInfo(
         current=current,
         latest=normalized_latest,
-        has_update=bool(normalized_latest and normalized_latest != current),
+        has_update=is_newer_version(normalized_latest, current),
         release_url=release_url,
         deployment_type=deployment_type,
         update_guidance=build_update_guidance(deployment_type),
@@ -173,11 +208,15 @@ def build_project_info_summary(db: Session) -> ProjectInfoSummary:
 
 
 def check_latest_project_version() -> ProjectVersionInfo:
-    response = httpx.get(
-        GITHUB_LATEST_RELEASE_API,
-        timeout=5.0,
-        headers={"Accept": "application/vnd.github+json"},
-    )
+    try:
+        response = httpx.get(
+            GITHUB_LATEST_RELEASE_API,
+            timeout=5.0,
+            headers={"Accept": "application/vnd.github+json"},
+        )
+    except httpx.HTTPError:
+        return get_project_version_info()
+
     if response.status_code >= 400:
         return get_project_version_info()
 

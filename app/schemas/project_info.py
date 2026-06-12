@@ -25,6 +25,7 @@ class ProjectUpdateGuidance(BaseModel):
     deployment_type: str
     title: str
     steps: list[str]
+    commands: list[str] = Field(default_factory=list)
 
 
 class ProjectVersionInfo(BaseModel):

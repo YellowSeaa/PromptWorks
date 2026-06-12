@@ -22,6 +22,7 @@ export interface ProjectUpdateGuidanceResponse {
   deployment_type: string
   title: string
   steps: string[]
+  commands: string[]
 }
 
 export interface ProjectVersionInfoResponse {

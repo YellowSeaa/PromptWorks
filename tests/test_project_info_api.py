@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -145,3 +146,73 @@ def test_project_info_check_version_uses_latest_release(
         "unknown",
     }
     assert payload["update_guidance"]["steps"]
+
+
+def test_project_info_check_version_ignores_older_release(
+    client: TestClient, monkeypatch
+) -> None:
+    class DummyResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, str]:
+            return {
+                "tag_name": "v0.1.0",
+                "html_url": "https://github.com/YellowSeaa/PromptWorks/releases/tag/v0.1.0",
+            }
+
+    def fake_get(url: str, timeout: float, headers: dict[str, str]) -> DummyResponse:
+        return DummyResponse()
+
+    monkeypatch.setattr("app.services.project_info.httpx.get", fake_get)
+
+    response = client.get("/api/v1/project-info/version/check")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["latest"] == "v0.1.0"
+    assert payload["has_update"] is False
+
+
+def test_project_info_update_commands_match_deployment_type(monkeypatch) -> None:
+    from app.services.project_info import get_project_version_info
+
+    monkeypatch.setenv("PROMPTWORKS_VERSION", "v1.0.0")
+    monkeypatch.setenv("PROMPTWORKS_DEPLOYMENT_TYPE", "docker")
+
+    docker_info = get_project_version_info(latest="v1.2.0")
+
+    assert docker_info.has_update is True
+    assert docker_info.update_guidance.title == "Docker 部署更新命令"
+    assert docker_info.update_guidance.commands == [
+        "docker compose pull",
+        "docker compose up -d",
+    ]
+
+    monkeypatch.setenv("PROMPTWORKS_DEPLOYMENT_TYPE", "source")
+
+    source_info = get_project_version_info(latest="v1.2.0")
+
+    assert source_info.update_guidance.title == "源码部署更新命令"
+    assert source_info.update_guidance.commands == [
+        "git pull --ff-only",
+        "uv sync",
+        "npm --prefix frontend ci",
+        "uv run alembic upgrade head",
+    ]
+
+
+def test_project_info_check_version_degrades_when_github_unavailable(
+    client: TestClient, monkeypatch
+) -> None:
+    def fake_get(url: str, timeout: float, headers: dict[str, str]) -> object:
+        raise httpx.ConnectError("network unavailable")
+
+    monkeypatch.setattr("app.services.project_info.httpx.get", fake_get)
+
+    response = client.get("/api/v1/project-info/version/check")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["current"] == _current_version()
+    assert payload["latest"] is None
+    assert payload["has_update"] is False

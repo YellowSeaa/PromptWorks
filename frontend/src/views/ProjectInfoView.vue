@@ -5,23 +5,23 @@
     <template v-else-if="summary">
       <section class="hero-card">
         <div class="hero-card__main">
-          <div class="project-mark">PW</div>
+          <img class="project-logo" src="/logo.png" alt="PromptWorks" />
           <div class="project-copy">
             <div class="project-kicker">{{ t('projectInfo.kicker') }}</div>
             <h2>{{ summary.project.name }}</h2>
-            <p>{{ summary.project.description }}</p>
+            <p>{{ t('projectInfo.description') }}</p>
             <div class="project-actions">
               <el-button :icon="Link" type="primary" @click="openExternal(summary.project.github_url)">
-                GitHub
-              </el-button>
-              <el-button :icon="Message" @click="openEmail">
-                {{ summary.project.contact_email }}
+                {{ t('projectInfo.repository') }}
               </el-button>
               <el-tooltip :content="t('projectInfo.tutorialComingSoon')" placement="top">
                 <el-button :icon="Reading" disabled>
                   {{ t('projectInfo.tutorial') }}
                 </el-button>
               </el-tooltip>
+              <el-button :icon="Message" @click="contactDialogVisible = true">
+                {{ t('projectInfo.contactAuthor') }}
+              </el-button>
             </div>
           </div>
         </div>
@@ -38,11 +38,16 @@
         <el-col
           v-for="stat in statisticCards"
           :key="stat.key"
-          :xs="12"
-          :sm="8"
+          :xs="24"
+          :sm="12"
           :lg="6"
         >
-          <el-card class="stat-card" shadow="hover">
+          <el-card
+            class="stat-card"
+            :class="{ 'stat-card--clickable': stat.routeName }"
+            shadow="hover"
+            @click="navigateToStat(stat.routeName)"
+          >
             <div class="stat-card__icon">
               <el-icon><component :is="stat.icon" /></el-icon>
             </div>
@@ -55,7 +60,7 @@
       </el-row>
 
       <el-row :gutter="16" class="detail-row">
-        <el-col :xs="24" :lg="14">
+        <el-col :xs="24">
           <el-card class="version-card" shadow="hover">
             <template #header>
               <div class="card-header">
@@ -63,14 +68,23 @@
                   <span>{{ t('projectInfo.version.title') }}</span>
                   <p>{{ t('projectInfo.version.subtitle') }}</p>
                 </div>
-                <el-button
-                  type="primary"
-                  :icon="Refresh"
-                  :loading="checking"
-                  @click="handleCheckVersion"
-                >
-                  {{ t('projectInfo.version.check') }}
-                </el-button>
+                <div class="version-actions">
+                  <el-button
+                    v-if="versionInfo.release_url"
+                    :icon="Link"
+                    @click="openExternal(versionInfo.release_url)"
+                  >
+                    {{ t('projectInfo.version.releaseNotes') }}
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    :icon="Refresh"
+                    :loading="checking"
+                    @click="handleCheckVersion"
+                  >
+                    {{ t('projectInfo.version.check') }}
+                  </el-button>
+                </div>
               </div>
             </template>
 
@@ -96,7 +110,29 @@
               :closable="false"
               class="version-alert"
               :title="t('projectInfo.version.updateAvailable')"
-            />
+            >
+              <template #default>
+                <div class="update-command-panel">
+                  <div
+                    v-for="command in updateCommands"
+                    :key="command"
+                    class="update-command-panel__line"
+                  >
+                    <code>{{ command }}</code>
+                  </div>
+                  <el-button
+                    v-if="updateCommands.length"
+                    class="copy-command-button"
+                    size="small"
+                    type="success"
+                    plain
+                    @click="copyUpdateCommands"
+                  >
+                    {{ t('projectInfo.version.copyCommands') }}
+                  </el-button>
+                </div>
+              </template>
+            </el-alert>
             <el-alert
               v-else
               type="info"
@@ -108,34 +144,27 @@
           </el-card>
         </el-col>
 
-        <el-col :xs="24" :lg="10">
-          <el-card class="guidance-card" shadow="hover">
-            <template #header>
-              <div class="card-header card-header--plain">
-                <span>{{ versionInfo.update_guidance.title }}</span>
-              </div>
-            </template>
-            <ol class="guidance-list">
-              <li v-for="step in versionInfo.update_guidance.steps" :key="step">
-                {{ step }}
-              </li>
-            </ol>
-            <el-button
-              v-if="versionInfo.release_url"
-              class="release-link"
-              text
-              type="primary"
-              :icon="Link"
-              @click="openExternal(versionInfo.release_url)"
-            >
-              {{ t('projectInfo.version.releaseNotes') }}
-            </el-button>
-          </el-card>
-        </el-col>
       </el-row>
     </template>
 
     <el-empty v-else :description="t('projectInfo.empty')" />
+
+    <el-dialog v-model="contactDialogVisible" :title="t('projectInfo.contactDialog.title')" width="420px">
+      <div class="contact-dialog">
+        <p>{{ t('projectInfo.contactDialog.message') }}</p>
+        <a :href="`mailto:${summary?.project.contact_email ?? ''}`">
+          {{ summary?.project.contact_email }}
+        </a>
+      </div>
+      <template #footer>
+        <el-button @click="contactDialogVisible = false">
+          {{ t('common.cancel') }}
+        </el-button>
+        <el-button type="primary" :icon="Message" @click="openEmail">
+          {{ t('projectInfo.contactDialog.emailAction') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -143,17 +172,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { useRouter, type RouteRecordName } from 'vue-router'
 import {
   Collection,
   Cpu,
-  Files,
   Histogram,
   Link,
   Memo,
   Message,
   Reading,
-  Refresh,
-  Tickets
+  Refresh
 } from '@element-plus/icons-vue'
 import {
   checkProjectVersion,
@@ -163,10 +191,12 @@ import {
 } from '../api/projectInfo'
 
 const { t, locale } = useI18n()
+const router = useRouter()
 
 const summary = ref<ProjectInfoSummaryResponse | null>(null)
 const loading = ref(false)
 const checking = ref(false)
+const contactDialogVisible = ref(false)
 
 const versionInfo = computed<ProjectVersionInfoResponse>(() => {
   if (summary.value) {
@@ -181,10 +211,13 @@ const versionInfo = computed<ProjectVersionInfoResponse>(() => {
     update_guidance: {
       deployment_type: 'unknown',
       title: '',
-      steps: []
+      steps: [],
+      commands: []
     }
   }
 })
+
+const updateCommands = computed(() => versionInfo.value.update_guidance.commands)
 
 const statisticCards = computed(() => {
   const stats = summary.value?.statistics
@@ -193,37 +226,29 @@ const statisticCards = computed(() => {
       key: 'providers',
       label: t('projectInfo.stats.providers'),
       value: stats?.provider_count ?? 0,
-      icon: Cpu
+      icon: Cpu,
+      routeName: 'llm-management'
     },
     {
       key: 'models',
       label: t('projectInfo.stats.models'),
       value: stats?.model_count ?? 0,
-      icon: Histogram
+      icon: Histogram,
+      routeName: 'llm-management'
     },
     {
       key: 'prompts',
       label: t('projectInfo.stats.prompts'),
       value: stats?.prompt_count ?? 0,
-      icon: Collection
-    },
-    {
-      key: 'versions',
-      label: t('projectInfo.stats.promptVersions'),
-      value: stats?.prompt_version_count ?? 0,
-      icon: Files
+      icon: Collection,
+      routeName: 'prompt-management'
     },
     {
       key: 'tasks',
       label: t('projectInfo.stats.testTasks'),
       value: stats?.test_task_count ?? 0,
-      icon: Memo
-    },
-    {
-      key: 'units',
-      label: t('projectInfo.stats.testUnits'),
-      value: stats?.test_unit_count ?? 0,
-      icon: Tickets
+      icon: Memo,
+      routeName: 'test-job-management'
     }
   ]
 })
@@ -262,6 +287,22 @@ function openEmail() {
   const email = summary.value?.project.contact_email
   if (!email) return
   window.location.href = `mailto:${email}`
+}
+
+function navigateToStat(routeName?: RouteRecordName) {
+  if (!routeName) return
+  router.push({ name: routeName })
+}
+
+async function copyUpdateCommands() {
+  if (!updateCommands.value.length) return
+  try {
+    await navigator.clipboard.writeText(updateCommands.value.join('\n'))
+    ElMessage.success(t('projectInfo.messages.copySuccess'))
+  } catch (error) {
+    console.error(error)
+    ElMessage.error(t('projectInfo.messages.copyFailed'))
+  }
 }
 
 async function loadSummary() {
@@ -330,18 +371,14 @@ onMounted(() => {
   min-width: 0;
 }
 
-.project-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.project-logo {
   flex: 0 0 64px;
   width: 64px;
   height: 64px;
   border-radius: 8px;
-  color: #ffffff;
-  background: #1f2d3d;
-  font-size: 22px;
-  font-weight: 700;
+  object-fit: contain;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgb(31 35 41 / 10%);
 }
 
 .project-copy {
@@ -404,6 +441,18 @@ onMounted(() => {
   min-height: 96px;
 }
 
+.stat-card--clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.stat-card--clickable:hover {
+  border-color: var(--el-color-primary-light-5);
+  transform: translateY(-2px);
+}
+
 .stat-card__icon {
   display: flex;
   align-items: center;
@@ -433,8 +482,7 @@ onMounted(() => {
   row-gap: 16px;
 }
 
-.version-card,
-.guidance-card {
+.version-card {
   height: 100%;
 }
 
@@ -456,8 +504,11 @@ onMounted(() => {
   font-size: 13px;
 }
 
-.card-header--plain {
-  justify-content: flex-start;
+.version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .version-summary {
@@ -490,19 +541,32 @@ onMounted(() => {
   margin-top: 16px;
 }
 
-.guidance-list {
-  margin: 0;
-  padding-left: 20px;
-  color: var(--header-text-color);
-}
-
-.guidance-list li + li {
+.update-command-panel {
   margin-top: 10px;
 }
 
-.release-link {
-  margin-top: 16px;
-  padding-left: 0;
+.update-command-panel__line {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+  color: var(--header-text-color);
+  font-size: 13px;
+}
+
+.copy-command-button {
+  margin-top: 10px;
+}
+
+.contact-dialog p {
+  margin: 0 0 12px;
+  color: var(--text-weak-color);
+  line-height: 1.7;
+}
+
+.contact-dialog a {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {
@@ -516,6 +580,15 @@ onMounted(() => {
 
   .version-summary {
     grid-template-columns: 1fr;
+  }
+
+  .card-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .version-actions {
+    justify-content: flex-start;
   }
 }
 

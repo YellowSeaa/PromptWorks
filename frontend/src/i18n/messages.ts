@@ -39,7 +39,7 @@ export const messages = {
       class: '分类管理',
       tag: '标签管理',
       llm: 'LLMs 管理',
-      usage: '用量管理',
+      usage: '用量监控',
       projectInfo: '项目信息'
     },
     promptManagement: {
@@ -442,7 +442,7 @@ export const messages = {
       }
     },
     usageManagement: {
-      headerTitle: '用量管理',
+      headerTitle: '用量监控',
       headerDescription: '汇总各模型与团队的调用用量，为配额管理和成本分析提供数据支撑。',
       datePicker: {
         rangeSeparator: '至',
@@ -492,10 +492,18 @@ export const messages = {
     },
     projectInfo: {
       kicker: '项目总览',
+      description: 'PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决方案，支持 Prompt 生命周期管理、模型配置、版本对比与评估实验。',
       currentVersion: '当前版本',
+      repository: '项目仓库',
+      contactAuthor: '联系作者',
       tutorial: '使用教程',
       tutorialComingSoon: '使用教程入口已预留，后续补充内容',
       empty: '暂未获取到项目信息',
+      contactDialog: {
+        title: '联系作者',
+        message: '欢迎联系我交流 PromptWorks 的使用反馈、部署问题或功能建议。',
+        emailAction: '发送邮件'
+      },
       stats: {
         providers: 'AI 供应商',
         models: '模型',
@@ -511,17 +519,18 @@ export const messages = {
       },
       version: {
         title: '版本检查与更新',
-        subtitle: '检查 GitHub 最新 Release，并根据部署方式给出更新步骤。',
+        subtitle: '检查 GitHub 最新 Release，并提供发布说明与可复制的更新命令。',
         check: '检查新版本',
         current: '当前版本',
         latest: '最新版本',
         deployment: '部署方式',
-        updateAvailable: '发现可用新版本，请按右侧步骤完成更新。',
+        updateAvailable: '发现可用新版本，可查看发布说明或复制下方命令手动更新。',
         upToDate: '当前已是最新版本。',
         notChecked: '尚未检查远端最新版本。',
         remoteUnknown: '未获取到',
         remoteUnknownHint: '暂未获取到远端最新版本，可稍后重试或查看 GitHub Releases。',
         releaseNotes: '查看发布说明',
+        copyCommands: '复制更新命令',
         statusUpdate: '可更新',
         statusLatest: '已是最新',
         statusRemoteUnknown: '远端未知'
@@ -529,7 +538,9 @@ export const messages = {
       messages: {
         loadFailed: '加载项目信息失败，请稍后重试',
         checkSuccess: '版本检查完成',
-        checkFailed: '检查版本失败，请稍后重试'
+        checkFailed: '检查版本失败，请稍后重试',
+        copySuccess: '更新命令已复制',
+        copyFailed: '复制失败，请手动选择命令'
       }
     },
     promptVersionCreate: {
@@ -1290,7 +1301,7 @@ export const messages = {
       class: 'Class Management',
       tag: 'Tag Management',
       llm: 'LLM Management',
-      usage: 'Usage Management',
+      usage: 'Usage Monitor',
       projectInfo: 'Project Info'
     },
     promptManagement: {
@@ -1693,7 +1704,7 @@ export const messages = {
       }
     },
     usageManagement: {
-      headerTitle: 'Usage Management',
+      headerTitle: 'Usage Monitor',
       headerDescription: 'Aggregate model and team usage to support quota management and cost analysis.',
       datePicker: {
         rangeSeparator: 'to',
@@ -1743,10 +1754,18 @@ export const messages = {
     },
     projectInfo: {
       kicker: 'Project Overview',
+      description: 'PromptWorks is a full-stack solution for prompt asset management and LLM operations, covering prompt lifecycle management, model configuration, version comparison, and evaluation experiments.',
       currentVersion: 'Current Version',
+      repository: 'Project Repository',
+      contactAuthor: 'Contact Author',
       tutorial: 'Tutorial',
       tutorialComingSoon: 'Tutorial entry reserved. Content will be added later.',
       empty: 'Project information is unavailable.',
+      contactDialog: {
+        title: 'Contact Author',
+        message: 'You are welcome to reach out about PromptWorks feedback, deployment questions, or feature ideas.',
+        emailAction: 'Send Email'
+      },
       stats: {
         providers: 'AI Providers',
         models: 'Models',
@@ -1762,17 +1781,18 @@ export const messages = {
       },
       version: {
         title: 'Version Check and Update',
-        subtitle: 'Check the latest GitHub Release and show update steps for the current deployment.',
+        subtitle: 'Check the latest GitHub Release and provide release notes plus copyable update commands.',
         check: 'Check Version',
         current: 'Current',
         latest: 'Latest',
         deployment: 'Deployment',
-        updateAvailable: 'A new version is available. Follow the steps on the right to update.',
+        updateAvailable: 'A new version is available. View release notes or copy the commands below to update manually.',
         upToDate: 'You are already on the latest version.',
         notChecked: 'Latest remote version has not been checked yet.',
         remoteUnknown: 'Unavailable',
         remoteUnknownHint: 'Latest remote version is unavailable. Try again later or check GitHub Releases.',
         releaseNotes: 'View Release Notes',
+        copyCommands: 'Copy Update Commands',
         statusUpdate: 'Update Available',
         statusLatest: 'Latest',
         statusRemoteUnknown: 'Remote Unknown'
@@ -1780,7 +1800,9 @@ export const messages = {
       messages: {
         loadFailed: 'Failed to load project information. Try again later.',
         checkSuccess: 'Version check completed.',
-        checkFailed: 'Failed to check version. Try again later.'
+        checkFailed: 'Failed to check version. Try again later.',
+        copySuccess: 'Update commands copied.',
+        copyFailed: 'Copy failed. Please select the commands manually.'
       }
     },
     promptVersionCreate: {
