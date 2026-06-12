@@ -172,12 +172,19 @@
                   />
                 </el-form-item>
                 <el-form-item label-position="top" :label="t('promptTestCreate.form.fields.temperature')">
+                  <el-segmented
+                    v-model="set.temperatureMode"
+                    :options="temperatureModeOptions"
+                    class="temperature-mode"
+                    @change="handleTemperatureModeChange(set)"
+                  />
                   <div class="inline-control">
                     <el-slider
                       v-model="set.temperature"
                       :min="0"
                       :max="2"
                       :step="0.01"
+                      :disabled="set.temperatureMode === 'llm_default'"
                     />
                     <el-input-number
                       v-model="set.temperature"
@@ -185,6 +192,7 @@
                       :max="2"
                       :step="0.1"
                       :precision="2"
+                      :disabled="set.temperatureMode === 'llm_default'"
                     />
                   </div>
                 </el-form-item>
@@ -427,7 +435,8 @@ interface VersionOption {
 interface ParameterSet {
   id: number
   label: string
-  temperature: number
+  temperatureMode: 'llm_default' | 'explicit'
+  temperature: number | null
   topP: number | null
   parametersJson: string
 }
@@ -444,7 +453,7 @@ interface UnitDraft {
   description: string | null
   model_name: string
   llm_provider_id: number
-  temperature: number
+  temperature: number | null
   top_p: number | null
   rounds: number
   prompt_version_id: number
@@ -458,7 +467,8 @@ interface UnitDraft {
 
 interface ParameterSetSource {
   label: string
-  temperature: number
+  temperature: number | null
+  temperatureMode: 'llm_default' | 'explicit'
   top_p: number | null
   parameters: Record<string, unknown> | null
 }
@@ -504,6 +514,17 @@ let suppressPromptWatcher = false
 
 let parameterSetUid = 1
 const parameterSets = ref<ParameterSet[]>([createParameterSet()])
+
+const temperatureModeOptions = computed(() => [
+  {
+    label: t('promptTestCreate.form.temperatureModes.llmDefault'),
+    value: 'llm_default'
+  },
+  {
+    label: t('promptTestCreate.form.temperatureModes.explicit'),
+    value: 'explicit'
+  }
+])
 
 const versionOptions = computed<VersionOption[]>(() => {
   const prompt = selectedPrompt.value
@@ -893,7 +914,8 @@ function createParameterSet(): ParameterSet {
   return {
     id: parameterSetUid++,
     label: '',
-    temperature: 0.7,
+    temperatureMode: 'llm_default',
+    temperature: null,
     topP: 1.0,
     parametersJson: ''
   }
@@ -1032,15 +1054,23 @@ function extractParameterSetSources(
       const record = toRecord(item)
       if (!record) return null
       const temperature =
-        typeof record.temperature === 'number'
+        record.temperature === null
+          ? null
+          : typeof record.temperature === 'number'
           ? record.temperature
           : Number(record.temperature)
+      const rawMode = record.temperature_mode ?? record.temperatureMode
+      const temperatureMode =
+        rawMode === 'llm_default' || temperature === null
+          ? 'llm_default'
+          : 'explicit'
       const topSource = record.top_p ?? record.topP
       const topValue =
         topSource === null || topSource === undefined ? null : Number(topSource)
       return {
         label: typeof record.label === 'string' ? record.label : '',
-        temperature: Number.isFinite(temperature) ? Number(temperature) : 0.7,
+        temperature: Number.isFinite(temperature) ? Number(temperature) : null,
+        temperatureMode,
         top_p: Number.isFinite(topValue) ? Number(topValue) : null,
         parameters: toRecord(record.parameters)
       } as ParameterSetSource
@@ -1074,7 +1104,11 @@ function deriveParameterSetsFromUnits(units: PromptTestUnit[]): ParameterSetSour
       temperature:
         typeof unit.temperature === 'number' && Number.isFinite(unit.temperature)
           ? unit.temperature
-          : 0.7,
+          : null,
+      temperatureMode:
+        typeof unit.temperature === 'number' && Number.isFinite(unit.temperature)
+          ? 'explicit'
+          : 'llm_default',
       top_p:
         typeof unit.top_p === 'number' && Number.isFinite(unit.top_p)
           ? unit.top_p
@@ -1095,7 +1129,10 @@ function applyParameterSetSources(sources: ParameterSetSource[]) {
   parameterSets.value = sources.map((source) => ({
     id: nextId++,
     label: source.label ?? '',
-    temperature: Number.isFinite(source.temperature) ? source.temperature : 0.7,
+    temperatureMode:
+      source.temperatureMode ??
+      (source.temperature === null ? 'llm_default' : 'explicit'),
+    temperature: Number.isFinite(source.temperature) ? source.temperature : null,
     topP:
       typeof source.top_p === 'number' && Number.isFinite(source.top_p)
         ? source.top_p
@@ -1103,6 +1140,15 @@ function applyParameterSetSources(sources: ParameterSetSource[]) {
     parametersJson: formatParametersJson(source.parameters ?? null)
   }))
   parameterSetUid = nextId
+}
+
+function handleTemperatureModeChange(set: ParameterSet) {
+  if (set.temperatureMode === 'explicit' && !Number.isFinite(set.temperature)) {
+    set.temperature = 0.7
+  }
+  if (set.temperatureMode === 'llm_default') {
+    set.temperature = null
+  }
 }
 
 function inferRoundsFromUnits(units: PromptTestUnit[]): number {
@@ -1467,7 +1513,8 @@ async function handleSubmit() {
   let preparedParameterSets: Array<{
     id: number
     label: string
-    temperature: number
+    temperatureMode: 'llm_default' | 'explicit'
+    temperature: number | null
     topP: number | null
     parameters: Record<string, unknown> | undefined
   }>
@@ -1475,9 +1522,10 @@ async function handleSubmit() {
     preparedParameterSets = parameterSets.value.map((set, index) => {
       const label = set.label.trim() || defaultParameterSetLabel(index)
       const parameters = parseParameterJson(set.parametersJson, label)
-      const temperature = Number.isFinite(set.temperature)
-        ? Number(set.temperature)
-        : 0.7
+      const temperature =
+        set.temperatureMode === 'explicit' && Number.isFinite(set.temperature)
+          ? Number(set.temperature)
+          : null
       const topP =
         set.topP === null || Number.isNaN(Number(set.topP))
           ? null
@@ -1485,6 +1533,7 @@ async function handleSubmit() {
       return {
         id: set.id,
         label,
+        temperatureMode: set.temperatureMode,
         temperature,
         topP,
         parameters
@@ -1580,6 +1629,7 @@ async function handleSubmit() {
         parameter_sets: preparedParameterSets.map((set, index) => ({
           id: set.id,
           label: set.label,
+          temperature_mode: set.temperatureMode,
           temperature: set.temperature,
           top_p: set.topP,
           parameters: set.parameters ?? {}

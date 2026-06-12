@@ -13,6 +13,7 @@
         <p class="page-desc">
           <span>{{ t('promptTestResult.fields.version') }}: {{ unit?.promptVersion ?? '-' }}</span>
           <span>{{ t('promptTestResult.fields.model') }}: {{ unit?.modelName ?? '-' }}</span>
+          <span>{{ t('promptTestResult.fields.temperature') }}: {{ formatUnitTemperature(unit) }}</span>
           <span>{{ t('promptTestResult.fields.parameters') }}: {{ unit?.parameterSet ?? '-' }}</span>
         </p>
       </div>
@@ -381,6 +382,16 @@ const unitMissingInfo = computed(() => resolveUnitMissingOutputInfo())
 const parameterEntries = computed(() =>
   unit.value ? buildParameterEntries(unit.value.parameters) : []
 )
+
+function formatUnitTemperature(source: PromptTestResultUnit | null): string {
+  if (!source) return '-'
+  if (source.temperatureMode === 'llm_default') {
+    return t('promptTestResult.temperatureModes.llmDefault')
+  }
+  return typeof source.temperature === 'number' && Number.isFinite(source.temperature)
+    ? source.temperature.toFixed(2)
+    : '-'
+}
 
 const unitOutputs = computed(() => unit.value?.outputs ?? [])
 const variableFilter = reactive({

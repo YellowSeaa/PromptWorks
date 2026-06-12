@@ -100,7 +100,7 @@ class PromptTestUnit(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
     llm_provider_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    temperature: Mapped[float] = mapped_column(nullable=False, default=0.7)
+    temperature: Mapped[float | None] = mapped_column(nullable=True)
     top_p: Mapped[float | None] = mapped_column(nullable=True)
     rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     prompt_template: Mapped[str | None] = mapped_column(Text, nullable=True)
