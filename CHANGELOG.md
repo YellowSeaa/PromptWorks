@@ -1,3 +1,10 @@
+## [1.2.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.1.0...v1.2.0-beta.1) (2026-06-12)
+
+### Features
+
+* 支持按版本生成AI优化建议 ([68032cb](https://github.com/YellowSeaa/PromptWorks/commit/68032cbbd7cb29c2ffee53660cc1d4201cc9c44f))
+* 新增项目信息页 ([e3b50ec](https://github.com/YellowSeaa/PromptWorks/commit/e3b50ecf3608c1ef9c7508b61901b40fee5667c6))
+
 ## [1.1.0](https://github.com/YellowSeaa/PromptWorks/compare/v1.0.0...v1.1.0) (2026-06-12)
 
 ### Features
