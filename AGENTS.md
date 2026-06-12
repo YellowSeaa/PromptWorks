@@ -20,3 +20,4 @@ PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决
    - 重大变更请在 commit body 中标注 `BREAKING CHANGE:`，触发 major 版本升级
 9. 版本号由 [semantic-release](https://semantic-release.gitbook.io/) 自动管理，无需手动更新版本号或 CHANGELOG.md
 10. 若要求更新README.md，需要同步修改英文版的docs/README_en.md
+11. 若用户要求 AI 更新 `main` 分支或协助完成正式版发布，在完成 `main` 更新后，必须询问用户是否需要同步更新 `dev` 分支；同步方式优先建议从 `main` 到 `dev` 发起同步 PR，避免自动合并绕过冲突检查或分支保护。
