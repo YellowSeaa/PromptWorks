@@ -111,6 +111,18 @@ def test_ci_uses_resolvable_setup_uv_version_tag():
     assert re.fullmatch(r"v\d+\.\d+\.\d+", match.group(1))
 
 
+def test_ci_uses_node24_ready_action_versions():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "uses: actions/checkout@v6" in workflow
+    assert "uses: actions/setup-python@v6" in workflow
+    assert "uses: actions/setup-node@v6" in workflow
+    assert "uses: docker/setup-qemu-action@v4" in workflow
+    assert "uses: docker/setup-buildx-action@v4" in workflow
+    assert "uses: docker/login-action@v4" in workflow
+    assert "uses: docker/build-push-action@v7" in workflow
+
+
 def test_alembic_revision_ids_fit_version_column_limit():
     for migration_path in sorted((ROOT / "alembic" / "versions").glob("*.py")):
         module = ast.parse(migration_path.read_text(encoding="utf-8"))
