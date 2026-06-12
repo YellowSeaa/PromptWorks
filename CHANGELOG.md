@@ -1,3 +1,14 @@
+## [1.1.0](https://github.com/YellowSeaa/PromptWorks/compare/v1.0.0...v1.1.0) (2026-06-12)
+
+### Features
+
+* 支持测试任务使用 LLM 默认温度 ([ef4ada6](https://github.com/YellowSeaa/PromptWorks/commit/ef4ada6171f41857f888d1a4fc58b53382a1b564))
+
+### Bug Fixes
+
+* 修复测试重试与流式错误处理 ([9cf9ec6](https://github.com/YellowSeaa/PromptWorks/commit/9cf9ec603ab077451865a525e28892c252d7ac11))
+* 修正默认温度迁移版本号长度 ([2e405c1](https://github.com/YellowSeaa/PromptWorks/commit/2e405c16356290c29af361ef71703f138c8c21a2))
+
 ## [1.1.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.0.0...v1.1.0-beta.1) (2026-06-12)
 
 ### Features
