@@ -355,7 +355,11 @@ async function handleCheckVersion() {
       summary.value = { ...summary.value, version }
     }
     writeProjectVersionCheckCache(version)
-    ElMessage.success(t('projectInfo.messages.checkSuccess'))
+    if (version.check_status === 'failed') {
+      ElMessage.error(t('projectInfo.messages.checkFailed'))
+    } else {
+      ElMessage.success(t('projectInfo.messages.checkSuccess'))
+    }
   } catch (error) {
     console.error(error)
     ElMessage.error(t('projectInfo.messages.checkFailed'))
@@ -422,26 +426,26 @@ onUnmounted(() => {
 }
 
 .project-kicker {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: var(--el-color-primary);
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
 }
 
 .project-copy h2 {
   margin: 0;
   color: var(--header-text-color);
-  font-size: 42px;
+  font-size: 36px;
   font-weight: 800;
-  line-height: 1.12;
+  line-height: 1.15;
 }
 
 .project-copy p {
   max-width: 980px;
-  margin: 18px 0 28px;
+  margin: 14px 0 24px;
   color: var(--text-weak-color);
-  font-size: 20px;
-  line-height: 1.75;
+  font-size: 18px;
+  line-height: 1.7;
 }
 
 .project-actions {
@@ -454,8 +458,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 14px;
-  min-width: 220px;
+  gap: 12px;
+  min-width: 250px;
 }
 
 .version-label {
@@ -466,9 +470,10 @@ onUnmounted(() => {
 
 .hero-card__version strong {
   color: var(--header-text-color);
-  font-size: 38px;
+  font-size: 28px;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .hero-card__version :deep(.el-tag) {
@@ -656,15 +661,19 @@ onUnmounted(() => {
   }
 
   .project-copy h2 {
-    font-size: 32px;
+    font-size: 30px;
   }
 
   .project-kicker {
-    font-size: 17px;
+    font-size: 16px;
   }
 
   .project-copy p {
-    font-size: 17px;
+    font-size: 16px;
+  }
+
+  .hero-card__version strong {
+    font-size: 24px;
   }
 }
 </style>

@@ -220,3 +220,27 @@ def test_project_info_check_version_degrades_when_github_unavailable(
     assert payload["latest"] is None
     assert payload["has_update"] is False
     assert payload["check_status"] == "failed"
+
+
+def test_project_info_check_version_marks_github_rate_limit_as_failed(
+    client: TestClient, monkeypatch
+) -> None:
+    class DummyResponse:
+        status_code = 403
+
+        def json(self) -> dict[str, str]:
+            return {"message": "API rate limit exceeded"}
+
+    def fake_get(url: str, timeout: float, headers: dict[str, str]) -> DummyResponse:
+        return DummyResponse()
+
+    monkeypatch.setattr("app.services.project_info.httpx.get", fake_get)
+
+    response = client.get("/api/v1/project-info/version/check")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["current"] == _current_version()
+    assert payload["latest"] is None
+    assert payload["has_update"] is False
+    assert payload["check_status"] == "failed"
