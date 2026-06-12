@@ -25,16 +25,14 @@
 
       <div class="global-action-card" aria-label="全局操作">
         <el-dropdown trigger="click" @command="handleLanguageCommand">
-          <el-tooltip :content="t('app.language')" placement="bottom">
-            <el-button
-              :icon="Reading"
-              circle
-              text
-              class="global-action-button"
-              :title="t('app.language')"
-              :aria-label="t('app.language')"
-            />
-          </el-tooltip>
+          <el-button
+            :icon="Reading"
+            circle
+            text
+            class="global-action-button"
+            :title="t('app.language')"
+            :aria-label="t('app.language')"
+          />
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="zh-CN" :disabled="language === 'zh-CN'">
@@ -48,16 +46,14 @@
         </el-dropdown>
 
         <el-dropdown trigger="click" @command="handleThemeCommand">
-          <el-tooltip :content="themeTooltip" placement="bottom">
-            <el-button
-              :icon="themeIcon"
-              circle
-              text
-              class="global-action-button"
-              :title="themeTooltip"
-              :aria-label="themeTooltip"
-            />
-          </el-tooltip>
+          <el-button
+            :icon="themeIcon"
+            circle
+            text
+            class="global-action-button"
+            :title="themeActionTooltip"
+            :aria-label="themeActionTooltip"
+          />
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="system" :disabled="themeMode === 'system'">
@@ -448,12 +444,7 @@ const themeIcon = computed(() => {
   }
   return isDarkTheme.value ? Moon : Sunny
 })
-const themeTooltip = computed(() => {
-  if (themeMode.value === 'system') {
-    return t('app.themeSystem')
-  }
-  return isDarkTheme.value ? t('app.themeDark') : t('app.themeLight')
-})
+const themeActionTooltip = computed(() => t('app.themeSwitch'))
 
 watch(language, (value) => {
   setLocale(value)
