@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -12,7 +14,15 @@ from app.models.prompt_test import (
     PromptTestTask,
     PromptTestUnit,
 )
-from app.services.project_info import read_current_version
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _current_version() -> str:
+    return json.loads(
+        (ROOT / "frontend" / "src" / "version.json").read_text(encoding="utf-8")
+    )["version"]
 
 
 def _seed_project_assets(db_session: Session) -> None:
@@ -88,7 +98,7 @@ def test_project_info_summary_returns_metadata_and_counts(
     )
     assert payload["project"]["contact_email"] == "hh81300889@gmail.com"
     assert payload["project"]["tutorial_available"] is False
-    assert payload["version"]["current"] == read_current_version()
+    assert payload["version"]["current"] == _current_version()
     assert payload["version"]["deployment_type"] in {"source", "docker", "unknown"}
     assert payload["statistics"] == {
         "provider_count": 1,
@@ -125,7 +135,7 @@ def test_project_info_check_version_uses_latest_release(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["current"] == read_current_version()
+    assert payload["current"] == _current_version()
     assert payload["latest"] == "v1.2.0"
     assert payload["has_update"] is True
     assert payload["release_url"].endswith("/v1.2.0")

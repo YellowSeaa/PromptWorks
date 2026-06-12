@@ -1,6 +1,6 @@
 """add prompt version scope to optimization recommendations
 
-Revision ID: 20260612_prompt_test_optimization_target_version
+Revision ID: 20260612_opt_target_ver
 Revises: 20260611_temp_default
 Create Date: 2026-06-12 15:30:00.000000
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "20260612_prompt_test_optimization_target_version"
+revision: str = "20260612_opt_target_ver"
 down_revision: Union[str, None] = "20260611_temp_default"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
