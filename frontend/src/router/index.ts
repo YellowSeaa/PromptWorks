@@ -105,6 +105,12 @@ const router = createRouter({
       component: () => import('../views/UsageManagementView.vue'),
       meta: { menu: 'usage', title: '用量管理' }
     },
+    {
+      path: '/project-info',
+      name: 'project-info',
+      component: () => import('../views/ProjectInfoView.vue'),
+      meta: { menu: 'project-info', title: '项目信息' }
+    },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ]
 })

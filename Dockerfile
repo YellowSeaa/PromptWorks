@@ -8,6 +8,7 @@ WORKDIR /app
 
 # 预先复制必要文件，加速 Docker 层缓存
 COPY pyproject.toml README.md alembic.ini /app/
+COPY frontend/src/version.json /app/frontend/src/version.json
 COPY app /app/app
 COPY alembic /app/alembic
 
