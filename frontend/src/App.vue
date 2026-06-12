@@ -122,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -151,6 +151,10 @@ import {
   DEFAULT_AI_OPTIMIZATION_TIMEOUT_SECONDS,
   DEFAULT_TIMEOUT_SECONDS
 } from './composables/useTestingSettings'
+import {
+  checkProjectVersionOncePerDay,
+  writeProjectVersionCheckCache
+} from './utils/projectVersionCheck'
 
 interface MenuItem {
   index: string
@@ -389,6 +393,28 @@ function handleMenuSelect(index: string) {
     router.push({ name: target.routeName })
   }
 }
+
+onMounted(() => {
+  checkProjectVersionOncePerDay().catch((error) => {
+    if (import.meta.env.DEV) {
+      console.warn('[project-version] daily check failed', error)
+    }
+    writeProjectVersionCheckCache({
+      current: APP_VERSION,
+      latest: null,
+      has_update: false,
+      check_status: 'failed',
+      release_url: null,
+      deployment_type: 'unknown',
+      update_guidance: {
+        deployment_type: 'unknown',
+        title: '',
+        steps: [],
+        commands: []
+      }
+    })
+  })
+})
 </script>
 
 <style scoped>

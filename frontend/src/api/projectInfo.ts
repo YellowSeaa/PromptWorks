@@ -29,6 +29,7 @@ export interface ProjectVersionInfoResponse {
   current: string
   latest: string | null
   has_update: boolean
+  check_status: 'unknown' | 'up_to_date' | 'update_available' | 'failed'
   release_url: string | null
   deployment_type: string
   update_guidance: ProjectUpdateGuidanceResponse

@@ -87,6 +87,16 @@ def is_newer_version(latest: str | None, current: str) -> bool:
     return parse_version(latest) > parse_version(current)
 
 
+def resolve_check_status(
+    *, latest: str | None, current: str, check_failed: bool
+) -> str:
+    if check_failed:
+        return "failed"
+    if not latest:
+        return "unknown"
+    return "update_available" if is_newer_version(latest, current) else "up_to_date"
+
+
 def detect_deployment_type() -> str:
     explicit = os.getenv("PROMPTWORKS_DEPLOYMENT_TYPE")
     if explicit:
@@ -184,15 +194,22 @@ def get_project_statistics(db: Session) -> ProjectStatistics:
 
 
 def get_project_version_info(
-    *, latest: str | None = None, release_url: str | None = None
+    *,
+    latest: str | None = None,
+    release_url: str | None = None,
+    check_failed: bool = False,
 ) -> ProjectVersionInfo:
     current = read_current_version()
     deployment_type = detect_deployment_type()
     normalized_latest = normalize_version(latest) if latest else None
+    check_status = resolve_check_status(
+        latest=normalized_latest, current=current, check_failed=check_failed
+    )
     return ProjectVersionInfo(
         current=current,
         latest=normalized_latest,
         has_update=is_newer_version(normalized_latest, current),
+        check_status=check_status,
         release_url=release_url,
         deployment_type=deployment_type,
         update_guidance=build_update_guidance(deployment_type),
@@ -215,10 +232,10 @@ def check_latest_project_version() -> ProjectVersionInfo:
             headers={"Accept": "application/vnd.github+json"},
         )
     except httpx.HTTPError:
-        return get_project_version_info()
+        return get_project_version_info(check_failed=True)
 
     if response.status_code >= 400:
-        return get_project_version_info()
+        return get_project_version_info(check_failed=True)
 
     payload = response.json()
     latest = payload.get("tag_name")

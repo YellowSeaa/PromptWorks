@@ -32,6 +32,7 @@ class ProjectVersionInfo(BaseModel):
     current: str
     latest: str | None = None
     has_update: bool = False
+    check_status: str = "unknown"
     release_url: str | None = None
     deployment_type: str
     update_guidance: ProjectUpdateGuidance

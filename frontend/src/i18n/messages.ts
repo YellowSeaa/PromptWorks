@@ -533,6 +533,7 @@ export const messages = {
         copyCommands: '复制更新命令',
         statusUpdate: '可更新',
         statusLatest: '已是最新',
+        statusFailed: '检查失败',
         statusRemoteUnknown: '远端未知'
       },
       messages: {
@@ -1795,6 +1796,7 @@ export const messages = {
         copyCommands: 'Copy Update Commands',
         statusUpdate: 'Update Available',
         statusLatest: 'Latest',
+        statusFailed: 'Check Failed',
         statusRemoteUnknown: 'Remote Unknown'
       },
       messages: {

@@ -139,6 +139,7 @@ def test_project_info_check_version_uses_latest_release(
     assert payload["current"] == _current_version()
     assert payload["latest"] == "v1.2.0"
     assert payload["has_update"] is True
+    assert payload["check_status"] == "update_available"
     assert payload["release_url"].endswith("/v1.2.0")
     assert payload["update_guidance"]["deployment_type"] in {
         "source",
@@ -171,6 +172,7 @@ def test_project_info_check_version_ignores_older_release(
     payload = response.json()
     assert payload["latest"] == "v0.1.0"
     assert payload["has_update"] is False
+    assert payload["check_status"] == "up_to_date"
 
 
 def test_project_info_update_commands_match_deployment_type(monkeypatch) -> None:
@@ -182,6 +184,7 @@ def test_project_info_update_commands_match_deployment_type(monkeypatch) -> None
     docker_info = get_project_version_info(latest="v1.2.0")
 
     assert docker_info.has_update is True
+    assert docker_info.check_status == "update_available"
     assert docker_info.update_guidance.title == "Docker 部署更新命令"
     assert docker_info.update_guidance.commands == [
         "docker compose pull",
@@ -216,3 +219,4 @@ def test_project_info_check_version_degrades_when_github_unavailable(
     assert payload["current"] == _current_version()
     assert payload["latest"] is None
     assert payload["has_update"] is False
+    assert payload["check_status"] == "failed"
