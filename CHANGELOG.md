@@ -1,3 +1,15 @@
+## [1.2.0-beta.2](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2026-06-12)
+
+### Bug Fixes
+
+* 优化项目信息页交互 ([b234f26](https://github.com/YellowSeaa/PromptWorks/commit/b234f262c8f84d53d287a0ce9149746cc4476df6))
+* 优化项目版本状态展示 ([7044f2c](https://github.com/YellowSeaa/PromptWorks/commit/7044f2cf6224ff5be675008d66725aa3885a7eac))
+* 修复 setup-uv action 标签 ([45044c9](https://github.com/YellowSeaa/PromptWorks/commit/45044c9a1a0f99875738b3a649ec15368f1a03f4))
+* 修复 setup-uv action 标签 ([9b630f6](https://github.com/YellowSeaa/PromptWorks/commit/9b630f669bd0cbf9937939dec0e41156b77cc71a))
+* 修复版本检查失败提示 ([dc7d227](https://github.com/YellowSeaa/PromptWorks/commit/dc7d22766d84366bea4777424cc113441ac45c46))
+* 修复迁移版本号过长导致启动失败 ([13ffba7](https://github.com/YellowSeaa/PromptWorks/commit/13ffba70d072c212d45b9615fd3b1aa27cf96131))
+* 显示版本检查限流原因 ([2bad2eb](https://github.com/YellowSeaa/PromptWorks/commit/2bad2ebc3e1722e325f1b78464f33c769f64e886))
+
 ## [1.2.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.1.0...v1.2.0-beta.1) (2026-06-12)
 
 ### Features
