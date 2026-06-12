@@ -71,11 +71,24 @@ jobs:
       - name: 安装根目录依赖
         run: npm ci
 
-      - name: 执行 semantic-release（仅 main）
-        if: github.ref == 'refs/heads/main'
+      - name: 执行 semantic-release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: |
+          set -euo pipefail
+          BEFORE_VERSION=$(node -p "require('./package.json').version")
+          npx semantic-release
+          RELEASE_VERSION=$(node -p "require('./package.json').version")
+          if [[ "${RELEASE_VERSION}" != "${BEFORE_VERSION}" ]]; then
+            echo "RELEASE_PUBLISHED=true" >> "$GITHUB_ENV"
+            echo "release_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "RELEASE_PUBLISHED=false" >> "$GITHUB_ENV"
+            echo "release_published=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+          echo "release_version=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: 启用 QEMU
         uses: docker/setup-qemu-action@v3
@@ -92,13 +105,25 @@ jobs:
 
           if [[ "${TARGET_BRANCH}" == "main" ]]; then
             echo "channel=main" >> "$GITHUB_OUTPUT"
-            echo "backend_tags=${DOCKER_REPOSITORY}:backend-main-${SHORT_SHA},${DOCKER_REPOSITORY}:backend-main-latest" >> "$GITHUB_OUTPUT"
-            echo "frontend_tags=${DOCKER_REPOSITORY}:frontend-main-${SHORT_SHA},${DOCKER_REPOSITORY}:frontend-main-latest" >> "$GITHUB_OUTPUT"
+            BACKEND_TAGS="${DOCKER_REPOSITORY}:backend-main-${SHORT_SHA},${DOCKER_REPOSITORY}:backend-main-latest"
+            FRONTEND_TAGS="${DOCKER_REPOSITORY}:frontend-main-${SHORT_SHA},${DOCKER_REPOSITORY}:frontend-main-latest"
           else
             echo "channel=dev" >> "$GITHUB_OUTPUT"
-            echo "backend_tags=${DOCKER_REPOSITORY}:backend-dev-${SHORT_SHA},${DOCKER_REPOSITORY}:backend-dev-latest" >> "$GITHUB_OUTPUT"
-            echo "frontend_tags=${DOCKER_REPOSITORY}:frontend-dev-${SHORT_SHA},${DOCKER_REPOSITORY}:frontend-dev-latest" >> "$GITHUB_OUTPUT"
+            BACKEND_TAGS="${DOCKER_REPOSITORY}:backend-dev-${SHORT_SHA},${DOCKER_REPOSITORY}:backend-dev-latest"
+            FRONTEND_TAGS="${DOCKER_REPOSITORY}:frontend-dev-${SHORT_SHA},${DOCKER_REPOSITORY}:frontend-dev-latest"
           fi
+
+          if [[ "${RELEASE_PUBLISHED}" == "true" ]]; then
+            BACKEND_TAGS="${BACKEND_TAGS},${DOCKER_REPOSITORY}:backend-v${RELEASE_VERSION}"
+            FRONTEND_TAGS="${FRONTEND_TAGS},${DOCKER_REPOSITORY}:frontend-v${RELEASE_VERSION}"
+            IMAGE_VERSION="v${RELEASE_VERSION}"
+          else
+            IMAGE_VERSION="${TARGET_BRANCH}-${GITHUB_SHA}"
+          fi
+
+          echo "backend_tags=${BACKEND_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "frontend_tags=${FRONTEND_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "image_version=${IMAGE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: 登录 Docker Hub
         uses: docker/login-action@v3
@@ -117,7 +142,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.tags.outputs.channel }}-${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.image_version }}
 
       - name: 构建并推送前端镜像
         uses: docker/build-push-action@v6
@@ -130,6 +155,6 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.tags.outputs.channel }}-${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.image_version }}
           build-args: |
             VITE_API_BASE_URL=${{ vars.DOCKER_FRONTEND_API_BASE_URL || 'http://localhost:8000/api/v1' }}

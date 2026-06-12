@@ -192,6 +192,7 @@
                   <div class="header-meta">
                     <span>{{ t('promptTestResult.fields.version') }}: {{ selectedUnits[idx]?.promptVersion ?? '-' }}</span>
                     <span>{{ t('promptTestResult.fields.model') }}: {{ selectedUnits[idx]?.modelName ?? '-' }}</span>
+                    <span>{{ t('promptTestResult.fields.temperature') }}: {{ formatUnitTemperature(selectedUnits[idx]) }}</span>
                     <span>{{ t('promptTestResult.fields.parameters') }}: {{ selectedUnits[idx]?.parameterSet ?? '-' }}</span>
                   </div>
                 </div>
@@ -435,6 +436,7 @@
             <div class="unit-card__meta">
               <div>{{ t('promptTestResult.fields.version') }}: {{ unit.promptVersion }}</div>
               <div>{{ t('promptTestResult.fields.model') }}: {{ unit.modelName }}</div>
+              <div>{{ t('promptTestResult.fields.temperature') }}: {{ formatUnitTemperature(unit) }}</div>
               <div>{{ t('promptTestResult.fields.parameters') }}: {{ unit.parameterSet }}</div>
             </div>
             <div class="unit-card__preview">
@@ -2407,6 +2409,16 @@ function formatUnitAverageScore(unit: PromptTestResultUnit): string {
     return t('promptTestResult.aiScoring.status.pending')
   }
   return t('promptTestResult.aiScoring.status.idle')
+}
+
+function formatUnitTemperature(unit: PromptTestResultUnit | null | undefined): string {
+  if (!unit) return '-'
+  if (unit.temperatureMode === 'llm_default') {
+    return t('promptTestResult.temperatureModes.llmDefault')
+  }
+  return typeof unit.temperature === 'number' && Number.isFinite(unit.temperature)
+    ? unit.temperature.toFixed(2)
+    : '-'
 }
 
 function goBack() {

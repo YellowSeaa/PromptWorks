@@ -20,6 +20,8 @@ export interface PromptTestResultUnit {
   name: string
   promptVersion: string
   modelName: string
+  temperature: number | null
+  temperatureMode: 'llm_default' | 'explicit'
   parameterSet: string
   parameters: Record<string, string>
   rounds: number
@@ -45,8 +47,17 @@ export function buildPromptTestResultUnit(
     name: unit.name,
     promptVersion: promptVersionLabel,
     modelName: unit.model_name,
+    temperature: unit.temperature,
+    temperatureMode: resolveTemperatureMode(unit),
     parameterSet: parameterLabel,
-    parameters: normalizeRecord(unit.parameters),
+    parameters: normalizeRecord({
+      ...extractRecord(unit.parameters),
+      temperature:
+        typeof unit.temperature === 'number' && Number.isFinite(unit.temperature)
+          ? unit.temperature
+          : null,
+      temperature_mode: resolveTemperatureMode(unit)
+    }),
     rounds: unit.rounds,
     status: latestExperiment?.status ?? null,
     error: normalizeError(latestExperiment?.error),
@@ -56,6 +67,15 @@ export function buildPromptTestResultUnit(
     scoreTotal: 0,
     outputs: buildOutputs(latestExperiment)
   }
+}
+
+function resolveTemperatureMode(
+  unit: PromptTestUnit
+): 'llm_default' | 'explicit' {
+  if (typeof unit.temperature === 'number' && Number.isFinite(unit.temperature)) {
+    return 'explicit'
+  }
+  return 'llm_default'
 }
 
 export function attachScoresToResultUnits(

@@ -106,6 +106,15 @@ def _mask_api_key(api_key: str) -> str:
     return f"{prefix}{'*' * (len(api_key) - 6)}{suffix}"
 
 
+def _format_sse_error(status_code: int, detail: Any) -> bytes:
+    payload = {
+        "status_code": status_code,
+        "detail": detail,
+    }
+    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return f"event: error\ndata: {data}\n\n".encode("utf-8")
+
+
 def _serialize_provider(provider: LLMProvider) -> LLMProviderRead:
     models = [
         LLMModelRead.model_validate(model, from_attributes=True)
@@ -1017,9 +1026,8 @@ async def stream_invoke_llm(
                             response.status_code,
                             error_payload,
                         )
-                        raise HTTPException(
-                            status_code=response.status_code, detail=error_payload
-                        )
+                        yield _format_sse_error(response.status_code, error_payload)
+                        return
 
                     async for line in response.aiter_lines():
                         if line is None:
@@ -1048,9 +1056,8 @@ async def stream_invoke_llm(
                     provider.id,
                     exc,
                 )
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-                ) from exc
+                yield _format_sse_error(status.HTTP_502_BAD_GATEWAY, str(exc))
+                return
             finally:
                 await run_in_threadpool(_persist_usage)
 

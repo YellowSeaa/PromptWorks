@@ -173,6 +173,99 @@ def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatc
     assert latest_log.prompt_tokens is not None or latest_log.total_tokens is not None
 
 
+def test_execute_prompt_test_experiment_omits_default_temperature(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    provider = model.provider
+    captured_payloads: list[dict[str, Any]] = []
+
+    task = PromptTestTask(name="默认温度任务", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="默认温度单元",
+        model_name=model.name,
+        llm_provider_id=provider.id,
+        temperature=None,
+        rounds=1,
+        prompt_template="请回答：{text}",
+        variables={"text": "你好"},
+        parameters={"max_tokens": 32},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    def fake_post(*_, **kwargs):
+        payload = kwargs.get("json") or {}
+        captured_payloads.append(payload)
+        response = {
+            "choices": [{"message": {"content": "你好"}}],
+            "usage": {"total_tokens": 8},
+        }
+        return DummyResponse(response, elapsed_ms=18)
+
+    monkeypatch.setattr("app.services.prompt_test_engine.httpx.post", fake_post)
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    assert captured_payloads
+    assert "temperature" not in captured_payloads[0]
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert refreshed is not None
+    assert refreshed.outputs is not None
+    assert refreshed.outputs[0]["parameters"]["temperature_mode"] == "llm_default"
+    assert "temperature" not in refreshed.outputs[0]["parameters"]
+
+
+def test_execute_prompt_test_experiment_marks_explicit_temperature(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+    provider = model.provider
+    captured_payloads: list[dict[str, Any]] = []
+
+    task = PromptTestTask(name="显式温度任务", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="显式温度单元",
+        model_name=model.name,
+        llm_provider_id=provider.id,
+        temperature=0.4,
+        rounds=1,
+        prompt_template="请回答：{text}",
+        variables={"text": "你好"},
+        parameters={"max_tokens": 32},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    def fake_post(*_, **kwargs):
+        payload = kwargs.get("json") or {}
+        captured_payloads.append(payload)
+        response = {
+            "choices": [{"message": {"content": "你好"}}],
+            "usage": {"total_tokens": 8},
+        }
+        return DummyResponse(response, elapsed_ms=18)
+
+    monkeypatch.setattr("app.services.prompt_test_engine.httpx.post", fake_post)
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    assert captured_payloads[0]["temperature"] == pytest.approx(0.4)
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert refreshed is not None
+    assert refreshed.outputs is not None
+    assert refreshed.outputs[0]["parameters"]["temperature"] == pytest.approx(0.4)
+    assert refreshed.outputs[0]["parameters"]["temperature_mode"] == "explicit"
+
+
 def test_execute_prompt_test_experiment_truncates_messages_by_model_context_length(
     db_session, monkeypatch
 ):
@@ -541,6 +634,97 @@ def test_execute_prompt_test_experiment_resumes_from_existing_outputs(
         "已有结果",
         "续跑结果 2",
     ]
+
+
+def test_execute_prompt_test_experiment_retries_failed_existing_outputs(
+    db_session, monkeypatch
+):
+    prompt_version = _create_prompt_version(db_session)
+    model = _create_provider_and_model(db_session)
+
+    task = PromptTestTask(name="重试失败轮次", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="失败续跑单元",
+        model_name=model.name,
+        llm_provider_id=model.provider_id,
+        rounds=2,
+        parameters={"max_tokens": 16},
+    )
+    experiment = PromptTestExperiment(
+        unit=unit,
+        sequence=1,
+        status=PromptTestExperimentStatus.FAILED,
+        outputs=[
+            {
+                "run_index": 1,
+                "status": "failed",
+                "error": "LLM 网络错误",
+                "variables": None,
+            },
+            {
+                "run_index": 2,
+                "messages": [],
+                "parameters": {"max_tokens": 16},
+                "variables": None,
+                "output_text": "已有成功结果",
+                "parsed_output": None,
+                "prompt_tokens": 4,
+                "completion_tokens": 4,
+                "total_tokens": 8,
+                "latency_ms": 15,
+                "raw_response": {"choices": []},
+            },
+        ],
+    )
+
+    db_session.add_all([task, unit, experiment])
+    db_session.commit()
+
+    executed_indexes: list[int] = []
+
+    def fake_single_round(
+        *,
+        provider,
+        model,
+        unit,
+        prompt_snapshot,
+        base_parameters,
+        context,
+        run_index,
+        request_timeout,
+    ):
+        executed_indexes.append(run_index)
+        return {
+            "run_index": run_index,
+            "messages": [],
+            "parameters": base_parameters,
+            "variables": context,
+            "output_text": f"重试成功 {run_index}",
+            "parsed_output": None,
+            "prompt_tokens": 5,
+            "completion_tokens": 5,
+            "total_tokens": 10,
+            "latency_ms": 20,
+            "raw_response": {"choices": []},
+        }
+
+    monkeypatch.setattr(
+        "app.services.prompt_test_engine._execute_single_round", fake_single_round
+    )
+
+    execute_prompt_test_experiment(db_session, experiment)
+
+    refreshed = db_session.get(PromptTestExperiment, experiment.id)
+    assert executed_indexes == [1]
+    assert refreshed is not None
+    assert refreshed.status == PromptTestExperimentStatus.COMPLETED
+    assert [item["output_text"] for item in refreshed.outputs or []] == [
+        "重试成功 1",
+        "已有成功结果",
+    ]
+    assert refreshed.metrics["failed_runs"] == 0
 
 
 def test_execute_prompt_test_experiment_respects_model_concurrency_limit(
@@ -1185,6 +1369,13 @@ def test_prompt_test_task_crud_and_unit_management(client, db_session):
     assert unit_update.status_code == 200
     assert unit_update.json()["description"] == "重新描述"
     assert unit_update.json()["temperature"] == 0.4
+
+    default_temp_update = client.patch(
+        f"/api/v1/prompt-test/units/{unit_id}",
+        json={"temperature": None},
+    )
+    assert default_temp_update.status_code == 200
+    assert default_temp_update.json()["temperature"] is None
 
 
 def test_get_prompt_test_unit_rejects_deleted_task(client, db_session):

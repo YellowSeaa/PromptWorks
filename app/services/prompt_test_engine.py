@@ -164,6 +164,7 @@ def execute_prompt_test_experiment(
         SimpleNamespace(
             id=unit.id,
             model_name=unit.model_name,
+            temperature=unit.temperature,
             parameters=unit.parameters,
             prompt_template=unit.prompt_template,
         ),
@@ -404,6 +405,8 @@ def _normalize_existing_outputs(outputs: Any) -> list[dict[str, Any]]:
 def _collect_completed_run_indexes(records: Sequence[Mapping[str, Any]]) -> set[int]:
     indexes: set[int] = set()
     for record in records:
+        if record.get("status") == "failed" or record.get("error"):
+            continue
         value = record.get("run_index")
         if isinstance(value, (int, float)) and int(value) > 0:
             indexes.add(int(value))
@@ -519,7 +522,9 @@ def _resolve_prompt_snapshot(unit: PromptTestUnit) -> str:
 
 
 def _collect_parameters(unit: PromptTestUnit) -> dict[str, Any]:
-    params: dict[str, Any] = {"temperature": unit.temperature}
+    params: dict[str, Any] = {}
+    if unit.temperature is not None:
+        params["temperature"] = unit.temperature
     if unit.top_p is not None:
         params["top_p"] = unit.top_p
 
@@ -536,6 +541,19 @@ def _collect_parameters(unit: PromptTestUnit) -> dict[str, Any]:
             params[key] = value
 
     return params
+
+
+def _build_recorded_parameters(
+    unit: PromptTestUnit, params: Mapping[str, Any]
+) -> dict[str, Any]:
+    recorded = dict(params)
+    if unit.temperature is None:
+        recorded.pop("temperature", None)
+        recorded["temperature_mode"] = "llm_default"
+    else:
+        recorded["temperature"] = unit.temperature
+        recorded["temperature_mode"] = "explicit"
+    return recorded
 
 
 def _execute_single_round(
@@ -560,6 +578,7 @@ def _execute_single_round(
     request_parameters = {
         key: value for key, value in payload.items() if key not in {"model", "messages"}
     }
+    recorded_parameters = _build_recorded_parameters(unit, request_parameters)
 
     base_url = _resolve_base_url(provider)
     headers = {
@@ -635,7 +654,7 @@ def _execute_single_round(
     return {
         "run_index": run_index,
         "messages": messages,
-        "parameters": request_parameters or None,
+        "parameters": recorded_parameters or None,
         "variables": variables,
         "output_text": output_text,
         "parsed_output": parsed_output,

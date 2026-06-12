@@ -68,7 +68,7 @@ class PromptTestUnitBase(BaseModel):
     description: str | None = None
     model_name: str = Field(..., max_length=100)
     llm_provider_id: int | None = None
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     rounds: int = Field(default=1, ge=1, le=100)
     prompt_template: str | None = None
