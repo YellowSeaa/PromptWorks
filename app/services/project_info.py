@@ -198,6 +198,7 @@ def get_project_version_info(
     latest: str | None = None,
     release_url: str | None = None,
     check_failed: bool = False,
+    check_error: str | None = None,
 ) -> ProjectVersionInfo:
     current = read_current_version()
     deployment_type = detect_deployment_type()
@@ -210,6 +211,7 @@ def get_project_version_info(
         latest=normalized_latest,
         has_update=is_newer_version(normalized_latest, current),
         check_status=check_status,
+        check_error=check_error,
         release_url=release_url,
         deployment_type=deployment_type,
         update_guidance=build_update_guidance(deployment_type),
@@ -232,10 +234,19 @@ def check_latest_project_version() -> ProjectVersionInfo:
             headers={"Accept": "application/vnd.github+json"},
         )
     except httpx.HTTPError:
-        return get_project_version_info(check_failed=True)
+        return get_project_version_info(
+            check_failed=True,
+            check_error="github_unavailable",
+        )
 
     if response.status_code >= 400:
-        return get_project_version_info(check_failed=True)
+        rate_remaining = response.headers.get("x-ratelimit-remaining")
+        check_error = (
+            "github_rate_limited"
+            if response.status_code in {403, 429} and rate_remaining == "0"
+            else "github_unavailable"
+        )
+        return get_project_version_info(check_failed=True, check_error=check_error)
 
     payload = response.json()
     latest = payload.get("tag_name")

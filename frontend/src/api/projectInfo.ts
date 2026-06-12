@@ -30,6 +30,7 @@ export interface ProjectVersionInfoResponse {
   latest: string | null
   has_update: boolean
   check_status: 'unknown' | 'up_to_date' | 'update_available' | 'failed'
+  check_error: 'github_rate_limited' | 'github_unavailable' | null
   release_url: string | null
   deployment_type: string
   update_guidance: ProjectUpdateGuidanceResponse

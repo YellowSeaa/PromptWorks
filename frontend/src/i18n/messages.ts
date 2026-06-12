@@ -540,6 +540,7 @@ export const messages = {
         loadFailed: '加载项目信息失败，请稍后重试',
         checkSuccess: '版本检查完成',
         checkFailed: '检查版本失败，请稍后重试',
+        checkRateLimited: '检查版本失败：GitHub 匿名 API 额度已用完，请稍后重试。',
         copySuccess: '更新命令已复制',
         copyFailed: '复制失败，请手动选择命令'
       }
@@ -1803,6 +1804,7 @@ export const messages = {
         loadFailed: 'Failed to load project information. Try again later.',
         checkSuccess: 'Version check completed.',
         checkFailed: 'Failed to check version. Try again later.',
+        checkRateLimited: 'Version check failed: GitHub anonymous API rate limit reached. Try again later.',
         copySuccess: 'Update commands copied.',
         copyFailed: 'Copy failed. Please select the commands manually.'
       }

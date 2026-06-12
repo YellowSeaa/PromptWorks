@@ -220,6 +220,7 @@ def test_project_info_check_version_degrades_when_github_unavailable(
     assert payload["latest"] is None
     assert payload["has_update"] is False
     assert payload["check_status"] == "failed"
+    assert payload["check_error"] == "github_unavailable"
 
 
 def test_project_info_check_version_marks_github_rate_limit_as_failed(
@@ -227,6 +228,7 @@ def test_project_info_check_version_marks_github_rate_limit_as_failed(
 ) -> None:
     class DummyResponse:
         status_code = 403
+        headers = {"x-ratelimit-remaining": "0"}
 
         def json(self) -> dict[str, str]:
             return {"message": "API rate limit exceeded"}
@@ -244,3 +246,4 @@ def test_project_info_check_version_marks_github_rate_limit_as_failed(
     assert payload["latest"] is None
     assert payload["has_update"] is False
     assert payload["check_status"] == "failed"
+    assert payload["check_error"] == "github_rate_limited"

@@ -314,6 +314,13 @@ function navigateToStat(routeName?: RouteRecordName) {
   router.push({ name: routeName })
 }
 
+function getVersionCheckErrorMessage(version: ProjectVersionInfoResponse): string {
+  if (version.check_error === 'github_rate_limited') {
+    return t('projectInfo.messages.checkRateLimited')
+  }
+  return t('projectInfo.messages.checkFailed')
+}
+
 async function copyUpdateCommands() {
   if (!updateCommands.value.length) return
   try {
@@ -356,7 +363,7 @@ async function handleCheckVersion() {
     }
     writeProjectVersionCheckCache(version)
     if (version.check_status === 'failed') {
-      ElMessage.error(t('projectInfo.messages.checkFailed'))
+      ElMessage.error(getVersionCheckErrorMessage(version))
     } else {
       ElMessage.success(t('projectInfo.messages.checkSuccess'))
     }
