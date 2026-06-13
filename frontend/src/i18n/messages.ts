@@ -298,18 +298,24 @@ export const messages = {
       table: {
         columns: {
           name: '测试名称',
+          task: '任务',
           model: '模型',
+          configuration: '测试配置',
           versions: '版本列表',
           temperature: '温度',
           repetitions: '测试次数',
           version: '结果页',
           status: '状态',
+          time: '时间',
           createdAt: '创建时间',
           updatedAt: '最近更新',
           actions: '操作'
         },
         promptPrefix: 'Prompt：',
         notePrefix: '备注：',
+        temperaturePrefix: '温度 ',
+        repetitionsPrefix: '{count} 轮',
+        updatedAtPrefix: '更新 ',
         viewDetails: '查看详情',
         retry: '重试',
         delete: '删除',
@@ -317,6 +323,17 @@ export const messages = {
         version: {
           new: '新版',
           legacy: '旧版'
+        }
+      },
+      filters: {
+        promptPlaceholder: '按 Prompt 筛选',
+        resultCount: '共 {count} 个任务',
+        filteredResultCount: '显示 {filtered} / {total} 个任务',
+        status: {
+          all: '全部',
+          active: '进行中',
+          completed: '已完成',
+          failed: '出错'
         }
       },
       versionCount: '{count} 版本',
@@ -1584,18 +1601,24 @@ export const messages = {
       table: {
         columns: {
           name: 'Job Name',
+          task: 'Task',
           model: 'Model',
+          configuration: 'Test Configuration',
           versions: 'Versions',
           temperature: 'Temperature',
           repetitions: 'Runs',
           version: 'Result Page',
           status: 'Status',
+          time: 'Time',
           createdAt: 'Created At',
           updatedAt: 'Last Updated',
           actions: 'Actions'
         },
         promptPrefix: 'Prompt: ',
         notePrefix: 'Note: ',
+        temperaturePrefix: 'Temp ',
+        repetitionsPrefix: '{count} rounds',
+        updatedAtPrefix: 'Updated ',
         viewDetails: 'View Details',
         retry: 'Retry',
         delete: 'Delete',
@@ -1603,6 +1626,17 @@ export const messages = {
         version: {
           new: 'New',
           legacy: 'Legacy'
+        }
+      },
+      filters: {
+        promptPlaceholder: 'Filter by Prompt',
+        resultCount: '{count} tasks',
+        filteredResultCount: 'Showing {filtered} / {total} tasks',
+        status: {
+          all: 'All',
+          active: 'In progress',
+          completed: 'Completed',
+          failed: 'Failed'
         }
       },
       versionCount: '{count} versions',
