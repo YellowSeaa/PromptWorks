@@ -1,3 +1,16 @@
+## [1.2.0-beta.4](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.3...v1.2.0-beta.4) (2026-06-13)
+
+### Features
+
+* 优化模型供应商卡片可读性 ([07f2842](https://github.com/YellowSeaa/PromptWorks/commit/07f28425ddbc3b76d6de50d9f305590d9747a27f))
+* 优化测试任务列表可读性 ([ef29e65](https://github.com/YellowSeaa/PromptWorks/commit/ef29e65629564e3c404d2f2756f98f0a9ed66b3a))
+* 增加测试任务状态筛选 ([58b3a5d](https://github.com/YellowSeaa/PromptWorks/commit/58b3a5d4e4630cc22f957129b63e64c3e1d2255b))
+
+### Bug Fixes
+
+* 修复测试任务列表筛选和高度 ([6074d59](https://github.com/YellowSeaa/PromptWorks/commit/6074d5964afa6cd63e631e5a6a9927a1c914a6f6))
+* 移除测试任务页外层滚动条 ([f13aa8b](https://github.com/YellowSeaa/PromptWorks/commit/f13aa8b7566750744f1ffe81e394401ccc886b51))
+
 ## [1.2.0-beta.3](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.2...v1.2.0-beta.3) (2026-06-12)
 
 ### Features
