@@ -246,7 +246,6 @@ const cardHeight = ref<number | null>(null)
 const promptFilter = ref('')
 const statusFilter = ref<JobStatusFilter>('all')
 
-const TABLE_BOTTOM_PADDING = 16
 const TABLE_MIN_HEIGHT = 240
 const promptTaskProgress = ref<Record<number, ProgressMetrics>>({})
 
@@ -291,8 +290,11 @@ function updateTableHeight() {
   const cardBodyStyle = cardBody ? window.getComputedStyle(cardBody) : null
   const bodyPaddingBottom = cardBodyStyle ? safeNumber(cardBodyStyle.paddingBottom) ?? 0 : 0
   const cardBottomOffset = cardRect ? rect.top - cardRect.top : 0
-  const cardAvailable = window.innerHeight - (cardRect?.top ?? rect.top) - TABLE_BOTTOM_PADDING
-  const tableAvailable = window.innerHeight - rect.top - bodyPaddingBottom - TABLE_BOTTOM_PADDING
+  const mainView = wrapper.closest('.main-view')
+  const mainViewRect = mainView?.getBoundingClientRect()
+  const contentBottom = mainViewRect?.bottom ?? window.innerHeight
+  const cardAvailable = contentBottom - (cardRect?.top ?? rect.top)
+  const tableAvailable = contentBottom - rect.top - bodyPaddingBottom
   const usable = Number.isFinite(tableAvailable) ? Math.floor(tableAvailable) : TABLE_MIN_HEIGHT
   cardHeight.value = Number.isFinite(cardAvailable)
     ? Math.max(TABLE_MIN_HEIGHT + cardBottomOffset, Math.floor(cardAvailable))
@@ -1117,6 +1119,9 @@ async function handleDelete(job: AggregatedJobRow) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: calc(100vh - 108px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -1187,6 +1192,7 @@ async function handleDelete(job: AggregatedJobRow) {
 .job-card {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
