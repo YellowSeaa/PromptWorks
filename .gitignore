@@ -45,6 +45,7 @@ htmlcov/
 .pytype/
 .dmypy.json
 .superpowers/
+.worktrees/
 
 # IDEs and editors
 .vscode/
