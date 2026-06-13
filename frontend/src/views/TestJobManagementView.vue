@@ -20,12 +20,45 @@
       </div>
     </section>
 
-    <el-card class="job-card">
+    <el-card class="job-card" :style="cardHeight ? { height: `${cardHeight}px` } : undefined">
       <template #header>
         <div class="card-header">
           <span>{{ t('testJobManagement.listTitle') }}</span>
         </div>
       </template>
+      <div class="list-toolbar">
+        <div class="list-toolbar__filters">
+          <el-radio-group v-model="statusFilter" size="small" class="status-filter">
+            <el-radio-button
+              v-for="option in statusFilterOptions"
+              :key="option.value"
+              :label="option.value"
+            >
+              {{ option.label }}
+            </el-radio-button>
+          </el-radio-group>
+          <el-select
+            v-model="promptFilter"
+            class="prompt-filter"
+            :placeholder="t('testJobManagement.filters.promptPlaceholder')"
+            clearable
+            filterable
+            value-on-clear=""
+            @change="handlePromptFilterChange"
+            @clear="handlePromptFilterClear"
+          >
+            <el-option
+              v-for="option in promptFilterOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </div>
+        <span class="list-toolbar__count">
+          {{ resultCountLabel }}
+        </span>
+      </div>
       <div ref="tableWrapperRef" class="table-wrapper">
         <el-alert
           v-if="errorMessage"
@@ -44,7 +77,7 @@
           :empty-text="tableEmptyText"
           v-loading="isLoading"
         >
-        <el-table-column :label="t('testJobManagement.table.columns.name')" min-width="260">
+        <el-table-column :label="t('testJobManagement.table.columns.task')" min-width="320">
           <template #default="{ row }">
             <div class="table-name-cell">
               <span class="table-name__title">{{ row.jobName }}</span>
@@ -63,35 +96,30 @@
             </p>
           </template>
         </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.model')" min-width="180">
+        <el-table-column :label="t('testJobManagement.table.columns.configuration')" min-width="260">
           <template #default="{ row }">
-            <div class="table-model">
-              <span>{{ row.modelName }}</span>
+            <div class="table-config">
+              <span class="table-config__model">{{ row.modelName }}</span>
               <span v-if="row.providerName" class="table-subtext">{{ row.providerName }}</span>
+              <span class="table-subtext">
+                {{ t('testJobManagement.table.temperaturePrefix') }}{{ formatTemperature(row.temperature) }}
+                ·
+                {{ t('testJobManagement.table.repetitionsPrefix', { count: row.repetitions }) }}
+              </span>
+              <el-space wrap class="version-tags">
+                <el-tag
+                  v-for="label in row.versionLabels"
+                  :key="label"
+                  size="small"
+                  type="info"
+                >
+                  {{ label }}
+                </el-tag>
+              </el-space>
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.versions')" min-width="220">
-          <template #default="{ row }">
-            <el-space wrap>
-              <el-tag
-                v-for="label in row.versionLabels"
-                :key="label"
-                size="small"
-                type="info"
-              >
-                {{ label }}
-              </el-tag>
-            </el-space>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.temperature')" width="100">
-          <template #default="{ row }">{{ formatTemperature(row.temperature) }}</template>
-        </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.repetitions')" width="100">
-          <template #default="{ row }">{{ row.repetitions }}</template>
-        </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.status')" width="180">
+        <el-table-column :label="t('testJobManagement.table.columns.status')" min-width="190">
           <template #default="{ row }">
             <div class="status-cell">
               <el-tag :type="statusTagType[row.status] ?? 'info'" size="small">
@@ -113,15 +141,17 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.createdAt')" min-width="160">
-          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
-        </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.updatedAt')" min-width="160">
-          <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
-        </el-table-column>
-        <el-table-column :label="t('testJobManagement.table.columns.actions')" width="210" fixed="right">
+        <el-table-column :label="t('testJobManagement.table.columns.time')" min-width="180">
           <template #default="{ row }">
-            <el-space :size="4">
+            <div class="table-time">
+              <span>{{ formatDateTime(row.createdAt) }}</span>
+              <span class="table-subtext">{{ t('testJobManagement.table.updatedAtPrefix') }}{{ formatDateTime(row.updatedAt) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('testJobManagement.table.columns.actions')" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-space :size="4" wrap>
               <el-button type="primary" link size="small" @click="handleViewJob(row)">
                 {{ t('testJobManagement.table.viewDetails') }}
               </el-button>
@@ -212,10 +242,14 @@ const errorMessage = ref<string | null>(null)
 const pollingTimer = ref<number | null>(null)
 const tableWrapperRef = ref<HTMLElement | null>(null)
 const tableHeight = ref(520)
+const cardHeight = ref<number | null>(null)
+const promptFilter = ref('')
+const statusFilter = ref<JobStatusFilter>('all')
 
-const TABLE_BOTTOM_PADDING = 24
 const TABLE_MIN_HEIGHT = 240
 const promptTaskProgress = ref<Record<number, ProgressMetrics>>({})
+
+type JobStatusFilter = 'all' | 'active' | 'completed' | 'failed'
 
 function clearPolling() {
   if (pollingTimer.value !== null) {
@@ -246,12 +280,25 @@ function updateTableHeight() {
   const wrapper = tableWrapperRef.value
   if (!wrapper) {
     tableHeight.value = Math.max(TABLE_MIN_HEIGHT, tableHeight.value)
+    cardHeight.value = null
     return
   }
   const rect = wrapper.getBoundingClientRect()
-  const available =
-    window.innerHeight - rect.top - TABLE_BOTTOM_PADDING
-  const usable = Number.isFinite(available) ? Math.floor(available) : TABLE_MIN_HEIGHT
+  const card = wrapper.closest('.job-card')
+  const cardRect = card?.getBoundingClientRect()
+  const cardBody = wrapper.closest('.el-card__body')
+  const cardBodyStyle = cardBody ? window.getComputedStyle(cardBody) : null
+  const bodyPaddingBottom = cardBodyStyle ? safeNumber(cardBodyStyle.paddingBottom) ?? 0 : 0
+  const cardBottomOffset = cardRect ? rect.top - cardRect.top : 0
+  const mainView = wrapper.closest('.main-view')
+  const mainViewRect = mainView?.getBoundingClientRect()
+  const contentBottom = mainViewRect?.bottom ?? window.innerHeight
+  const cardAvailable = contentBottom - (cardRect?.top ?? rect.top)
+  const tableAvailable = contentBottom - rect.top - bodyPaddingBottom
+  const usable = Number.isFinite(tableAvailable) ? Math.floor(tableAvailable) : TABLE_MIN_HEIGHT
+  cardHeight.value = Number.isFinite(cardAvailable)
+    ? Math.max(TABLE_MIN_HEIGHT + cardBottomOffset, Math.floor(cardAvailable))
+    : null
   tableHeight.value = Math.max(TABLE_MIN_HEIGHT, usable)
 }
 
@@ -465,11 +512,58 @@ function unmarkJobDeleting(id: string) {
   deletingJobIds.value = deletingJobIds.value.filter((item) => item !== id)
 }
 
-const jobs = computed<AggregatedJobRow[]>(() => {
+function normalizePromptFilterValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function handlePromptFilterChange(value: unknown) {
+  promptFilter.value = normalizePromptFilterValue(value)
+}
+
+function handlePromptFilterClear() {
+  promptFilter.value = ''
+}
+
+const allJobs = computed<AggregatedJobRow[]>(() => {
   const legacyRows = buildLegacyJobRows(testRuns.value)
   const promptTaskRows = buildPromptTestTaskRows(promptTestTasks.value)
   const merged = [...legacyRows, ...promptTaskRows]
   return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+})
+
+const promptFilterOptions = computed(() =>
+  deduplicateStrings(allJobs.value.map((job) => job.promptName))
+    .sort((a, b) => a.localeCompare(b, locale.value === 'zh-CN' ? 'zh-CN' : 'en-US'))
+    .map((name) => ({ label: name, value: name }))
+)
+
+const statusFilterOptions = computed<Array<{ label: string; value: JobStatusFilter }>>(() => [
+  { label: t('testJobManagement.filters.status.all'), value: 'all' },
+  { label: t('testJobManagement.filters.status.active'), value: 'active' },
+  { label: t('testJobManagement.filters.status.completed'), value: 'completed' },
+  { label: t('testJobManagement.filters.status.failed'), value: 'failed' }
+])
+
+const jobs = computed<AggregatedJobRow[]>(() => {
+  const selectedPrompt = promptFilter.value.trim()
+  return allJobs.value.filter((job) => {
+    const matchesPrompt = !selectedPrompt || job.promptName === selectedPrompt
+    const matchesStatus =
+      statusFilter.value === 'all' ||
+      (statusFilter.value === 'active' && (job.status === 'pending' || job.status === 'running')) ||
+      job.status === statusFilter.value
+    return matchesPrompt && matchesStatus
+  })
+})
+
+const resultCountLabel = computed(() => {
+  if (promptFilter.value.trim() || statusFilter.value !== 'all') {
+    return t('testJobManagement.filters.filteredResultCount', {
+      filtered: jobs.value.length,
+      total: allJobs.value.length
+    })
+  }
+  return t('testJobManagement.filters.resultCount', { count: allJobs.value.length })
 })
 
 watch([jobs, isLoading], () => {
@@ -477,6 +571,12 @@ watch([jobs, isLoading], () => {
     updateTableHeight()
   })
 }, { immediate: true })
+
+watch(promptFilterOptions, (options) => {
+  if (promptFilter.value && !options.some((option) => option.value === promptFilter.value)) {
+    handlePromptFilterClear()
+  }
+})
 
 function buildLegacyJobRows(runs: TestRun[]): AggregatedJobRow[] {
   const groups = new Map<string, TestRun[]>()
@@ -1019,6 +1119,9 @@ async function handleDelete(job: AggregatedJobRow) {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: calc(100vh - 108px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -1056,15 +1159,50 @@ async function handleDelete(job: AggregatedJobRow) {
   font-weight: 600;
 }
 
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.list-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.status-filter {
+  flex: 0 0 auto;
+}
+
+.prompt-filter {
+  width: 260px;
+}
+
+.list-toolbar__count {
+  flex: 0 0 auto;
+  color: var(--text-weak-color);
+  font-size: 13px;
+}
+
 .job-card {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .job-card :deep(.el-card__body) {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .table-wrapper {
@@ -1072,6 +1210,8 @@ async function handleDelete(job: AggregatedJobRow) {
   flex-direction: column;
   gap: 12px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .table-alert {
@@ -1086,27 +1226,50 @@ async function handleDelete(job: AggregatedJobRow) {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .table-name__title {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-subtitle {
   margin: 2px 0 0;
   font-size: 12px;
   color: var(--text-weak-color);
+  line-height: 1.45;
+  word-break: break-word;
 }
 
-.table-model {
+.table-config,
+.table-time {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.table-config__model,
+.table-time > span:first-child {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-subtext {
   font-size: 12px;
   color: var(--text-weak-color);
+  line-height: 1.45;
+}
+
+.version-tags {
+  margin-top: 4px;
 }
 
 .table-failure {
@@ -1156,5 +1319,41 @@ async function handleDelete(job: AggregatedJobRow) {
   font-size: 12px;
   color: var(--text-weak-color);
   white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .page-header,
+  .list-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-header__actions,
+  .prompt-filter {
+    width: 100%;
+  }
+
+  .list-toolbar__filters {
+    width: 100%;
+  }
+
+  .status-filter {
+    display: flex;
+    width: 100%;
+  }
+
+  .status-filter :deep(.el-radio-button) {
+    flex: 1;
+  }
+
+  .status-filter :deep(.el-radio-button__inner) {
+    width: 100%;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .page-header__actions :deep(.el-button) {
+    flex: 1;
+  }
 }
 </style>

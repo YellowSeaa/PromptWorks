@@ -133,6 +133,19 @@
 
             <div class="generator-row">
               <el-select
+                v-model="selectedPromptVersionId"
+                class="version-select"
+                :placeholder="t('promptTestOptimization.messages.promptVersionRequired')"
+                @change="handlePromptVersionChange"
+              >
+                <el-option
+                  v-for="option in promptVersionOptions"
+                  :key="option.id"
+                  :label="option.label"
+                  :value="option.id"
+                />
+              </el-select>
+              <el-select
                 v-model="optimizationModelKey"
                 filterable
                 clearable
@@ -157,6 +170,7 @@
                 type="primary"
                 :icon="MagicStick"
                 :loading="generating"
+                :disabled="!selectedPromptVersionId"
                 @click="handleGenerateRecommendation"
               >
                 {{ recommendation ? t('promptTestOptimization.actions.regenerate') : t('promptTestOptimization.actions.generate') }}
@@ -218,6 +232,41 @@
               </div>
             </section>
           </el-card>
+
+          <el-card class="workbench-card" shadow="never">
+            <template #header>
+              <div class="workbench-header">
+                <div>
+                  <h3>{{ t('promptTestOptimization.sections.history') }}</h3>
+                  <p>{{ currentPromptMeta }}</p>
+                </div>
+                <el-switch
+                  v-model="showAllHistory"
+                  :active-text="t('promptTestOptimization.actions.showAllHistory')"
+                  @change="handleHistoryScopeChange"
+                />
+              </div>
+            </template>
+            <div v-if="recommendationHistory.length" class="history-list">
+              <button
+                v-for="item in recommendationHistory"
+                :key="item.id"
+                type="button"
+                class="history-item"
+                :class="{ 'history-item--active': recommendation?.id === item.id }"
+                @click="applyRecommendation(item)"
+              >
+                <span>{{ recommendationHistoryMeta(item) }}</span>
+                <el-tag
+                  size="small"
+                  :type="item.status === 'failed' ? 'danger' : item.status === 'completed' ? 'success' : 'warning'"
+                >
+                  {{ t(`promptTestOptimization.status.${item.status}`) }}
+                </el-tag>
+              </button>
+            </div>
+            <el-empty v-else :description="t('promptTestOptimization.empty.noHistory')" />
+          </el-card>
         </main>
       </div>
     </template>
@@ -271,6 +320,7 @@ import {
   getLatestPromptTestOptimizationRecommendation,
   getPromptTestAIScores,
   getPromptTestTask,
+  listPromptTestOptimizationRecommendations,
   listPromptTestUnits
 } from '../api/promptTest'
 import { listLLMProviders } from '../api/llmProvider'
@@ -305,16 +355,19 @@ const task = ref<PromptTestTask | null>(null)
 const units = ref<PromptTestUnit[]>([])
 const scoringSummary = ref<PromptTestAIScoreSummary | null>(null)
 const recommendation = ref<PromptTestOptimizationRecommendation | null>(null)
+const recommendationHistory = ref<PromptTestOptimizationRecommendation[]>([])
 const providers = ref<LLMProvider[]>([])
 const prompts = ref<Prompt[]>([])
 const optimizationModelKey = ref('')
+const selectedPromptVersionId = ref<number | null>(null)
+const showAllHistory = ref(false)
 const revisionDraft = ref('')
 const loading = ref(false)
 const generating = ref(false)
 const creatingVersion = ref(false)
 const errorMessage = ref<string | null>(null)
 
-const adviceFields = ['overall_advice', 'temperature_advice', 'model_advice', 'validation_plan']
+const adviceFields = ['overall_advice', 'parameter_advice', 'model_advice', 'validation_plan']
 
 const versionDialog = reactive({
   visible: false,
@@ -386,6 +439,28 @@ const referencedVersionIds = computed(() => {
   return ids
 })
 
+const promptVersionOptions = computed(() => {
+  const prompt = targetPrompt.value
+  if (!prompt) return []
+  return prompt.versions
+    .filter((version) => referencedVersionIds.value.has(version.id))
+    .map((version) => ({
+      id: version.id,
+      label: `${prompt.name} · ${version.version}`,
+      version: version.version
+    }))
+    .sort((left, right) => left.version.localeCompare(right.version))
+})
+
+const targetUnitIds = computed(() => {
+  if (!selectedPromptVersionId.value) return new Set<number>()
+  return new Set(
+    units.value
+      .filter((unit) => unit.prompt_version_id === selectedPromptVersionId.value)
+      .map((unit) => unit.id)
+  )
+})
+
 const targetPrompt = computed<Prompt | null>(() => {
   if (configuredPromptId.value) {
     return prompts.value.find((prompt) => prompt.id === configuredPromptId.value) ?? null
@@ -399,6 +474,10 @@ const targetPrompt = computed<Prompt | null>(() => {
 const currentPromptVersion = computed<PromptVersion | null>(() => {
   const prompt = targetPrompt.value
   if (!prompt) return null
+  if (selectedPromptVersionId.value) {
+    const matched = prompt.versions.find((version) => version.id === selectedPromptVersionId.value)
+    if (matched) return matched
+  }
   const taskVersionId = task.value?.prompt_version_id
   if (typeof taskVersionId === 'number') {
     const matched = prompt.versions.find((version) => version.id === taskVersionId)
@@ -422,12 +501,18 @@ const currentPromptMeta = computed(() => {
   return `${prompt.name} · ${version.version}`
 })
 
+const targetScores = computed(() => {
+  const ids = targetUnitIds.value
+  if (!ids.size) return scoringSummary.value?.scores ?? []
+  return (scoringSummary.value?.scores ?? []).filter((score) => ids.has(score.unit_id))
+})
+
 const completedScores = computed(() =>
-  (scoringSummary.value?.scores ?? []).filter((score) => score.status === 'completed')
+  targetScores.value.filter((score) => score.status === 'completed')
 )
 
-const totalScoreCount = computed(() => Number(scoringSummary.value?.status?.total ?? 0))
-const completedScoreCount = computed(() => Number(scoringSummary.value?.status?.completed ?? 0))
+const totalScoreCount = computed(() => targetScores.value.length)
+const completedScoreCount = computed(() => completedScores.value.length)
 
 const averageScore = computed(() => {
   const values = completedScores.value
@@ -507,7 +592,10 @@ function formatScoreValue(value: unknown): string {
 
 function recommendationText(key: string): string {
   const content = recommendation.value?.content
-  const value = content?.[key]
+  const value =
+    key === 'parameter_advice'
+      ? content?.parameter_advice ?? content?.temperature_advice
+      : content?.[key]
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value
   try {
@@ -515,6 +603,24 @@ function recommendationText(key: string): string {
   } catch {
     return String(value)
   }
+}
+
+function promptVersionLabel(versionId: number | null | undefined): string {
+  if (!versionId) return '-'
+  return promptVersionOptions.value.find((option) => option.id === versionId)?.version ?? `#${versionId}`
+}
+
+function recommendationHistoryMeta(item: PromptTestOptimizationRecommendation): string {
+  return t('promptTestOptimization.labels.historyMeta', {
+    version: promptVersionLabel(item.prompt_version_id),
+    model: item.evaluator_model_name ?? '-',
+    time: formatDateTime(item.created_at)
+  })
+}
+
+function applyRecommendation(item: PromptTestOptimizationRecommendation | null) {
+  recommendation.value = item
+  applyRecommendationDraft()
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -559,6 +665,51 @@ async function loadPrompts() {
   prompts.value = Array.from(promptMap.values())
 }
 
+function resolveRoutePromptVersionId(): number | null {
+  const raw = Array.isArray(route.query.promptVersionId)
+    ? route.query.promptVersionId[0]
+    : route.query.promptVersionId
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+async function refreshRecommendationHistory(taskId: number) {
+  const versionId = selectedPromptVersionId.value
+  const history = await listPromptTestOptimizationRecommendations(
+    taskId,
+    showAllHistory.value ? null : versionId
+  )
+  recommendationHistory.value = history
+}
+
+async function refreshRecommendationForTarget(taskId: number) {
+  const versionId = selectedPromptVersionId.value
+  recommendation.value = versionId
+    ? await getLatestPromptTestOptimizationRecommendation(taskId, versionId).catch(() => null)
+    : null
+  await refreshRecommendationHistory(taskId)
+  applyRecommendationDraft()
+}
+
+function initializeTargetPromptVersion() {
+  const routeVersionId = resolveRoutePromptVersionId()
+  const available = Array.from(referencedVersionIds.value)
+  if (routeVersionId && available.includes(routeVersionId)) {
+    selectedPromptVersionId.value = routeVersionId
+    return
+  }
+  if (available.length === 1) {
+    selectedPromptVersionId.value = available[0]
+    void router.replace({
+      name: 'prompt-test-optimization',
+      params: route.params,
+      query: { ...route.query, promptVersionId: String(available[0]) }
+    })
+    return
+  }
+  selectedPromptVersionId.value = null
+}
+
 async function loadPage() {
   const taskId = routeTaskId.value
   if (!taskId) {
@@ -568,22 +719,21 @@ async function loadPage() {
   loading.value = true
   errorMessage.value = null
   try {
-    const [taskData, unitList, scoreResult, recommendationResult, providerList] =
+    const [taskData, unitList, scoreResult, providerList] =
       await Promise.all([
         getPromptTestTask(taskId),
         listPromptTestUnits(taskId),
         getPromptTestAIScores(taskId).catch(() => null),
-        getLatestPromptTestOptimizationRecommendation(taskId).catch(() => null),
         listLLMProviders()
       ])
     task.value = taskData
     units.value = unitList
     scoringSummary.value = scoreResult
-    recommendation.value = recommendationResult
     providers.value = providerList
+    initializeTargetPromptVersion()
     initializeOptimizationModel()
     await loadPrompts()
-    applyRecommendationDraft()
+    await refreshRecommendationForTarget(taskId)
   } catch (error) {
     console.error('加载 AI 优化页失败', error)
     errorMessage.value = extractErrorMessage(
@@ -598,6 +748,11 @@ async function loadPage() {
 async function handleGenerateRecommendation() {
   const currentTask = task.value
   if (!currentTask) return
+  const promptVersionId = selectedPromptVersionId.value
+  if (!promptVersionId) {
+    ElMessage.warning(t('promptTestOptimization.messages.promptVersionRequired'))
+    return
+  }
   const model = selectedModel.value
   if (!model) {
     ElMessage.warning(t('promptTestOptimization.messages.modelRequired'))
@@ -606,11 +761,13 @@ async function handleGenerateRecommendation() {
   generating.value = true
   try {
     recommendation.value = await createPromptTestOptimizationRecommendation(currentTask.id, {
+      prompt_version_id: promptVersionId,
       evaluator_provider_id: model.providerId,
       evaluator_model_id: model.modelId,
       evaluator_model_name: model.modelName,
       language: locale.value
     })
+    await refreshRecommendationHistory(currentTask.id)
     applyRecommendationDraft()
     if (recommendation.value.status === 'failed') {
       ElMessage.error(
@@ -626,6 +783,30 @@ async function handleGenerateRecommendation() {
     )
   } finally {
     generating.value = false
+  }
+}
+
+async function handlePromptVersionChange(value: string | number | boolean | null | undefined) {
+  const taskId = routeTaskId.value
+  const parsed = Number(value)
+  const versionId = Number.isInteger(parsed) && parsed > 0 ? parsed : null
+  selectedPromptVersionId.value = versionId
+  revisionDraft.value = ''
+  recommendation.value = null
+  if (taskId && versionId) {
+    await router.replace({
+      name: 'prompt-test-optimization',
+      params: route.params,
+      query: { ...route.query, promptVersionId: String(versionId) }
+    })
+    await refreshRecommendationForTarget(taskId)
+  }
+}
+
+async function handleHistoryScopeChange() {
+  const taskId = routeTaskId.value
+  if (taskId) {
+    await refreshRecommendationHistory(taskId)
   }
 }
 
@@ -878,6 +1059,10 @@ onMounted(() => {
   width: min(380px, 100%);
 }
 
+.version-select {
+  width: min(320px, 100%);
+}
+
 .recommendation-alert {
   margin-bottom: 16px;
 }
@@ -920,6 +1105,32 @@ onMounted(() => {
 .revision-tip {
   color: var(--el-color-warning);
   font-size: 13px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-item--active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
 }
 
 @media (max-width: 1120px) {

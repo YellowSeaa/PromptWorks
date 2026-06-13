@@ -1,3 +1,48 @@
+## [1.2.0-beta.4](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.3...v1.2.0-beta.4) (2026-06-13)
+
+### Features
+
+* 优化模型供应商卡片可读性 ([07f2842](https://github.com/YellowSeaa/PromptWorks/commit/07f28425ddbc3b76d6de50d9f305590d9747a27f))
+* 优化测试任务列表可读性 ([ef29e65](https://github.com/YellowSeaa/PromptWorks/commit/ef29e65629564e3c404d2f2756f98f0a9ed66b3a))
+* 增加测试任务状态筛选 ([58b3a5d](https://github.com/YellowSeaa/PromptWorks/commit/58b3a5d4e4630cc22f957129b63e64c3e1d2255b))
+
+### Bug Fixes
+
+* 修复测试任务列表筛选和高度 ([6074d59](https://github.com/YellowSeaa/PromptWorks/commit/6074d5964afa6cd63e631e5a6a9927a1c914a6f6))
+* 移除测试任务页外层滚动条 ([f13aa8b](https://github.com/YellowSeaa/PromptWorks/commit/f13aa8b7566750744f1ffe81e394401ccc886b51))
+
+## [1.2.0-beta.3](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.2...v1.2.0-beta.3) (2026-06-12)
+
+### Features
+
+* 优化前端主布局 ([84422b1](https://github.com/YellowSeaa/PromptWorks/commit/84422b18001a8e6c2505dca8a3ae8bc015fe4d82))
+* 优化前端主布局 ([067de80](https://github.com/YellowSeaa/PromptWorks/commit/067de80355a0883193820ccda8be8117ad64ff97))
+* 增加前端主题色切换 ([59d5070](https://github.com/YellowSeaa/PromptWorks/commit/59d50709831a6b54d91ddce9e12a8196aff89f30))
+
+### Bug Fixes
+
+* 修复顶部下拉按钮点击失效 ([b885770](https://github.com/YellowSeaa/PromptWorks/commit/b885770962afa6c204cc3c9a7f177dc9ce164c71))
+* 恢复顶部按钮悬浮提示 ([add3fd6](https://github.com/YellowSeaa/PromptWorks/commit/add3fd651ae4734f950bfbc430ed8eaf6ddb01fd))
+
+## [1.2.0-beta.2](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0-beta.1...v1.2.0-beta.2) (2026-06-12)
+
+### Bug Fixes
+
+* 优化项目信息页交互 ([b234f26](https://github.com/YellowSeaa/PromptWorks/commit/b234f262c8f84d53d287a0ce9149746cc4476df6))
+* 优化项目版本状态展示 ([7044f2c](https://github.com/YellowSeaa/PromptWorks/commit/7044f2cf6224ff5be675008d66725aa3885a7eac))
+* 修复 setup-uv action 标签 ([45044c9](https://github.com/YellowSeaa/PromptWorks/commit/45044c9a1a0f99875738b3a649ec15368f1a03f4))
+* 修复 setup-uv action 标签 ([9b630f6](https://github.com/YellowSeaa/PromptWorks/commit/9b630f669bd0cbf9937939dec0e41156b77cc71a))
+* 修复版本检查失败提示 ([dc7d227](https://github.com/YellowSeaa/PromptWorks/commit/dc7d22766d84366bea4777424cc113441ac45c46))
+* 修复迁移版本号过长导致启动失败 ([13ffba7](https://github.com/YellowSeaa/PromptWorks/commit/13ffba70d072c212d45b9615fd3b1aa27cf96131))
+* 显示版本检查限流原因 ([2bad2eb](https://github.com/YellowSeaa/PromptWorks/commit/2bad2ebc3e1722e325f1b78464f33c769f64e886))
+
+## [1.2.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.1.0...v1.2.0-beta.1) (2026-06-12)
+
+### Features
+
+* 支持按版本生成AI优化建议 ([68032cb](https://github.com/YellowSeaa/PromptWorks/commit/68032cbbd7cb29c2ffee53660cc1d4201cc9c44f))
+* 新增项目信息页 ([e3b50ec](https://github.com/YellowSeaa/PromptWorks/commit/e3b50ecf3608c1ef9c7508b61901b40fee5667c6))
+
 ## [1.1.0](https://github.com/YellowSeaa/PromptWorks/compare/v1.0.0...v1.1.0) (2026-06-12)
 
 ### Features

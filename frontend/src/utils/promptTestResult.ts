@@ -18,6 +18,7 @@ export interface PromptTestResultOutput {
 export interface PromptTestResultUnit {
   id: number
   name: string
+  promptVersionId: number | null
   promptVersion: string
   modelName: string
   temperature: number | null
@@ -45,6 +46,7 @@ export function buildPromptTestResultUnit(
   return {
     id: unit.id,
     name: unit.name,
+    promptVersionId: unit.prompt_version_id,
     promptVersion: promptVersionLabel,
     modelName: unit.model_name,
     temperature: unit.temperature,

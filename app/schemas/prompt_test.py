@@ -214,6 +214,7 @@ class PromptTestOptimizationRecommendationRequest(BaseModel):
 
     __test__ = False
 
+    prompt_version_id: int = Field(..., ge=1)
     evaluator_provider_id: int = Field(..., ge=1)
     evaluator_model_id: int = Field(..., ge=1)
     evaluator_model_name: str = Field(..., min_length=1, max_length=150)
@@ -227,6 +228,7 @@ class PromptTestOptimizationRecommendationRead(BaseModel):
 
     id: int
     task_id: int
+    prompt_version_id: int | None = None
     status: PromptTestOptimizationRecommendationStatus
     evaluator_provider_id: int | None = None
     evaluator_model_id: int | None = None

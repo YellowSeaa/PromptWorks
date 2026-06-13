@@ -15,9 +15,19 @@ export const messages = {
     app: {
       title: 'PromptWorks 控制台',
       settings: '设置',
+      language: '语言',
       languageCn: '中文',
       languageEn: 'English',
+      themeLight: '浅色模式',
       themeDark: '深色模式',
+      themeSystem: '跟随系统',
+      themeSwitch: '主题切换',
+      themeColor: '主题色',
+      themeColorBlue: '默认蓝',
+      themeColorGreen: '清新绿',
+      themeColorViolet: '灵感紫',
+      themeColorOrange: '活力橙',
+      themeColorRose: '玫瑰红',
       settingsDialogTitle: '运行超时设置',
       settingsQuickTestTimeoutLabel: '快速测试超时时间（秒）',
       settingsTestTaskTimeoutLabel: '测试任务超时时间（秒）',
@@ -28,18 +38,17 @@ export const messages = {
       settingsSaveSuccess: '超时时间设置已保存',
       settingsSaveFailed: '保存超时时间失败，请稍后重试',
       settingsLoadFailed: '加载设置失败，请稍后重试',
-      settingsSecondsUnit: '秒',
-      settingsNeverUpdated: '尚未设置超时时间',
-      settingsLastUpdated: '上次更新时间：{time}'
+      settingsSecondsUnit: '秒'
     },
     menu: {
-      prompt: 'Prompt 管理',
+      prompt: '提示词管理',
       quickTest: '快速测试',
       testJob: '测试任务',
       class: '分类管理',
       tag: '标签管理',
-      llm: 'LLMs 管理',
-      usage: '用量管理'
+      llm: '模型管理',
+      usage: '用量监控',
+      projectInfo: '项目信息'
     },
     promptManagement: {
       headerTitle: 'Prompt 管理',
@@ -289,18 +298,24 @@ export const messages = {
       table: {
         columns: {
           name: '测试名称',
+          task: '任务',
           model: '模型',
+          configuration: '测试配置',
           versions: '版本列表',
           temperature: '温度',
           repetitions: '测试次数',
           version: '结果页',
           status: '状态',
+          time: '时间',
           createdAt: '创建时间',
           updatedAt: '最近更新',
           actions: '操作'
         },
         promptPrefix: 'Prompt：',
         notePrefix: '备注：',
+        temperaturePrefix: '温度 ',
+        repetitionsPrefix: '{count} 轮',
+        updatedAtPrefix: '更新 ',
         viewDetails: '查看详情',
         retry: '重试',
         delete: '删除',
@@ -308,6 +323,17 @@ export const messages = {
         version: {
           new: '新版',
           legacy: '旧版'
+        }
+      },
+      filters: {
+        promptPlaceholder: '按 Prompt 筛选',
+        resultCount: '共 {count} 个任务',
+        filteredResultCount: '显示 {filtered} / {total} 个任务',
+        status: {
+          all: '全部',
+          active: '进行中',
+          completed: '已完成',
+          failed: '出错'
         }
       },
       versionCount: '{count} 版本',
@@ -344,6 +370,8 @@ export const messages = {
       card: {
         expand: '展开查看详情',
         collapse: '收起卡片',
+        editProvider: '编辑提供方配置',
+        modelCount: '{count} 个模型',
         updateApiKey: '更新 API Key',
         deleteProvider: '删除提供方',
         apiKeyLabel: 'API Key（仅展示脱敏信息）',
@@ -381,6 +409,15 @@ export const messages = {
         apiKeyLabel: 'API Key',
         apiKeyPlaceholder: '请输入访问凭证'
       },
+      providerEditDialog: {
+        title: '编辑提供方配置',
+        providerLabel: '提供方',
+        baseUrlLabel: '接口地址',
+        baseUrlPlaceholder: '请输入提供方 API 地址',
+        currentApiKeyLabel: '当前 API Key',
+        newApiKeyLabel: '新 API Key',
+        newApiKeyPlaceholder: '留空则不更新 API Key'
+      },
       modelDialog: {
         title: '添加模型',
         editTitle: '编辑模型',
@@ -393,7 +430,8 @@ export const messages = {
         concurrencyLabel: '测试并发数',
         concurrencyPlaceholder: '并发请求上限，默认 5',
         contextLengthLabel: '上下文长度',
-        contextLengthPlaceholder: '按 token 近似值填写，留空不截断'
+        contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
+        contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。'
       },
       confirmations: {
         removeModel: {
@@ -435,13 +473,15 @@ export const messages = {
         invalidApiKey: '请输入有效的 API Key',
         apiKeyUpdated: 'API Key 已更新',
         apiKeyUpdateFailed: '更新 API Key 失败，请稍后重试',
+        providerUpdated: '提供方配置已更新',
+        providerUpdateFailed: '更新提供方配置失败，请稍后重试',
         checkTimeout: '检测超时，请稍后重试',
         checkFailed: '检测失败，请稍后重试',
         checkSuccess: '检测成功，用时 {ms} ms'
       }
     },
     usageManagement: {
-      headerTitle: '用量管理',
+      headerTitle: '用量监控',
       headerDescription: '汇总各模型与团队的调用用量，为配额管理和成本分析提供数据支撑。',
       datePicker: {
         rangeSeparator: '至',
@@ -487,6 +527,61 @@ export const messages = {
       messages: {
         usageLoadFailed: '加载用量数据失败，请稍后重试',
         trendLoadFailed: '加载趋势数据失败，请稍后重试'
+      }
+    },
+    projectInfo: {
+      kicker: '项目总览',
+      description: 'PromptWorks 是一个聚焦 Prompt 资产管理与大模型运营的全栈解决方案，支持 Prompt 生命周期管理、模型配置、版本对比与评估实验。',
+      currentVersion: '当前版本',
+      repository: '项目仓库',
+      contactAuthor: '联系作者',
+      tutorial: '使用教程',
+      tutorialComingSoon: '使用教程入口已预留，后续补充内容',
+      empty: '暂未获取到项目信息',
+      contactDialog: {
+        title: '联系作者',
+        message: '欢迎联系我交流 PromptWorks 的使用反馈、部署问题或功能建议。',
+        emailAction: '发送邮件'
+      },
+      stats: {
+        providers: 'AI 供应商',
+        models: '模型',
+        prompts: 'Prompt',
+        promptVersions: 'Prompt 版本',
+        testTasks: '测试任务',
+        testUnits: '测试单元'
+      },
+      deployment: {
+        source: '源码部署',
+        docker: 'Docker 部署',
+        unknown: '未知部署'
+      },
+      version: {
+        title: '版本检查与更新',
+        subtitle: '检查 GitHub 最新 Release，并提供发布说明与可复制的更新命令。',
+        check: '检查新版本',
+        current: '当前版本',
+        latest: '最新版本',
+        deployment: '部署方式',
+        updateAvailable: '发现可用新版本，可查看发布说明或复制下方命令手动更新。',
+        upToDate: '当前已是最新版本。',
+        notChecked: '尚未检查远端最新版本。',
+        remoteUnknown: '未获取到',
+        remoteUnknownHint: '暂未获取到远端最新版本，可稍后重试或查看 GitHub Releases。',
+        releaseNotes: '查看发布说明',
+        copyCommands: '复制更新命令',
+        statusUpdate: '可更新',
+        statusLatest: '已是最新',
+        statusFailed: '检查失败',
+        statusRemoteUnknown: '远端未知'
+      },
+      messages: {
+        loadFailed: '加载项目信息失败，请稍后重试',
+        checkSuccess: '版本检查完成',
+        checkFailed: '检查版本失败，请稍后重试',
+        checkRateLimited: '检查版本失败：GitHub 匿名 API 额度已用完，请稍后重试。',
+        copySuccess: '更新命令已复制',
+        copyFailed: '复制失败，请手动选择命令'
       }
     },
     promptVersionCreate: {
@@ -1059,7 +1154,7 @@ export const messages = {
         },
         fields: {
           overall_advice: '总体建议',
-          temperature_advice: '温度建议',
+          parameter_advice: '参数建议',
           model_advice: '模型建议',
           prompt_revision: 'Prompt 改写',
           validation_plan: '验证计划'
@@ -1067,6 +1162,15 @@ export const messages = {
         messages: {
           success: '优化建议已生成',
           failed: '优化建议生成失败'
+        },
+        versionSelect: {
+          title: '选择优化目标版本',
+          description: '当前任务包含多个 Prompt 版本，请选择本次要优化的目标版本。',
+          recommended: '推荐',
+          avgScore: '平均分 {score}',
+          scoredCount: '已评分 {count} 条',
+          noScore: '暂无评分',
+          confirm: '进入优化'
         }
       },
       labels: {
@@ -1137,13 +1241,16 @@ export const messages = {
         issueDesc: '优先展示低分输出中的评分理由',
         currentPrompt: '当前 Prompt',
         workbench: '优化工作台',
+        history: '历史优化记录',
         revision: 'Prompt 改写结果',
         revisionDesc: '可在创建版本前人工调整内容'
       },
       labels: {
         averageScore: '平均分',
         scoreProgress: '已评分 {completed}/{total}',
-        recommendationMeta: '模型：{model} · 生成时间：{time}'
+        recommendationMeta: '模型：{model} · 生成时间：{time}',
+        targetVersion: '目标版本',
+        historyMeta: '{version} · {model} · {time}'
       },
       status: {
         noRecommendation: '暂无优化建议',
@@ -1156,7 +1263,8 @@ export const messages = {
         generate: '生成优化',
         regenerate: '重新生成',
         copy: '复制改写',
-        createVersion: '新增版本'
+        createVersion: '新增版本',
+        showAllHistory: '全部记录'
       },
       placeholders: {
         model: '选择优化模型',
@@ -1173,6 +1281,7 @@ export const messages = {
         noTask: '测试任务不存在',
         noDimensions: '暂无维度评分',
         noIssues: '暂无低分问题归因',
+        noHistory: '暂无历史优化记录',
         noPromptContent: '暂无 Prompt 内容',
         promptUnknown: '无法识别 Prompt'
       },
@@ -1180,6 +1289,7 @@ export const messages = {
         invalidTask: '无效的测试任务编号',
         loadFailed: '加载 AI 优化页失败，请稍后重试',
         promptScopeInvalid: '无法解析该测试任务唯一归属的 Prompt，可继续生成和复制改写结果，但不能直接新增版本。',
+        promptVersionRequired: '请选择要优化的 Prompt 版本',
         modelRequired: '请选择优化模型',
         generateSuccess: '优化建议已生成',
         generateFailed: '优化建议生成失败',
@@ -1208,9 +1318,19 @@ export const messages = {
     app: {
       title: 'PromptWorks Console',
       settings: 'Settings',
-      languageCn: 'Chinese',
+      language: 'Language',
+      languageCn: '中文',
       languageEn: 'English',
+      themeLight: 'Light Mode',
       themeDark: 'Dark Mode',
+      themeSystem: 'Follow System',
+      themeSwitch: 'Theme Switch',
+      themeColor: 'Theme Color',
+      themeColorBlue: 'Default Blue',
+      themeColorGreen: 'Fresh Green',
+      themeColorViolet: 'Inspiration Violet',
+      themeColorOrange: 'Energy Orange',
+      themeColorRose: 'Rose Red',
       settingsDialogTitle: 'Timeout Settings',
       settingsQuickTestTimeoutLabel: 'Quick Test Timeout (seconds)',
       settingsTestTaskTimeoutLabel: 'Test Task Timeout (seconds)',
@@ -1221,9 +1341,7 @@ export const messages = {
       settingsSaveSuccess: 'Timeout settings saved',
       settingsSaveFailed: 'Failed to save timeout settings. Please try again later.',
       settingsLoadFailed: 'Failed to load settings. Please try again later.',
-      settingsSecondsUnit: 's',
-      settingsNeverUpdated: 'Timeout not configured yet',
-      settingsLastUpdated: 'Last updated at: {time}'
+      settingsSecondsUnit: 's'
     },
     menu: {
       prompt: 'Prompt Management',
@@ -1232,7 +1350,8 @@ export const messages = {
       class: 'Class Management',
       tag: 'Tag Management',
       llm: 'LLM Management',
-      usage: 'Usage Management'
+      usage: 'Usage Monitor',
+      projectInfo: 'Project Info'
     },
     promptManagement: {
       headerTitle: 'Prompt Management',
@@ -1482,18 +1601,24 @@ export const messages = {
       table: {
         columns: {
           name: 'Job Name',
+          task: 'Task',
           model: 'Model',
+          configuration: 'Test Configuration',
           versions: 'Versions',
           temperature: 'Temperature',
           repetitions: 'Runs',
           version: 'Result Page',
           status: 'Status',
+          time: 'Time',
           createdAt: 'Created At',
           updatedAt: 'Last Updated',
           actions: 'Actions'
         },
         promptPrefix: 'Prompt: ',
         notePrefix: 'Note: ',
+        temperaturePrefix: 'Temp ',
+        repetitionsPrefix: '{count} rounds',
+        updatedAtPrefix: 'Updated ',
         viewDetails: 'View Details',
         retry: 'Retry',
         delete: 'Delete',
@@ -1501,6 +1626,17 @@ export const messages = {
         version: {
           new: 'New',
           legacy: 'Legacy'
+        }
+      },
+      filters: {
+        promptPlaceholder: 'Filter by Prompt',
+        resultCount: '{count} tasks',
+        filteredResultCount: 'Showing {filtered} / {total} tasks',
+        status: {
+          all: 'All',
+          active: 'In progress',
+          completed: 'Completed',
+          failed: 'Failed'
         }
       },
       versionCount: '{count} versions',
@@ -1537,6 +1673,8 @@ export const messages = {
       card: {
         expand: 'Expand details',
         collapse: 'Collapse card',
+        editProvider: 'Edit provider settings',
+        modelCount: '{count} models',
         updateApiKey: 'Update API Key',
         deleteProvider: 'Remove provider',
         apiKeyLabel: 'API Key (masked)',
@@ -1574,6 +1712,15 @@ export const messages = {
         apiKeyLabel: 'API Key',
         apiKeyPlaceholder: 'Enter access credential'
       },
+      providerEditDialog: {
+        title: 'Edit Provider Settings',
+        providerLabel: 'Provider',
+        baseUrlLabel: 'Endpoint',
+        baseUrlPlaceholder: 'Enter provider API URL',
+        currentApiKeyLabel: 'Current API Key',
+        newApiKeyLabel: 'New API Key',
+        newApiKeyPlaceholder: 'Leave blank to keep the current API key'
+      },
       modelDialog: {
         title: 'Add Model',
         editTitle: 'Edit Model',
@@ -1586,7 +1733,8 @@ export const messages = {
         concurrencyLabel: 'Test Concurrency',
         concurrencyPlaceholder: 'Max concurrent requests (default 5)',
         contextLengthLabel: 'Context Length',
-        contextLengthPlaceholder: 'Approximate tokens; blank disables truncation'
+        contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
+        contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.'
       },
       confirmations: {
         removeModel: {
@@ -1628,13 +1776,15 @@ export const messages = {
         invalidApiKey: 'Enter a valid API key.',
         apiKeyUpdated: 'API key updated.',
         apiKeyUpdateFailed: 'Failed to update API key. Try again later.',
+        providerUpdated: 'Provider settings updated.',
+        providerUpdateFailed: 'Failed to update provider settings. Try again later.',
         checkTimeout: 'Check timed out. Try again later.',
         checkFailed: 'Model check failed. Try again later.',
         checkSuccess: 'Check succeeded in {ms} ms.'
       }
     },
     usageManagement: {
-      headerTitle: 'Usage Management',
+      headerTitle: 'Usage Monitor',
       headerDescription: 'Aggregate model and team usage to support quota management and cost analysis.',
       datePicker: {
         rangeSeparator: 'to',
@@ -1680,6 +1830,61 @@ export const messages = {
       messages: {
         usageLoadFailed: 'Failed to load usage data. Try again later.',
         trendLoadFailed: 'Failed to load trend data. Try again later.'
+      }
+    },
+    projectInfo: {
+      kicker: 'Project Overview',
+      description: 'PromptWorks is a full-stack solution for prompt asset management and LLM operations, covering prompt lifecycle management, model configuration, version comparison, and evaluation experiments.',
+      currentVersion: 'Current Version',
+      repository: 'Project Repository',
+      contactAuthor: 'Contact Author',
+      tutorial: 'Tutorial',
+      tutorialComingSoon: 'Tutorial entry reserved. Content will be added later.',
+      empty: 'Project information is unavailable.',
+      contactDialog: {
+        title: 'Contact Author',
+        message: 'You are welcome to reach out about PromptWorks feedback, deployment questions, or feature ideas.',
+        emailAction: 'Send Email'
+      },
+      stats: {
+        providers: 'AI Providers',
+        models: 'Models',
+        prompts: 'Prompts',
+        promptVersions: 'Prompt Versions',
+        testTasks: 'Test Tasks',
+        testUnits: 'Test Units'
+      },
+      deployment: {
+        source: 'Source Deployment',
+        docker: 'Docker Deployment',
+        unknown: 'Unknown Deployment'
+      },
+      version: {
+        title: 'Version Check and Update',
+        subtitle: 'Check the latest GitHub Release and provide release notes plus copyable update commands.',
+        check: 'Check Version',
+        current: 'Current',
+        latest: 'Latest',
+        deployment: 'Deployment',
+        updateAvailable: 'A new version is available. View release notes or copy the commands below to update manually.',
+        upToDate: 'You are already on the latest version.',
+        notChecked: 'Latest remote version has not been checked yet.',
+        remoteUnknown: 'Unavailable',
+        remoteUnknownHint: 'Latest remote version is unavailable. Try again later or check GitHub Releases.',
+        releaseNotes: 'View Release Notes',
+        copyCommands: 'Copy Update Commands',
+        statusUpdate: 'Update Available',
+        statusLatest: 'Latest',
+        statusFailed: 'Check Failed',
+        statusRemoteUnknown: 'Remote Unknown'
+      },
+      messages: {
+        loadFailed: 'Failed to load project information. Try again later.',
+        checkSuccess: 'Version check completed.',
+        checkFailed: 'Failed to check version. Try again later.',
+        checkRateLimited: 'Version check failed: GitHub anonymous API rate limit reached. Try again later.',
+        copySuccess: 'Update commands copied.',
+        copyFailed: 'Copy failed. Please select the commands manually.'
       }
     },
     promptVersionCreate: {
@@ -2254,7 +2459,7 @@ export const messages = {
         },
         fields: {
           overall_advice: 'Overall Advice',
-          temperature_advice: 'Temperature Advice',
+          parameter_advice: 'Parameter Advice',
           model_advice: 'Model Advice',
           prompt_revision: 'Prompt Revision',
           validation_plan: 'Validation Plan'
@@ -2262,6 +2467,15 @@ export const messages = {
         messages: {
           success: 'Recommendations generated.',
           failed: 'Failed to generate recommendations.'
+        },
+        versionSelect: {
+          title: 'Select Target Version',
+          description: 'This task contains multiple Prompt versions. Choose the version to optimize.',
+          recommended: 'Recommended',
+          avgScore: 'Average {score}',
+          scoredCount: '{count} scored',
+          noScore: 'No scores',
+          confirm: 'Open Optimization'
         }
       },
       labels: {
@@ -2332,13 +2546,16 @@ export const messages = {
         issueDesc: 'Prioritizes reasoning from low-score outputs',
         currentPrompt: 'Current Prompt',
         workbench: 'Optimization Workspace',
+        history: 'Optimization History',
         revision: 'Prompt Revision',
         revisionDesc: 'Edit the content before creating a new version'
       },
       labels: {
         averageScore: 'Average Score',
         scoreProgress: 'Scored {completed}/{total}',
-        recommendationMeta: 'Model: {model} · Generated: {time}'
+        recommendationMeta: 'Model: {model} · Generated: {time}',
+        targetVersion: 'Target Version',
+        historyMeta: '{version} · {model} · {time}'
       },
       status: {
         noRecommendation: 'No recommendation yet',
@@ -2351,7 +2568,8 @@ export const messages = {
         generate: 'Generate',
         regenerate: 'Regenerate',
         copy: 'Copy Revision',
-        createVersion: 'Create Version'
+        createVersion: 'Create Version',
+        showAllHistory: 'All Records'
       },
       placeholders: {
         model: 'Select optimization model',
@@ -2368,6 +2586,7 @@ export const messages = {
         noTask: 'Test task not found',
         noDimensions: 'No dimension scores',
         noIssues: 'No low-score issue diagnosis',
+        noHistory: 'No optimization history',
         noPromptContent: 'No Prompt content',
         promptUnknown: 'Prompt unknown'
       },
@@ -2375,6 +2594,7 @@ export const messages = {
         invalidTask: 'Invalid test task id.',
         loadFailed: 'Failed to load the AI optimization workspace. Please try again later.',
         promptScopeInvalid: 'Unable to resolve a unique Prompt for this test task. You can still generate and copy revisions, but direct version creation is disabled.',
+        promptVersionRequired: 'Please select the Prompt version to optimize.',
         modelRequired: 'Please select an optimization model.',
         generateSuccess: 'Recommendations generated.',
         generateFailed: 'Failed to generate recommendations.',

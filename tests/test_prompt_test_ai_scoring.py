@@ -12,6 +12,7 @@ from app.models.prompt import Prompt, PromptClass, PromptVersion
 from app.models.prompt_test import (
     PromptTestExperiment,
     PromptTestExperimentStatus,
+    PromptTestOptimizationRecommendation,
     PromptTestOptimizationRecommendationStatus,
     PromptTestOutputScore,
     PromptTestOutputScoreStatus,
@@ -116,6 +117,116 @@ def _create_completed_experiment(db_session, model: LLMModel) -> PromptTestExper
     db_session.add_all([task, unit, experiment])
     db_session.commit()
     return experiment
+
+
+def _create_multi_version_task(db_session, model: LLMModel):
+    """创建同一 Prompt 下两个版本的测试任务。"""
+
+    prompt_class = PromptClass(name="多版本评分分类")
+    prompt = Prompt(name="多版本 Prompt", prompt_class=prompt_class)
+    version_a = PromptVersion(
+        prompt=prompt,
+        version="v1",
+        content="请简洁回答用户问题。",
+    )
+    version_b = PromptVersion(
+        prompt=prompt,
+        version="v2",
+        content="请分步骤、带风险提示地回答用户问题。",
+    )
+    prompt.current_version = version_b
+    task = PromptTestTask(
+        name="多版本任务",
+        description="对比两个 Prompt 版本。",
+        prompt_version_id=version_a.id,
+        config={"prompt_id": prompt.id},
+    )
+    unit_a = PromptTestUnit(
+        task=task,
+        prompt_version=version_a,
+        name="v1 单元",
+        model_name="tested-model",
+        llm_provider_id=model.provider_id,
+        rounds=1,
+        temperature=0.7,
+    )
+    unit_b = PromptTestUnit(
+        task=task,
+        prompt_version=version_b,
+        name="v2 单元",
+        model_name="tested-model",
+        llm_provider_id=model.provider_id,
+        rounds=1,
+        temperature=0.7,
+    )
+    experiment_a = PromptTestExperiment(
+        unit=unit_a,
+        sequence=1,
+        status=PromptTestExperimentStatus.COMPLETED,
+        outputs=[
+            {
+                "run_index": 1,
+                "messages": [{"role": "user", "content": "如何退款？"}],
+                "output_text": "在订单页申请退款。",
+                "latency_ms": 10,
+            }
+        ],
+        finished_at=datetime.now(UTC),
+    )
+    experiment_b = PromptTestExperiment(
+        unit=unit_b,
+        sequence=1,
+        status=PromptTestExperimentStatus.COMPLETED,
+        outputs=[
+            {
+                "run_index": 1,
+                "messages": [{"role": "user", "content": "如何退款？"}],
+                "output_text": "第一步打开订单，第二步申请退款，并确认规则。",
+                "latency_ms": 12,
+            }
+        ],
+        finished_at=datetime.now(UTC),
+    )
+    db_session.add_all(
+        [prompt_class, prompt, version_a, version_b, task, unit_a, unit_b]
+    )
+    db_session.flush()
+    db_session.add_all(
+        [
+            experiment_a,
+            experiment_b,
+            PromptTestOutputScore(
+                task_id=task.id,
+                unit_id=unit_a.id,
+                experiment=experiment_a,
+                run_index=1,
+                status=PromptTestOutputScoreStatus.COMPLETED,
+                evaluator_provider_id=model.provider_id,
+                evaluator_model_id=model.id,
+                evaluator_model_name=model.name,
+                language="zh-CN",
+                overall_score=62,
+                dimension_scores={"完整性": 60},
+                reason="回答过于简略。",
+            ),
+            PromptTestOutputScore(
+                task_id=task.id,
+                unit_id=unit_b.id,
+                experiment=experiment_b,
+                run_index=1,
+                status=PromptTestOutputScoreStatus.COMPLETED,
+                evaluator_provider_id=model.provider_id,
+                evaluator_model_id=model.id,
+                evaluator_model_name=model.name,
+                language="zh-CN",
+                overall_score=91,
+                dimension_scores={"完整性": 92},
+                reason="步骤清晰。",
+            ),
+        ]
+    )
+    db_session.commit()
+    return task, version_a, version_b
 
 
 def test_score_output_retries_twice_then_persists_success(db_session, monkeypatch):
@@ -467,6 +578,7 @@ def test_create_optimization_recommendation_success(db_session, monkeypatch):
     recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
         db_session,
         task_id=experiment.unit.task_id,
+        prompt_version_id=experiment.unit.prompt_version_id,
         evaluator_provider_id=model.provider_id,
         evaluator_model_id=model.id,
         evaluator_model_name=model.name,
@@ -479,6 +591,109 @@ def test_create_optimization_recommendation_success(db_session, monkeypatch):
     assert recommendation.status == PromptTestOptimizationRecommendationStatus.COMPLETED
     assert recommendation.content["prompt_revision"] == "请分步骤回答。"
     assert latest is recommendation
+
+
+def test_create_optimization_recommendation_filters_target_prompt_version(
+    db_session, monkeypatch
+):
+    model = _create_provider_and_model(db_session)
+    task, version_a, version_b = _create_multi_version_task(db_session, model)
+    captured: dict[str, Any] = {}
+
+    def fake_post(*_, **kwargs):
+        messages = kwargs["json"]["messages"]
+        captured["prompt"] = messages[-1]["content"]
+        return DummyResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"overall_advice": "继续强化步骤。", "parameter_advice": "保持当前参数。", "model_advice": "当前模型可继续使用。", "prompt_revision": "请分步骤、带风险提示地回答用户问题，并列出操作入口。", "validation_plan": "用退款问题重测。"}'
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("app.services.prompt_test_ai_scoring.httpx.post", fake_post)
+
+    recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
+        db_session,
+        task_id=task.id,
+        prompt_version_id=version_b.id,
+        evaluator_provider_id=model.provider_id,
+        evaluator_model_id=model.id,
+        evaluator_model_name=model.name,
+        language="zh-CN",
+    )
+
+    assert recommendation.prompt_version_id == version_b.id
+    assert "请分步骤、带风险提示地回答用户问题。" in captured["prompt"]
+    assert "请简洁回答用户问题。" not in captured["prompt"]
+    assert '"unit_id":' in captured["prompt"]
+    assert f'"prompt_version_id": {version_a.id}' not in captured["prompt"]
+    assert recommendation.content["parameter_advice"] == "保持当前参数。"
+
+
+def test_recommendation_history_can_filter_by_prompt_version(db_session):
+    model = _create_provider_and_model(db_session)
+    task, version_a, version_b = _create_multi_version_task(db_session, model)
+    old = PromptTestOptimizationRecommendation(
+        task_id=task.id,
+        prompt_version_id=version_a.id,
+        status=PromptTestOptimizationRecommendationStatus.COMPLETED,
+        evaluator_provider_id=model.provider_id,
+        evaluator_model_id=model.id,
+        evaluator_model_name=model.name,
+        language="zh-CN",
+        content={"prompt_revision": "v1 优化"},
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+    latest_v2 = PromptTestOptimizationRecommendation(
+        task_id=task.id,
+        prompt_version_id=version_b.id,
+        status=PromptTestOptimizationRecommendationStatus.COMPLETED,
+        evaluator_provider_id=model.provider_id,
+        evaluator_model_id=model.id,
+        evaluator_model_name=model.name,
+        language="zh-CN",
+        content={"prompt_revision": "v2 优化"},
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+    db_session.add_all([old, latest_v2])
+    db_session.commit()
+
+    assert (
+        prompt_test_ai_scoring.get_latest_recommendation(
+            db_session, task.id, prompt_version_id=version_b.id
+        ).id
+        == latest_v2.id
+    )
+    history = prompt_test_ai_scoring.list_recommendations(
+        db_session, task.id, prompt_version_id=version_a.id
+    )
+
+    assert [item.id for item in history] == [old.id]
+
+
+def test_optimization_recommendation_api_requires_prompt_version_id(client, db_session):
+    model = _create_provider_and_model(db_session)
+    task, _version_a, _version_b = _create_multi_version_task(db_session, model)
+
+    response = client.post(
+        f"/api/v1/prompt-test/tasks/{task.id}/optimization-recommendations",
+        json={
+            "evaluator_provider_id": model.provider_id,
+            "evaluator_model_id": model.id,
+            "evaluator_model_name": model.name,
+            "language": "zh-CN",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "prompt_version_id" in response.text
 
 
 def test_score_prompt_marks_llm_default_temperature(db_session):
@@ -582,6 +797,7 @@ def test_create_optimization_recommendation_uses_ai_optimization_timeout(
     recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
         db_session,
         task_id=experiment.unit.task_id,
+        prompt_version_id=experiment.unit.prompt_version_id,
         evaluator_provider_id=model.provider_id,
         evaluator_model_id=model.id,
         evaluator_model_name=model.name,
@@ -623,6 +839,7 @@ def test_create_optimization_recommendation_handles_read_timeout(
     recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
         db_session,
         task_id=experiment.unit.task_id,
+        prompt_version_id=experiment.unit.prompt_version_id,
         evaluator_provider_id=model.provider_id,
         evaluator_model_id=model.id,
         evaluator_model_name=model.name,
@@ -678,6 +895,8 @@ def test_recommendation_prompt_uses_compact_output_excerpt(db_session):
     assert long_output not in prompt
     assert "output_excerpt" in prompt
     assert "score_summary" in prompt
+    assert "parameter_advice" in prompt
+    assert "temperature_advice" not in prompt
     assert "prompt_revision 必须是完整可直接落库的新 Prompt 文本" in prompt
     assert "PromptTestOutputScore" not in prompt
 
@@ -756,6 +975,7 @@ def test_optimization_recommendation_requires_valid_scores(client, db_session):
     response = client.post(
         f"/api/v1/prompt-test/tasks/{experiment.unit.task_id}/optimization-recommendations",
         json={
+            "prompt_version_id": experiment.unit.prompt_version_id,
             "evaluator_provider_id": model.provider_id,
             "evaluator_model_id": model.id,
             "evaluator_model_name": model.name,

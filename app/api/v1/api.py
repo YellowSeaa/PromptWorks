@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     test_prompt,
     usage,
     prompt_test_tasks,
+    project_info,
     settings,
 )
 
@@ -27,5 +28,8 @@ api_router.include_router(
     test_prompt.router, prefix="/test_prompt", tags=["test_prompt"]
 )
 api_router.include_router(usage.router, prefix="/usage", tags=["usage"])
+api_router.include_router(
+    project_info.router, prefix="/project-info", tags=["project_info"]
+)
 api_router.include_router(prompt_test_tasks.router)
 api_router.include_router(settings.router)

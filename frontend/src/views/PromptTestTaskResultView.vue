@@ -755,6 +755,50 @@
         <pre>{{ rawResponseDialog.content || t('promptTestResult.dialog.rawResponsePlaceholder') }}</pre>
       </div>
     </el-dialog>
+    <el-dialog
+      v-model="optimizationVersionDialog.visible"
+      :title="t('promptTestResult.recommendation.versionSelect.title')"
+      width="760px"
+    >
+      <p class="version-select-desc">
+        {{ t('promptTestResult.recommendation.versionSelect.description') }}
+      </p>
+      <div class="version-select-grid">
+        <button
+          v-for="option in optimizationVersionOptions"
+          :key="option.promptVersionId"
+          type="button"
+          class="version-select-card"
+          :class="{ 'version-select-card--active': optimizationVersionDialog.selectedId === option.promptVersionId }"
+          @click="optimizationVersionDialog.selectedId = option.promptVersionId"
+        >
+          <div class="version-select-card__header">
+            <strong>{{ option.promptVersion }}</strong>
+            <el-tag v-if="option.recommended" size="small" type="success">
+              {{ t('promptTestResult.recommendation.versionSelect.recommended') }}
+            </el-tag>
+          </div>
+          <div class="version-select-card__score">
+            {{
+              option.averageScore !== null
+                ? t('promptTestResult.recommendation.versionSelect.avgScore', { score: formatScoreValue(option.averageScore) })
+                : t('promptTestResult.recommendation.versionSelect.noScore')
+            }}
+          </div>
+          <div class="version-select-card__meta">
+            {{ t('promptTestResult.recommendation.versionSelect.scoredCount', { count: option.scoreCount }) }}
+          </div>
+        </button>
+      </div>
+      <template #footer>
+        <el-button @click="optimizationVersionDialog.visible = false">
+          {{ t('common.cancel') }}
+        </el-button>
+        <el-button type="primary" @click="confirmOptimizationVersion">
+          {{ t('promptTestResult.recommendation.versionSelect.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -827,6 +871,15 @@ interface ModelInfo {
   modelName: string
 }
 
+interface OptimizationVersionOption {
+  promptVersionId: number
+  promptVersion: string
+  averageScore: number | null
+  scoreCount: number
+  latestTime: number
+  recommended: boolean
+}
+
 type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
 
 interface AnalysisModuleState {
@@ -890,6 +943,10 @@ const rawResponseDialog = reactive({
   visible: false,
   title: '',
   content: ''
+})
+const optimizationVersionDialog = reactive({
+  visible: false,
+  selectedId: null as number | null
 })
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -1531,6 +1588,50 @@ const filteredUnits = computed(() =>
     return keywordMatched && versionMatched && modelMatched && parameterMatched
   })
 )
+
+const optimizationVersionOptions = computed<OptimizationVersionOption[]>(() => {
+  const grouped = new Map<number, PromptTestResultUnit[]>()
+  units.value.forEach((unit) => {
+    if (typeof unit.promptVersionId !== 'number') return
+    const list = grouped.get(unit.promptVersionId) ?? []
+    list.push(unit)
+    grouped.set(unit.promptVersionId, list)
+  })
+
+  const options = Array.from(grouped.entries()).map(([promptVersionId, versionUnits]) => {
+    const scoreValues = versionUnits
+      .map((unit) => unit.averageScore)
+      .filter((score): score is number => typeof score === 'number' && Number.isFinite(score))
+    const averageScore = scoreValues.length
+      ? scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length
+      : null
+    const latestTime = Math.max(
+      0,
+      ...versionUnits.flatMap((unit) =>
+        unit.outputs.map((output) => Number(output.runIndex || 0))
+      )
+    )
+    return {
+      promptVersionId,
+      promptVersion: versionUnits[0]?.promptVersion ?? `#${promptVersionId}`,
+      averageScore,
+      scoreCount: versionUnits.reduce((sum, unit) => sum + unit.scoreCount, 0),
+      latestTime,
+      recommended: false
+    }
+  })
+
+  options.sort((left, right) => {
+    if (left.averageScore !== null && right.averageScore === null) return -1
+    if (left.averageScore === null && right.averageScore !== null) return 1
+    if (left.averageScore !== null && right.averageScore !== null) {
+      const scoreDiff = right.averageScore - left.averageScore
+      if (scoreDiff !== 0) return scoreDiff
+    }
+    return right.latestTime - left.latestTime
+  })
+  return options.map((option, index) => ({ ...option, recommended: index === 0 }))
+})
 
 const configuredModuleIds = computed(() =>
   extractConfiguredAnalysisModules(task.value?.config as Record<string, unknown> | null)
@@ -2428,7 +2529,31 @@ function goBack() {
 function openOptimizationPage() {
   const currentTask = task.value
   if (!currentTask) return
-  router.push({ name: 'prompt-test-optimization', params: { taskId: currentTask.id } })
+  const options = optimizationVersionOptions.value
+  if (options.length <= 1) {
+    router.push({
+      name: 'prompt-test-optimization',
+      params: { taskId: currentTask.id },
+      query: options[0]?.promptVersionId
+        ? { promptVersionId: String(options[0].promptVersionId) }
+        : undefined
+    })
+    return
+  }
+  optimizationVersionDialog.selectedId = options[0]?.promptVersionId ?? null
+  optimizationVersionDialog.visible = true
+}
+
+function confirmOptimizationVersion() {
+  const currentTask = task.value
+  const promptVersionId = optimizationVersionDialog.selectedId
+  if (!currentTask || !promptVersionId) return
+  optimizationVersionDialog.visible = false
+  router.push({
+    name: 'prompt-test-optimization',
+    params: { taskId: currentTask.id },
+    query: { promptVersionId: String(promptVersionId) }
+  })
 }
 
 function exportUnitsCsv() {
@@ -3044,6 +3169,53 @@ watch(
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--el-font-family-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace);
+  font-size: 13px;
+}
+
+.version-select-desc {
+  margin: 0 0 12px;
+  color: var(--text-weak-color);
+}
+
+.version-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.version-select-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 128px;
+  padding: 14px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-select-card--active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
+}
+
+.version-select-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.version-select-card__score {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.version-select-card__meta {
+  color: var(--text-weak-color);
   font-size: 13px;
 }
 

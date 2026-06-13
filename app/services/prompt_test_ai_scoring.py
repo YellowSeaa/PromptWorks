@@ -374,6 +374,25 @@ def retry_output_score(
 def build_task_score_summary(db: Session, task_id: int) -> dict[str, Any]:
     """生成任务级评分列表和单元聚合统计。"""
 
+    return build_task_score_summary_for_prompt_version(db, task_id)
+
+
+def build_task_score_summary_for_prompt_version(
+    db: Session, task_id: int, prompt_version_id: int | None = None
+) -> dict[str, Any]:
+    """生成任务评分列表，可限定目标 Prompt 版本。"""
+
+    filtered_unit_ids: set[int] | None = None
+    if prompt_version_id is not None:
+        filtered_unit_ids = set(
+            db.scalars(
+                select(PromptTestUnit.id).where(
+                    PromptTestUnit.task_id == task_id,
+                    PromptTestUnit.prompt_version_id == prompt_version_id,
+                )
+            )
+        )
+
     scores = list(
         db.scalars(
             select(PromptTestOutputScore)
@@ -385,6 +404,8 @@ def build_task_score_summary(db: Session, task_id: int) -> dict[str, Any]:
             )
         )
     )
+    if filtered_unit_ids is not None:
+        scores = [score for score in scores if score.unit_id in filtered_unit_ids]
     completed_scores = [
         score
         for score in scores
@@ -392,8 +413,8 @@ def build_task_score_summary(db: Session, task_id: int) -> dict[str, Any]:
         and score.overall_score is not None
     ]
     unit_summaries: dict[str, Any] = {}
-    unit_ids = sorted({score.unit_id for score in completed_scores})
-    for unit_id in unit_ids:
+    completed_unit_ids = sorted({score.unit_id for score in completed_scores})
+    for unit_id in completed_unit_ids:
         unit_scores = [score for score in completed_scores if score.unit_id == unit_id]
         values = [float(score.overall_score or 0) for score in unit_scores]
         unit_summaries[str(unit_id)] = {
@@ -417,6 +438,7 @@ def create_optimization_recommendation(
     db: Session,
     *,
     task_id: int,
+    prompt_version_id: int,
     evaluator_provider_id: int,
     evaluator_model_id: int,
     evaluator_model_name: str,
@@ -424,14 +446,18 @@ def create_optimization_recommendation(
 ) -> PromptTestOptimizationRecommendation:
     """基于评分生成优化建议。"""
 
-    summary = build_task_score_summary(db, task_id)
+    task = _load_task_with_outputs(db, task_id)
+    _validate_recommendation_prompt_version(task, prompt_version_id)
+    summary = build_task_score_summary_for_prompt_version(
+        db, task_id, prompt_version_id
+    )
     valid_count = sum(item["count"] for item in summary["unit_summaries"].values())
     if valid_count <= 0:
-        raise PromptTestAIScoringError("当前测试任务没有有效评分，无法生成优化建议。")
+        raise PromptTestAIScoringError("当前版本没有有效评分，无法生成优化建议。")
 
-    task = _load_task_with_outputs(db, task_id)
     recommendation = PromptTestOptimizationRecommendation(
         task_id=task_id,
+        prompt_version_id=prompt_version_id,
         status=PromptTestOptimizationRecommendationStatus.RUNNING,
         evaluator_provider_id=evaluator_provider_id,
         evaluator_model_id=evaluator_model_id,
@@ -447,6 +473,7 @@ def create_optimization_recommendation(
             db,
             task=task,
             summary=summary,
+            prompt_version_id=prompt_version_id,
             evaluator_provider_id=evaluator_provider_id,
             evaluator_model_id=evaluator_model_id,
             evaluator_model_name=evaluator_model_name,
@@ -465,15 +492,59 @@ def create_optimization_recommendation(
 
 
 def get_latest_recommendation(
-    db: Session, task_id: int
+    db: Session, task_id: int, prompt_version_id: int | None = None
 ) -> PromptTestOptimizationRecommendation | None:
     """读取任务最近一次优化建议。"""
 
-    return db.scalar(
+    stmt = (
         select(PromptTestOptimizationRecommendation)
         .where(PromptTestOptimizationRecommendation.task_id == task_id)
         .order_by(PromptTestOptimizationRecommendation.created_at.desc())
     )
+    if prompt_version_id is not None:
+        stmt = stmt.where(
+            PromptTestOptimizationRecommendation.prompt_version_id == prompt_version_id
+        )
+    return db.scalar(stmt)
+
+
+def list_recommendations(
+    db: Session, task_id: int, prompt_version_id: int | None = None
+) -> list[PromptTestOptimizationRecommendation]:
+    """读取任务优化建议历史。"""
+
+    stmt = (
+        select(PromptTestOptimizationRecommendation)
+        .where(PromptTestOptimizationRecommendation.task_id == task_id)
+        .order_by(PromptTestOptimizationRecommendation.created_at.desc())
+    )
+    if prompt_version_id is not None:
+        stmt = stmt.where(
+            PromptTestOptimizationRecommendation.prompt_version_id == prompt_version_id
+        )
+    return list(db.scalars(stmt))
+
+
+def _validate_recommendation_prompt_version(
+    task: PromptTestTask, prompt_version_id: int
+) -> None:
+    """确认目标版本属于当前任务并有对应测试单元。"""
+
+    version_ids = {
+        unit.prompt_version_id
+        for unit in task.units
+        if unit.prompt_version_id is not None
+    }
+    if prompt_version_id not in version_ids:
+        raise PromptTestAIScoringError("目标 Prompt 版本不属于当前测试任务。")
+
+
+def _target_units(
+    task: PromptTestTask, prompt_version_id: int | None
+) -> list[PromptTestUnit]:
+    if prompt_version_id is None:
+        return list(task.units)
+    return [unit for unit in task.units if unit.prompt_version_id == prompt_version_id]
 
 
 def _invoke_score_llm(
@@ -518,6 +589,7 @@ def _invoke_recommendation_llm(
     *,
     task: PromptTestTask,
     summary: dict[str, Any],
+    prompt_version_id: int,
     evaluator_provider_id: int,
     evaluator_model_id: int,
     evaluator_model_name: str,
@@ -538,7 +610,9 @@ def _invoke_recommendation_llm(
         },
         {
             "role": "user",
-            "content": _build_recommendation_prompt(task, summary, language),
+            "content": _build_recommendation_prompt(
+                task, summary, language, prompt_version_id=prompt_version_id
+            ),
         },
     ]
     timeout_config = get_testing_timeout_config(db)
@@ -721,15 +795,20 @@ def _build_score_prompt(
 
 
 def _build_recommendation_prompt(
-    task: PromptTestTask, summary: dict[str, Any], language: str
+    task: PromptTestTask,
+    summary: dict[str, Any],
+    language: str,
+    *,
+    prompt_version_id: int | None = None,
 ) -> str:
     units_payload: list[dict[str, Any]] = []
-    for unit in task.units:
+    for unit in _target_units(task, prompt_version_id):
         latest = _latest_experiment(unit)
         outputs = latest.outputs if latest and isinstance(latest.outputs, list) else []
         units_payload.append(
             {
                 "unit_id": unit.id,
+                "prompt_version_id": unit.prompt_version_id,
                 "unit_name": unit.name,
                 "model_name": unit.model_name,
                 "temperature": unit.temperature,
@@ -745,12 +824,14 @@ def _build_recommendation_prompt(
     payload = {
         "language": language,
         "task": {"id": task.id, "name": task.name, "description": task.description},
+        "target_prompt_version_id": prompt_version_id,
         "score_summary": _compact_recommendation_score_summary(summary),
         "units": units_payload,
     }
     return (
         "请基于评分结果生成 Prompt 测试优化建议。只返回 JSON，字段包括 "
-        "overall_advice、temperature_advice、model_advice、prompt_revision、validation_plan。"
+        "overall_advice、parameter_advice、model_advice、prompt_revision、validation_plan。"
+        "parameter_advice 应覆盖本次测试实际使用的参数，例如 temperature、top_p、max_tokens、response_format 或其他模型参数。"
         "prompt_revision 必须是完整可直接落库的新 Prompt 文本，不能只返回修改片段、摘要或解释。"
         f"所有文本使用 {language} 对应语言。\n"
         f"{json.dumps(payload, ensure_ascii=False, default=str)}"
@@ -1098,8 +1179,10 @@ __all__ = [
     "score_task_outputs",
     "retry_output_score",
     "build_task_score_summary",
+    "build_task_score_summary_for_prompt_version",
     "create_optimization_recommendation",
     "ensure_pending_output_score",
     "get_latest_recommendation",
+    "list_recommendations",
     "update_task_ai_scoring_status",
 ]

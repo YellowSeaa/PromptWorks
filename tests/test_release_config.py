@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -99,3 +101,42 @@ def test_ci_runs_semantic_release_on_main_and_dev_and_tags_images_by_release_ver
     assert "image_version=${IMAGE_VERSION}" in workflow
     assert "backend-v${RELEASE_VERSION}" in workflow
     assert "frontend-v${RELEASE_VERSION}" in workflow
+
+
+def test_ci_uses_resolvable_setup_uv_version_tag():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    match = re.search(r"uses:\s+astral-sh/setup-uv@(v[^\s]+)", workflow)
+
+    assert match is not None
+    assert re.fullmatch(r"v\d+\.\d+\.\d+", match.group(1))
+
+
+def test_ci_uses_node24_ready_action_versions():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "uses: actions/checkout@v6" in workflow
+    assert "uses: actions/setup-python@v6" in workflow
+    assert "uses: actions/setup-node@v6" in workflow
+    assert "uses: docker/setup-qemu-action@v4" in workflow
+    assert "uses: docker/setup-buildx-action@v4" in workflow
+    assert "uses: docker/login-action@v4" in workflow
+    assert "uses: docker/build-push-action@v7" in workflow
+
+
+def test_alembic_revision_ids_fit_version_column_limit():
+    for migration_path in sorted((ROOT / "alembic" / "versions").glob("*.py")):
+        module = ast.parse(migration_path.read_text(encoding="utf-8"))
+        revision = None
+
+        for node in module.body:
+            if not isinstance(node, ast.AnnAssign):
+                continue
+            if not isinstance(node.target, ast.Name) or node.target.id != "revision":
+                continue
+            revision = ast.literal_eval(node.value)
+            break
+
+        assert revision is not None, f"{migration_path.name} 缺少 revision 定义"
+        assert len(revision) <= 32, (
+            f"{migration_path.name} 的 revision 过长({len(revision)}): {revision}"
+        )
