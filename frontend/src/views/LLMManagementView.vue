@@ -22,10 +22,19 @@
             class="provider-card"
             :class="{ 'provider-card--collapsed': card.collapsed }"
           >
-            <div class="provider-card__header">
+            <div
+              class="provider-card__header"
+              role="button"
+              tabindex="0"
+              :aria-label="card.collapsed ? t('llmManagement.card.expand') : t('llmManagement.card.collapse')"
+              @click="toggleCollapse(card.id)"
+              @keydown.enter.prevent="toggleCollapse(card.id)"
+              @keydown.space.prevent="toggleCollapse(card.id)"
+            >
               <div class="provider-card__identity">
                 <el-avatar
                   :size="48"
+                  shape="square"
                   class="provider-card__avatar"
                   :src="card.logoUrl || undefined"
                 >
@@ -33,9 +42,20 @@
                 </el-avatar>
                 <div class="provider-card__text">
                   <h3>{{ card.providerName }}</h3>
+                  <p class="provider-card__url" :title="card.baseUrl || t('common.notSet')">
+                    {{ card.baseUrl || t('common.notSet') }}
+                  </p>
                 </div>
               </div>
               <div class="provider-card__actions">
+                <el-tag
+                  v-if="card.collapsed"
+                  class="provider-card__model-count"
+                  type="info"
+                  effect="plain"
+                >
+                  {{ t('llmManagement.card.modelCount', { count: card.models.length }) }}
+                </el-tag>
                 <el-tooltip
                   :content="card.collapsed ? t('llmManagement.card.expand') : t('llmManagement.card.collapse')"
                   placement="top"
@@ -45,16 +65,18 @@
                     text
                     size="small"
                     :icon="card.collapsed ? Expand : Fold"
-                    @click="toggleCollapse(card.id)"
+                    :aria-label="card.collapsed ? t('llmManagement.card.expand') : t('llmManagement.card.collapse')"
+                    @click.stop="toggleCollapse(card.id)"
                   />
                 </el-tooltip>
-                <el-tooltip :content="t('llmManagement.card.updateApiKey')" placement="top">
+                <el-tooltip :content="t('llmManagement.card.editProvider')" placement="top">
                   <el-button
                     class="collapse-button"
                     text
                     size="small"
                     :icon="Edit"
-                    @click="handleUpdateApiKey(card)"
+                    :aria-label="t('llmManagement.card.editProvider')"
+                    @click.stop="openProviderEditDialog(card)"
                   />
                 </el-tooltip>
                 <el-tooltip :content="t('llmManagement.card.deleteProvider')" placement="top">
@@ -64,7 +86,8 @@
                     type="danger"
                     size="small"
                     :icon="Delete"
-                    @click="handleDeleteProvider(card)"
+                    :aria-label="t('llmManagement.card.deleteProvider')"
+                    @click.stop="handleDeleteProvider(card)"
                   />
                 </el-tooltip>
               </div>
@@ -72,36 +95,6 @@
 
             <transition name="fade">
               <div v-show="!card.collapsed" class="provider-card__body">
-                <el-form label-position="top" class="provider-card__form">
-                  <el-form-item :label="t('llmManagement.card.apiKeyLabel')">
-                    <el-input
-                      class="provider-card__input"
-                      :type="card.revealApiKey ? 'text' : 'password'"
-                      :model-value="card.maskedApiKey"
-                      readonly
-                    >
-                      <template #suffix>
-                        <el-icon class="icon-button" @click.stop="toggleApiVisible(card.id)">
-                          <component :is="card.revealApiKey ? Hide : View" />
-                        </el-icon>
-                      </template>
-                    </el-input>
-                  </el-form-item>
-                  <el-form-item :label="t('llmManagement.card.baseUrlLabel')">
-                    <el-input
-                      class="provider-card__input"
-                      v-model="card.baseUrl"
-                      :readonly="!card.isCustom"
-                      :placeholder="
-                        card.isCustom
-                          ? t('llmManagement.card.baseUrlPlaceholderCustom')
-                          : t('llmManagement.card.baseUrlPlaceholderDefault')
-                      "
-                      @change="(value) => handleBaseUrlChange(card, value)"
-                    />
-                  </el-form-item>
-                </el-form>
-
                 <div class="provider-card__models">
                   <div class="provider-card__models-header">
                     <span>{{ t('llmManagement.card.modelsTitle') }}</span>
@@ -260,6 +253,52 @@
     </el-dialog>
 
     <el-dialog
+      v-model="providerEditDialogVisible"
+      :title="t('llmManagement.providerEditDialog.title')"
+      width="560px"
+    >
+      <el-form :model="providerEditForm" label-width="120px" class="dialog-form">
+        <el-form-item :label="t('llmManagement.providerEditDialog.providerLabel')">
+          <el-input v-model="providerEditForm.providerName" disabled />
+        </el-form-item>
+        <el-form-item :label="t('llmManagement.providerEditDialog.baseUrlLabel')">
+          <el-input
+            v-model="providerEditForm.baseUrl"
+            :placeholder="t('llmManagement.providerEditDialog.baseUrlPlaceholder')"
+          />
+        </el-form-item>
+        <el-form-item :label="t('llmManagement.providerEditDialog.currentApiKeyLabel')">
+          <el-input
+            class="provider-card__input"
+            :type="providerEditForm.revealApiKey ? 'text' : 'password'"
+            :model-value="providerEditForm.maskedApiKey"
+            readonly
+          >
+            <template #suffix>
+              <el-icon class="icon-button" @click.stop="providerEditForm.revealApiKey = !providerEditForm.revealApiKey">
+                <component :is="providerEditForm.revealApiKey ? Hide : View" />
+              </el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item :label="t('llmManagement.providerEditDialog.newApiKeyLabel')">
+          <el-input
+            v-model="providerEditForm.apiKey"
+            :placeholder="t('llmManagement.providerEditDialog.newApiKeyPlaceholder')"
+            type="password"
+            show-password
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="providerEditDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="providerEditLoading" @click="submitProviderEdit">
+          {{ t('common.save') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="modelDialogVisible"
       :title="isEditingModel ? t('llmManagement.modelDialog.editTitle') : t('llmManagement.modelDialog.title')"
       width="560px"
@@ -287,6 +326,7 @@
         <el-form-item :label="t('llmManagement.modelDialog.concurrencyLabel')">
           <el-input-number
             v-model="modelForm.concurrency"
+            class="model-number-input"
             :min="1"
             :max="50"
             :step="1"
@@ -294,9 +334,27 @@
             :placeholder="t('llmManagement.modelDialog.concurrencyPlaceholder')"
           />
         </el-form-item>
-        <el-form-item :label="t('llmManagement.modelDialog.contextLengthLabel')">
+        <el-form-item>
+          <template #label>
+            <span class="form-label-with-help">
+              {{ t('llmManagement.modelDialog.contextLengthLabel') }}
+              <el-tooltip
+                :content="t('llmManagement.modelDialog.contextLengthHelp')"
+                placement="top"
+                trigger="hover"
+                :show-after="120"
+              >
+                <span class="form-help-trigger">
+                  <el-icon class="form-help-icon">
+                    <InfoFilled />
+                  </el-icon>
+                </span>
+              </el-tooltip>
+            </span>
+          </template>
           <el-input-number
             v-model="modelForm.contextLength"
+            class="model-number-input"
             :min="1"
             :max="2000000"
             :step="1024"
@@ -317,7 +375,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { CircleCheck, Delete, Edit, Expand, Fold, Hide, Plus, View } from '@element-plus/icons-vue'
+import { CircleCheck, Delete, Edit, Expand, Fold, Hide, InfoFilled, Plus, View } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import {
@@ -360,7 +418,6 @@ interface ProviderCard {
   isCustom: boolean
   models: ProviderCardModel[]
   collapsed: boolean
-  revealApiKey: boolean
 }
 
 const { t } = useI18n()
@@ -464,21 +521,13 @@ function toggleCollapse(id: number) {
   }
 }
 
-function toggleApiVisible(id: number) {
-  const target = providerCards.value.find((item) => item.id === id)
-  if (target) {
-    target.revealApiKey = !target.revealApiKey
-  }
-}
-
 async function fetchProviders() {
   loadingProviders.value = true
   try {
     const existingCollapsed = new Map(providerCards.value.map((card) => [card.id, card.collapsed]))
-    const existingReveal = new Map(providerCards.value.map((card) => [card.id, card.revealApiKey]))
 
     const providers = await listLLMProviders()
-    providerCards.value = providers.map((provider) => mapProviderToCard(provider, existingCollapsed, existingReveal))
+    providerCards.value = providers.map((provider) => mapProviderToCard(provider, existingCollapsed))
   } catch (error) {
     console.error(error)
     ElMessage.error(t('llmManagement.messages.loadProvidersFailed'))
@@ -514,8 +563,7 @@ function extractErrorMessage(error: unknown): string {
 
 function mapProviderToCard(
   provider: LLMProvider,
-  collapsedState: Map<number, boolean>,
-  revealState: Map<number, boolean>
+  collapsedState: Map<number, boolean>
 ): ProviderCard {
   const logoUrl = provider.logo_url ?? null
   const logoEmoji =
@@ -537,8 +585,7 @@ function mapProviderToCard(
       concurrencyLimit: model.concurrency_limit,
       contextLength: model.context_length
     })),
-    collapsed: collapsedState.get(provider.id) ?? false,
-    revealApiKey: revealState.get(provider.id) ?? false
+    collapsed: collapsedState.get(provider.id) ?? true
   }
 }
 
@@ -741,28 +788,6 @@ function formatContextLength(value: number | null) {
   return value.toLocaleString()
 }
 
-async function handleBaseUrlChange(card: ProviderCard, value: string) {
-  if (!card.isCustom) {
-    return
-  }
-  const trimmed = (value ?? '').trim()
-  if (!trimmed) {
-    ElMessage.warning(t('llmManagement.messages.customBaseUrlRequired'))
-    await fetchProviders()
-    return
-  }
-  try {
-    await updateLLMProvider(card.id, { base_url: trimmed })
-    ElMessage.success(t('llmManagement.messages.baseUrlUpdated'))
-    card.baseUrl = trimmed
-  } catch (error: any) {
-    console.error(error)
-    const message = error?.payload?.detail ?? t('llmManagement.messages.baseUrlUpdateFailed')
-    ElMessage.error(message)
-    await fetchProviders()
-  }
-}
-
 async function handleDeleteProvider(card: ProviderCard) {
   const modelCount = card.models.length
   const message = t('llmManagement.confirmations.removeProvider.message', {
@@ -790,35 +815,70 @@ async function handleDeleteProvider(card: ProviderCard) {
   }
 }
 
-async function handleUpdateApiKey(card: ProviderCard) {
+const providerEditDialogVisible = ref(false)
+const providerEditLoading = ref(false)
+const providerEditForm = reactive({
+  providerId: null as number | null,
+  providerName: '',
+  baseUrl: '',
+  originalBaseUrl: '',
+  maskedApiKey: '',
+  apiKey: '',
+  revealApiKey: false
+})
+
+function openProviderEditDialog(card: ProviderCard) {
+  providerEditForm.providerId = card.id
+  providerEditForm.providerName = card.providerName
+  providerEditForm.baseUrl = card.baseUrl
+  providerEditForm.originalBaseUrl = card.baseUrl
+  providerEditForm.maskedApiKey = card.maskedApiKey
+  providerEditForm.apiKey = ''
+  providerEditForm.revealApiKey = false
+  providerEditDialogVisible.value = true
+}
+
+async function submitProviderEdit() {
+  const providerId = providerEditForm.providerId
+  if (!providerId) {
+    ElMessage.error(t('llmManagement.messages.providerNotFound'))
+    return
+  }
+
+  const trimmedBaseUrl = providerEditForm.baseUrl.trim()
+  const trimmedApiKey = providerEditForm.apiKey.trim()
+  if (!trimmedBaseUrl) {
+    ElMessage.warning(t('llmManagement.messages.customBaseUrlRequired'))
+    return
+  }
+
+  const payload: {
+    base_url?: string
+    api_key?: string
+  } = {}
+  if (trimmedBaseUrl !== providerEditForm.originalBaseUrl) {
+    payload.base_url = trimmedBaseUrl
+  }
+  if (trimmedApiKey) {
+    payload.api_key = trimmedApiKey
+  }
+  if (!Object.keys(payload).length) {
+    providerEditDialogVisible.value = false
+    return
+  }
+
+  providerEditLoading.value = true
   try {
-    const { value } = await ElMessageBox.prompt(
-      t('llmManagement.confirmations.updateApiKey.message'),
-      t('llmManagement.confirmations.updateApiKey.title'),
-      {
-        confirmButtonText: t('common.confirm'),
-        cancelButtonText: t('common.cancel'),
-        inputType: 'password',
-        inputPlaceholder: t('llmManagement.confirmations.updateApiKey.placeholder')
-      }
-    )
-
-    const newKey = value.trim()
-    if (!newKey) {
-      ElMessage.warning(t('llmManagement.messages.invalidApiKey'))
-      return
-    }
-
-    await updateLLMProvider(card.id, { api_key: newKey })
-    ElMessage.success(t('llmManagement.messages.apiKeyUpdated'))
+    await updateLLMProvider(providerId, payload)
+    ElMessage.success(t('llmManagement.messages.providerUpdated'))
+    providerEditDialogVisible.value = false
     await fetchProviders()
   } catch (error: any) {
-    if (error === 'cancel' || error === 'close') {
-      return
-    }
     console.error(error)
-    const detail = error?.payload?.detail ?? t('llmManagement.messages.apiKeyUpdateFailed')
+    const detail = error?.payload?.detail ?? t('llmManagement.messages.providerUpdateFailed')
     ElMessage.error(detail)
+  } finally {
+    providerEditLoading.value = false
   }
 }
 
@@ -901,72 +961,109 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 180px;
 }
 
 .provider-card--collapsed {
-  min-height: 120px;
+  min-height: 0;
 }
 
 .provider-card__header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.provider-card__header:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
 }
 
 .provider-card__identity {
   display: flex;
+  flex: 1 1 auto;
   gap: 12px;
   align-items: center;
+  min-width: 0;
 }
 
 .provider-card__avatar {
+  flex: 0 0 auto;
   font-size: 24px;
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
+  border-radius: 12px;
+}
+
+.provider-card__avatar :deep(img) {
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.provider-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .provider-card__text h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
-.provider-card__text p {
-  margin: 4px 0 0;
-  font-size: 13px;
+.provider-card__url {
+  max-width: min(640px, 58vw);
+  margin: 0;
+  overflow: hidden;
   color: var(--text-weak-color);
+  font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .provider-card__actions {
   display: flex;
-  align-items: flex-start;
+  gap: 2px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.provider-card__model-count {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .collapse-button {
-  padding: 0 8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+}
+
+.collapse-button :deep(.el-icon) {
+  font-size: 18px;
 }
 
 .provider-card__body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding-top: 18px;
 }
 
-.provider-card__form {
-  display: flex;
-  flex-direction: column;
-  /* gap: 12px; */
-  width: 100%;
-  max-width: 360px;
-  margin-top: 15px;
-}
-
-.provider-card__form .el-form-item {
-  width: 100%;
-}
 .provider-card__input {
-  max-width: 360px;
   width: 100%;
 }
 
@@ -999,6 +1096,34 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   gap: 12px;
 }
 
+.form-label-with-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-help-icon {
+  color: var(--text-weak-color);
+  cursor: help;
+  font-size: 15px;
+}
+
+.form-help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+
+.model-number-input {
+  width: 100%;
+}
+
+.model-number-input :deep(.el-input) {
+  width: 100%;
+}
+
 .emoji-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
@@ -1026,5 +1151,34 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 480px) {
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .provider-card__header {
+    flex-direction: column;
+  }
+
+  .provider-card__identity {
+    width: 100%;
+  }
+
+  .provider-card__text {
+    flex: 1 1 auto;
+  }
+
+  .provider-card__url {
+    max-width: 100%;
+  }
+
+  .provider-card__actions {
+    align-self: flex-end;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 </style>

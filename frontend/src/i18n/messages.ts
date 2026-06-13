@@ -353,6 +353,8 @@ export const messages = {
       card: {
         expand: '展开查看详情',
         collapse: '收起卡片',
+        editProvider: '编辑提供方配置',
+        modelCount: '{count} 个模型',
         updateApiKey: '更新 API Key',
         deleteProvider: '删除提供方',
         apiKeyLabel: 'API Key（仅展示脱敏信息）',
@@ -390,6 +392,15 @@ export const messages = {
         apiKeyLabel: 'API Key',
         apiKeyPlaceholder: '请输入访问凭证'
       },
+      providerEditDialog: {
+        title: '编辑提供方配置',
+        providerLabel: '提供方',
+        baseUrlLabel: '接口地址',
+        baseUrlPlaceholder: '请输入提供方 API 地址',
+        currentApiKeyLabel: '当前 API Key',
+        newApiKeyLabel: '新 API Key',
+        newApiKeyPlaceholder: '留空则不更新 API Key'
+      },
       modelDialog: {
         title: '添加模型',
         editTitle: '编辑模型',
@@ -402,7 +413,8 @@ export const messages = {
         concurrencyLabel: '测试并发数',
         concurrencyPlaceholder: '并发请求上限，默认 5',
         contextLengthLabel: '上下文长度',
-        contextLengthPlaceholder: '按 token 近似值填写，留空不截断'
+        contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
+        contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。'
       },
       confirmations: {
         removeModel: {
@@ -444,6 +456,8 @@ export const messages = {
         invalidApiKey: '请输入有效的 API Key',
         apiKeyUpdated: 'API Key 已更新',
         apiKeyUpdateFailed: '更新 API Key 失败，请稍后重试',
+        providerUpdated: '提供方配置已更新',
+        providerUpdateFailed: '更新提供方配置失败，请稍后重试',
         checkTimeout: '检测超时，请稍后重试',
         checkFailed: '检测失败，请稍后重试',
         checkSuccess: '检测成功，用时 {ms} ms'
@@ -1625,6 +1639,8 @@ export const messages = {
       card: {
         expand: 'Expand details',
         collapse: 'Collapse card',
+        editProvider: 'Edit provider settings',
+        modelCount: '{count} models',
         updateApiKey: 'Update API Key',
         deleteProvider: 'Remove provider',
         apiKeyLabel: 'API Key (masked)',
@@ -1662,6 +1678,15 @@ export const messages = {
         apiKeyLabel: 'API Key',
         apiKeyPlaceholder: 'Enter access credential'
       },
+      providerEditDialog: {
+        title: 'Edit Provider Settings',
+        providerLabel: 'Provider',
+        baseUrlLabel: 'Endpoint',
+        baseUrlPlaceholder: 'Enter provider API URL',
+        currentApiKeyLabel: 'Current API Key',
+        newApiKeyLabel: 'New API Key',
+        newApiKeyPlaceholder: 'Leave blank to keep the current API key'
+      },
       modelDialog: {
         title: 'Add Model',
         editTitle: 'Edit Model',
@@ -1674,7 +1699,8 @@ export const messages = {
         concurrencyLabel: 'Test Concurrency',
         concurrencyPlaceholder: 'Max concurrent requests (default 5)',
         contextLengthLabel: 'Context Length',
-        contextLengthPlaceholder: 'Approximate tokens; blank disables truncation'
+        contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
+        contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.'
       },
       confirmations: {
         removeModel: {
@@ -1716,6 +1742,8 @@ export const messages = {
         invalidApiKey: 'Enter a valid API key.',
         apiKeyUpdated: 'API key updated.',
         apiKeyUpdateFailed: 'Failed to update API key. Try again later.',
+        providerUpdated: 'Provider settings updated.',
+        providerUpdateFailed: 'Failed to update provider settings. Try again later.',
         checkTimeout: 'Check timed out. Try again later.',
         checkFailed: 'Model check failed. Try again later.',
         checkSuccess: 'Check succeeded in {ms} ms.'
