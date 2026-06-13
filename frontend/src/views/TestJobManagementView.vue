@@ -28,6 +28,15 @@
       </template>
       <div class="list-toolbar">
         <div class="list-toolbar__filters">
+          <el-radio-group v-model="statusFilter" size="small" class="status-filter">
+            <el-radio-button
+              v-for="option in statusFilterOptions"
+              :key="option.value"
+              :label="option.value"
+            >
+              {{ option.label }}
+            </el-radio-button>
+          </el-radio-group>
           <el-select
             v-model="promptFilter"
             class="prompt-filter"
@@ -231,10 +240,13 @@ const pollingTimer = ref<number | null>(null)
 const tableWrapperRef = ref<HTMLElement | null>(null)
 const tableHeight = ref(520)
 const promptFilter = ref('')
+const statusFilter = ref<JobStatusFilter>('all')
 
 const TABLE_BOTTOM_PADDING = 24
 const TABLE_MIN_HEIGHT = 240
 const promptTaskProgress = ref<Record<number, ProgressMetrics>>({})
+
+type JobStatusFilter = 'all' | 'active' | 'completed' | 'failed'
 
 function clearPolling() {
   if (pollingTimer.value !== null) {
@@ -497,16 +509,27 @@ const promptFilterOptions = computed(() =>
     .map((name) => ({ label: name, value: name }))
 )
 
+const statusFilterOptions = computed<Array<{ label: string; value: JobStatusFilter }>>(() => [
+  { label: t('testJobManagement.filters.status.all'), value: 'all' },
+  { label: t('testJobManagement.filters.status.active'), value: 'active' },
+  { label: t('testJobManagement.filters.status.completed'), value: 'completed' },
+  { label: t('testJobManagement.filters.status.failed'), value: 'failed' }
+])
+
 const jobs = computed<AggregatedJobRow[]>(() => {
   const selectedPrompt = promptFilter.value.trim()
-  if (!selectedPrompt) {
-    return allJobs.value
-  }
-  return allJobs.value.filter((job) => job.promptName === selectedPrompt)
+  return allJobs.value.filter((job) => {
+    const matchesPrompt = !selectedPrompt || job.promptName === selectedPrompt
+    const matchesStatus =
+      statusFilter.value === 'all' ||
+      (statusFilter.value === 'active' && (job.status === 'pending' || job.status === 'running')) ||
+      job.status === statusFilter.value
+    return matchesPrompt && matchesStatus
+  })
 })
 
 const resultCountLabel = computed(() => {
-  if (promptFilter.value.trim()) {
+  if (promptFilter.value.trim() || statusFilter.value !== 'all') {
     return t('testJobManagement.filters.filteredResultCount', {
       filtered: jobs.value.length,
       total: allJobs.value.length
@@ -1115,9 +1138,14 @@ async function handleDelete(job: AggregatedJobRow) {
 
 .list-toolbar__filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.status-filter {
+  flex: 0 0 auto;
 }
 
 .prompt-filter {
@@ -1263,9 +1291,27 @@ async function handleDelete(job: AggregatedJobRow) {
   }
 
   .page-header__actions,
-  .list-toolbar__filters,
   .prompt-filter {
     width: 100%;
+  }
+
+  .list-toolbar__filters {
+    width: 100%;
+  }
+
+  .status-filter {
+    display: flex;
+    width: 100%;
+  }
+
+  .status-filter :deep(.el-radio-button) {
+    flex: 1;
+  }
+
+  .status-filter :deep(.el-radio-button__inner) {
+    width: 100%;
+    padding-right: 8px;
+    padding-left: 8px;
   }
 
   .page-header__actions :deep(.el-button) {

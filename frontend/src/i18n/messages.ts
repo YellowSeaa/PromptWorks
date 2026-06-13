@@ -328,7 +328,13 @@ export const messages = {
       filters: {
         promptPlaceholder: '按 Prompt 筛选',
         resultCount: '共 {count} 个任务',
-        filteredResultCount: '显示 {filtered} / {total} 个任务'
+        filteredResultCount: '显示 {filtered} / {total} 个任务',
+        status: {
+          all: '全部',
+          active: '进行中',
+          completed: '已完成',
+          failed: '出错'
+        }
       },
       versionCount: '{count} 版本',
       empty: '暂未创建测试任务',
@@ -1611,7 +1617,13 @@ export const messages = {
       filters: {
         promptPlaceholder: 'Filter by Prompt',
         resultCount: '{count} tasks',
-        filteredResultCount: 'Showing {filtered} / {total} tasks'
+        filteredResultCount: 'Showing {filtered} / {total} tasks',
+        status: {
+          all: 'All',
+          active: 'In progress',
+          completed: 'Completed',
+          failed: 'Failed'
+        }
       },
       versionCount: '{count} versions',
       empty: 'No test jobs yet',
