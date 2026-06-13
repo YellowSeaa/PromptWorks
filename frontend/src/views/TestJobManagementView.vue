@@ -20,7 +20,7 @@
       </div>
     </section>
 
-    <el-card class="job-card">
+    <el-card class="job-card" :style="cardHeight ? { height: `${cardHeight}px` } : undefined">
       <template #header>
         <div class="card-header">
           <span>{{ t('testJobManagement.listTitle') }}</span>
@@ -43,6 +43,9 @@
             :placeholder="t('testJobManagement.filters.promptPlaceholder')"
             clearable
             filterable
+            value-on-clear=""
+            @change="handlePromptFilterChange"
+            @clear="handlePromptFilterClear"
           >
             <el-option
               v-for="option in promptFilterOptions"
@@ -239,10 +242,11 @@ const errorMessage = ref<string | null>(null)
 const pollingTimer = ref<number | null>(null)
 const tableWrapperRef = ref<HTMLElement | null>(null)
 const tableHeight = ref(520)
+const cardHeight = ref<number | null>(null)
 const promptFilter = ref('')
 const statusFilter = ref<JobStatusFilter>('all')
 
-const TABLE_BOTTOM_PADDING = 24
+const TABLE_BOTTOM_PADDING = 16
 const TABLE_MIN_HEIGHT = 240
 const promptTaskProgress = ref<Record<number, ProgressMetrics>>({})
 
@@ -277,12 +281,22 @@ function updateTableHeight() {
   const wrapper = tableWrapperRef.value
   if (!wrapper) {
     tableHeight.value = Math.max(TABLE_MIN_HEIGHT, tableHeight.value)
+    cardHeight.value = null
     return
   }
   const rect = wrapper.getBoundingClientRect()
-  const available =
-    window.innerHeight - rect.top - TABLE_BOTTOM_PADDING
-  const usable = Number.isFinite(available) ? Math.floor(available) : TABLE_MIN_HEIGHT
+  const card = wrapper.closest('.job-card')
+  const cardRect = card?.getBoundingClientRect()
+  const cardBody = wrapper.closest('.el-card__body')
+  const cardBodyStyle = cardBody ? window.getComputedStyle(cardBody) : null
+  const bodyPaddingBottom = cardBodyStyle ? safeNumber(cardBodyStyle.paddingBottom) ?? 0 : 0
+  const cardBottomOffset = cardRect ? rect.top - cardRect.top : 0
+  const cardAvailable = window.innerHeight - (cardRect?.top ?? rect.top) - TABLE_BOTTOM_PADDING
+  const tableAvailable = window.innerHeight - rect.top - bodyPaddingBottom - TABLE_BOTTOM_PADDING
+  const usable = Number.isFinite(tableAvailable) ? Math.floor(tableAvailable) : TABLE_MIN_HEIGHT
+  cardHeight.value = Number.isFinite(cardAvailable)
+    ? Math.max(TABLE_MIN_HEIGHT + cardBottomOffset, Math.floor(cardAvailable))
+    : null
   tableHeight.value = Math.max(TABLE_MIN_HEIGHT, usable)
 }
 
@@ -496,6 +510,18 @@ function unmarkJobDeleting(id: string) {
   deletingJobIds.value = deletingJobIds.value.filter((item) => item !== id)
 }
 
+function normalizePromptFilterValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function handlePromptFilterChange(value: unknown) {
+  promptFilter.value = normalizePromptFilterValue(value)
+}
+
+function handlePromptFilterClear() {
+  promptFilter.value = ''
+}
+
 const allJobs = computed<AggregatedJobRow[]>(() => {
   const legacyRows = buildLegacyJobRows(testRuns.value)
   const promptTaskRows = buildPromptTestTaskRows(promptTestTasks.value)
@@ -546,7 +572,7 @@ watch([jobs, isLoading], () => {
 
 watch(promptFilterOptions, (options) => {
   if (promptFilter.value && !options.some((option) => option.value === promptFilter.value)) {
-    promptFilter.value = ''
+    handlePromptFilterClear()
   }
 })
 
@@ -1161,12 +1187,16 @@ async function handleDelete(job: AggregatedJobRow) {
 .job-card {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .job-card :deep(.el-card__body) {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .table-wrapper {
@@ -1174,6 +1204,8 @@ async function handleDelete(job: AggregatedJobRow) {
   flex-direction: column;
   gap: 12px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .table-alert {
