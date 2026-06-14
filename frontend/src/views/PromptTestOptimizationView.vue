@@ -391,6 +391,7 @@ const loading = ref(false)
 const generating = ref(false)
 const creatingVersion = ref(false)
 const errorMessage = ref<string | null>(null)
+let recommendationRefreshToken = 0
 
 const adviceFields = ['overall_advice', 'parameter_advice', 'model_advice', 'validation_plan']
 
@@ -681,7 +682,24 @@ function recommendationHistoryMeta(item: PromptTestOptimizationRecommendation): 
   })
 }
 
-function applyRecommendation(item: PromptTestOptimizationRecommendation | null) {
+async function applyRecommendation(item: PromptTestOptimizationRecommendation | null) {
+  recommendationRefreshToken += 1
+  const versionId = item?.prompt_version_id ?? null
+  if (
+    versionId &&
+    versionId !== selectedPromptVersionId.value &&
+    promptVersionOptions.value.some((option) => option.id === versionId)
+  ) {
+    const taskId = routeTaskId.value
+    selectedPromptVersionId.value = versionId
+    if (taskId) {
+      await router.replace({
+        name: 'prompt-test-optimization',
+        params: route.params,
+        query: { ...route.query, promptVersionId: String(versionId) }
+      })
+    }
+  }
   recommendation.value = item
   applyRecommendationDraft()
 }
@@ -738,19 +756,44 @@ function resolveRoutePromptVersionId(): number | null {
 
 async function refreshRecommendationHistory(taskId: number) {
   const versionId = selectedPromptVersionId.value
+  const includeAllHistory = showAllHistory.value
+  const requestToken = ++recommendationRefreshToken
   const history = await listPromptTestOptimizationRecommendations(
     taskId,
-    showAllHistory.value ? null : versionId
+    includeAllHistory ? null : versionId
   )
+  if (
+    requestToken !== recommendationRefreshToken ||
+    selectedPromptVersionId.value !== versionId ||
+    showAllHistory.value !== includeAllHistory
+  ) {
+    return
+  }
   recommendationHistory.value = history
 }
 
 async function refreshRecommendationForTarget(taskId: number) {
   const versionId = selectedPromptVersionId.value
-  recommendation.value = versionId
-    ? await getLatestPromptTestOptimizationRecommendation(taskId, versionId).catch(() => null)
-    : null
-  await refreshRecommendationHistory(taskId)
+  const includeAllHistory = showAllHistory.value
+  const requestToken = ++recommendationRefreshToken
+  const [latest, history] = await Promise.all([
+    versionId
+      ? getLatestPromptTestOptimizationRecommendation(taskId, versionId).catch(() => null)
+      : Promise.resolve(null),
+    listPromptTestOptimizationRecommendations(
+      taskId,
+      includeAllHistory ? null : versionId
+    )
+  ])
+  if (
+    requestToken !== recommendationRefreshToken ||
+    selectedPromptVersionId.value !== versionId ||
+    showAllHistory.value !== includeAllHistory
+  ) {
+    return
+  }
+  recommendation.value = latest
+  recommendationHistory.value = history
   applyRecommendationDraft()
 }
 
