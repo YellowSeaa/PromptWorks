@@ -1248,6 +1248,7 @@ export const messages = {
       labels: {
         averageScore: '平均分',
         scoreProgress: '已评分 {completed}/{total}',
+        summaryMeta: '{task} · Prompt 版本 {version}',
         recommendationMeta: '模型：{model} · 生成时间：{time}',
         targetVersion: '目标版本',
         historyMeta: '{version} · {model} · {time}'
@@ -1264,7 +1265,13 @@ export const messages = {
         regenerate: '重新生成',
         copy: '复制改写',
         createVersion: '新增版本',
+        versionHistory: '版本与历史',
         showAllHistory: '全部记录'
+      },
+      historyDialog: {
+        title: '版本与历史记录',
+        versionTitle: '目标版本',
+        versionDesc: '生成优化时会锁定当前选择的 Prompt 版本。'
       },
       placeholders: {
         model: '选择优化模型',
@@ -2553,6 +2560,7 @@ export const messages = {
       labels: {
         averageScore: 'Average Score',
         scoreProgress: 'Scored {completed}/{total}',
+        summaryMeta: '{task} · Prompt version {version}',
         recommendationMeta: 'Model: {model} · Generated: {time}',
         targetVersion: 'Target Version',
         historyMeta: '{version} · {model} · {time}'
@@ -2569,7 +2577,13 @@ export const messages = {
         regenerate: 'Regenerate',
         copy: 'Copy Revision',
         createVersion: 'Create Version',
+        versionHistory: 'Versions & History',
         showAllHistory: 'All Records'
+      },
+      historyDialog: {
+        title: 'Versions & History',
+        versionTitle: 'Target Version',
+        versionDesc: 'Generation locks to the currently selected Prompt version.'
       },
       placeholders: {
         model: 'Select optimization model',
