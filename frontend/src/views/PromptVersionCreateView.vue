@@ -45,8 +45,8 @@
             :placeholder="t('promptVersionCreate.form.contentPlaceholder')"
           />
         </el-form-item>
-        <el-form-item :label="t('promptVersionCreate.form.referenceLabel')">
-          <el-select v-model="form.reference" clearable :placeholder="t('promptVersionCreate.form.referencePlaceholder')">
+        <el-form-item :label="t('promptVersionCreate.form.baseVersionLabel')">
+          <el-select v-model="form.baseVersionId" clearable :placeholder="t('promptVersionCreate.form.baseVersionPlaceholder')">
             <el-option
               v-for="version in promptDetail.versions"
               :key="version.id"
@@ -95,7 +95,7 @@ const form = reactive({
   version: '',
   summary: '',
   content: '',
-  reference: undefined as number | undefined
+  baseVersionId: undefined as number | undefined
 })
 
 const isSubmitting = ref(false)
@@ -104,10 +104,23 @@ watch(
   () => promptDetail.value?.current_version?.id,
   (versionId) => {
     if (typeof versionId === 'number') {
-      form.reference = versionId
+      form.baseVersionId = versionId
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => form.baseVersionId,
+  (versionId) => {
+    if (typeof versionId !== 'number') {
+      return
+    }
+    const baseVersion = promptDetail.value?.versions.find((version) => version.id === versionId)
+    if (baseVersion) {
+      form.content = baseVersion.content
+    }
+  }
 )
 
 function extractErrorMessage(error: unknown): string {
