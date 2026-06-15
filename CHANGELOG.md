@@ -1,3 +1,9 @@
+## [1.3.0-beta.3](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.2...v1.3.0-beta.3) (2026-06-15)
+
+### Bug Fixes
+
+* 合并模型成本迁移头 ([d6b0a57](https://github.com/YellowSeaa/PromptWorks/commit/d6b0a573f5ae7e8b20c344149677a7190ec5d5fc))
+
 ## [1.3.0-beta.2](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-06-15)
 
 ### Features
