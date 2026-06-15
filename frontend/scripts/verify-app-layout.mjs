@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const appVue = readFileSync(resolve(root, 'src/App.vue'), 'utf8')
 const usageManagementVue = readFileSync(resolve(root, 'src/views/UsageManagementView.vue'), 'utf8')
+const llmManagementVue = readFileSync(resolve(root, 'src/views/LLMManagementView.vue'), 'utf8')
 const messages = readFileSync(resolve(root, 'src/i18n/messages.ts'), 'utf8')
 
 const checks = [
@@ -76,6 +77,39 @@ const checks = [
       usageManagementVue.includes('.dark .model-card :deep(.el-table__body tr.is-active > td)') &&
       usageManagementVue.includes('--el-table-tr-bg-color') &&
       usageManagementVue.includes('--el-fill-color-light')
+  },
+  {
+    name: '模型成本配置主流程默认使用人民币',
+    pass:
+      llmManagementVue.includes("modelForm.costCurrency = 'CNY'") &&
+      llmManagementVue.includes("modelForm.costDisplayCurrency = 'CNY'") &&
+      llmManagementVue.includes('cost-default-note')
+  },
+  {
+    name: '模型成本计费规则不直接展示汇率字段',
+    pass:
+      llmManagementVue.includes('cost-pricing-section') &&
+      llmManagementVue.indexOf('cost-pricing-section') < llmManagementVue.indexOf('cost-advanced-section') &&
+      !llmManagementVue
+        .slice(
+          llmManagementVue.indexOf('cost-pricing-section'),
+          llmManagementVue.indexOf('cost-advanced-section')
+        )
+        .includes('costExchangeRate')
+  },
+  {
+    name: '模型成本高级设置包含币种和汇率',
+    pass:
+      llmManagementVue.includes('cost-advanced-section') &&
+      llmManagementVue.includes('costCurrencyLabel') &&
+      llmManagementVue.includes('costExchangeRateLabel')
+  },
+  {
+    name: '模型成本阶梯价格展示列名',
+    pass:
+      llmManagementVue.includes('cost-tier-row--head') &&
+      llmManagementVue.includes('costTierContextLabel') &&
+      llmManagementVue.includes('costTierActionLabel')
   },
   {
     name: '中文菜单使用提示词管理和模型管理',
