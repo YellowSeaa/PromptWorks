@@ -426,8 +426,29 @@
                 <h4>{{ t('llmManagement.modelDialog.costCurrencySectionTitle') }}</h4>
                 <p>{{ t('llmManagement.modelDialog.costCurrencySectionHint') }}</p>
               </div>
+              <el-tag :type="modelForm.useCustomCurrency ? 'warning' : 'info'" effect="plain">
+                {{
+                  modelForm.useCustomCurrency
+                    ? t('llmManagement.modelDialog.costCurrencyEnabled')
+                    : t('llmManagement.modelDialog.costCurrencyDisabled')
+                }}
+              </el-tag>
             </div>
-            <el-row :gutter="12">
+            <div class="cost-currency-toggle">
+              <div>
+                <strong>{{ t('llmManagement.modelDialog.costCurrencyToggleTitle') }}</strong>
+                <span>{{ t('llmManagement.modelDialog.costCurrencyToggleHint') }}</span>
+              </div>
+              <el-switch
+                v-model="modelForm.useCustomCurrency"
+                @change="handleCustomCurrencyToggle"
+              />
+            </div>
+            <div v-if="!modelForm.useCustomCurrency" class="cost-currency-summary">
+              <span>{{ t('llmManagement.modelDialog.costCurrencyDefaultStatus') }}</span>
+              <strong>CNY / 1</strong>
+            </div>
+            <el-row v-else :gutter="12">
               <el-col :xs="24" :sm="12">
                 <el-form-item :label="t('llmManagement.modelDialog.costCurrencyLabel')">
                   <el-input v-model="modelForm.costCurrency" />
@@ -445,11 +466,16 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            <div class="cost-default-note">
+            <div v-if="modelForm.useCustomCurrency" class="cost-default-note">
               {{ t('llmManagement.modelDialog.costCurrencyDefaultNote') }}
             </div>
-          </el-collapse-item>
-          <el-collapse-item :title="t('llmManagement.modelDialog.costTierTitle')" name="tiers">
+            <div class="cost-advanced-divider" />
+            <div class="cost-section-header">
+              <div>
+                <h4>{{ t('llmManagement.modelDialog.costTierTitle') }}</h4>
+                <p>{{ t('llmManagement.modelDialog.costTierHint') }}</p>
+              </div>
+            </div>
             <div class="cost-tier-list">
               <div class="cost-tier-row cost-tier-row--head" aria-hidden="true">
                 <span>{{ t('llmManagement.modelDialog.costTierContextLabel') }}</span>
@@ -838,6 +864,7 @@ const modelForm = reactive({
   quota: '',
   concurrency: 5,
   contextLength: null as number | null,
+  useCustomCurrency: false,
   costCurrency: 'CNY',
   costDisplayCurrency: 'CNY',
   costExchangeRate: 1,
@@ -863,6 +890,7 @@ function handleAddModel(providerId: number) {
 }
 
 function resetModelCostForm() {
+  modelForm.useCustomCurrency = false
   modelForm.costCurrency = 'CNY'
   modelForm.costDisplayCurrency = 'CNY'
   modelForm.costExchangeRate = 1
@@ -870,6 +898,19 @@ function resetModelCostForm() {
   modelForm.costInputPerUnit = null
   modelForm.costOutputPerUnit = null
   modelForm.costTiers = []
+}
+
+function isCustomCurrency(currency: string, exchangeRate: number) {
+  const normalizedCurrency = currency.trim().toUpperCase()
+  return normalizedCurrency !== 'CNY' || Number(exchangeRate) !== 1
+}
+
+function handleCustomCurrencyToggle(value: string | number | boolean) {
+  if (!value) {
+    modelForm.costCurrency = 'CNY'
+    modelForm.costDisplayCurrency = 'CNY'
+    modelForm.costExchangeRate = 1
+  }
 }
 
 function buildCostPayload() {
@@ -881,9 +922,11 @@ function buildCostPayload() {
       output_per_unit: tier.outputPerUnit ?? null
     }))
   return {
-    cost_currency: modelForm.costCurrency.trim().toUpperCase() || 'CNY',
+    cost_currency: modelForm.useCustomCurrency
+      ? modelForm.costCurrency.trim().toUpperCase() || 'CNY'
+      : 'CNY',
     cost_display_currency: modelForm.costDisplayCurrency.trim().toUpperCase() || 'CNY',
-    cost_exchange_rate: Number(modelForm.costExchangeRate) || 1,
+    cost_exchange_rate: modelForm.useCustomCurrency ? Number(modelForm.costExchangeRate) || 1 : 1,
     cost_pricing_unit: Math.trunc(Number(modelForm.costPricingUnit) || 1000000),
     cost_input_per_unit: modelForm.costInputPerUnit,
     cost_output_per_unit: modelForm.costOutputPerUnit,
@@ -985,6 +1028,7 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.quota = model.quota ?? ''
   modelForm.concurrency = model.concurrencyLimit
   modelForm.contextLength = model.contextLength
+  modelForm.useCustomCurrency = isCustomCurrency(model.costCurrency, model.costExchangeRate)
   modelForm.costCurrency = model.costCurrency
   modelForm.costDisplayCurrency = model.costDisplayCurrency
   modelForm.costExchangeRate = model.costExchangeRate
@@ -1003,10 +1047,15 @@ function formatContextLength(value: number | null) {
 }
 
 function formatModelCost(model: ProviderCardModel) {
-  const input = model.costInputPerUnit ?? 0
-  const output = model.costOutputPerUnit ?? 0
+  const input = formatDisplayCostRate(model.costInputPerUnit, model.costExchangeRate)
+  const output = formatDisplayCostRate(model.costOutputPerUnit, model.costExchangeRate)
   const unit = model.costPricingUnit.toLocaleString()
   return `${model.costDisplayCurrency} ${input}/${output} / ${unit}`
+}
+
+function formatDisplayCostRate(value: number | null, exchangeRate: number) {
+  const displayValue = (value ?? 0) * (Number(exchangeRate) || 1)
+  return Number.isInteger(displayValue) ? `${displayValue}` : `${Number(displayValue.toFixed(6))}`
 }
 
 async function handleDeleteProvider(card: ProviderCard) {
@@ -1334,6 +1383,10 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 }
 
 .cost-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -1348,6 +1401,58 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.cost-currency-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  background: var(--el-fill-color-lighter);
+}
+
+.cost-currency-toggle strong,
+.cost-currency-toggle span {
+  display: block;
+}
+
+.cost-currency-toggle strong {
+  font-size: 13px;
+}
+
+.cost-currency-toggle span {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cost-currency-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-blank);
+  font-size: 12px;
+}
+
+.cost-currency-summary strong {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+}
+
+.cost-advanced-divider {
+  height: 1px;
+  margin: 18px 0 14px;
+  background: var(--el-border-color-lighter);
 }
 
 .form-label-with-help {
@@ -1468,6 +1573,13 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 
   .cost-tier-row--head {
     display: none;
+  }
+
+  .cost-section-header,
+  .cost-currency-toggle,
+  .cost-currency-summary {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

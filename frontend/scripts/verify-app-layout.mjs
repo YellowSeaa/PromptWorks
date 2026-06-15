@@ -102,14 +102,24 @@ const checks = [
     pass:
       llmManagementVue.includes('cost-advanced-section') &&
       llmManagementVue.includes('costCurrencyLabel') &&
-      llmManagementVue.includes('costExchangeRateLabel')
+      llmManagementVue.includes('costExchangeRateLabel') &&
+      llmManagementVue.includes('costCurrencyToggleTitle')
   },
   {
     name: '模型成本阶梯价格展示列名',
     pass:
       llmManagementVue.includes('cost-tier-row--head') &&
       llmManagementVue.includes('costTierContextLabel') &&
-      llmManagementVue.includes('costTierActionLabel')
+      llmManagementVue.includes('costTierActionLabel') &&
+      llmManagementVue.indexOf('cost-advanced-section') < llmManagementVue.indexOf('costTierTitle') &&
+      !llmManagementVue.includes('<el-collapse-item :title="t(\'llmManagement.modelDialog.costTierTitle\')"')
+  },
+  {
+    name: '模型列表成本展示按汇率折算为展示币种',
+    pass:
+      llmManagementVue.includes('formatDisplayCostRate') &&
+      llmManagementVue.includes('model.costExchangeRate') &&
+      llmManagementVue.includes('model.costDisplayCurrency')
   },
   {
     name: '中文菜单使用提示词管理和模型管理',
