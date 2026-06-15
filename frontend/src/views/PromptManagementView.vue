@@ -145,8 +145,14 @@
         show-icon
         class="dialog-alert"
       />
-      <el-form :model="promptForm" label-width="100px" class="dialog-form">
-        <el-form-item :label="t('promptManagement.form.title')">
+      <el-form
+        ref="createFormRef"
+        :model="promptForm"
+        :rules="createRules"
+        label-width="100px"
+        class="dialog-form"
+      >
+        <el-form-item :label="t('promptManagement.form.title')" prop="name">
           <el-input v-model="promptForm.name" :placeholder="t('promptManagement.form.titlePlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('promptManagement.form.author')">
@@ -160,7 +166,7 @@
             :placeholder="t('promptManagement.form.descriptionPlaceholder')"
           />
         </el-form-item>
-        <el-form-item :label="t('promptManagement.form.class')">
+        <el-form-item :label="t('promptManagement.form.class')" prop="classId">
           <el-select v-model="promptForm.classId" :placeholder="t('promptManagement.form.classPlaceholder')">
             <el-option
               v-for="item in classOptions"
@@ -186,10 +192,10 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('promptManagement.form.version')">
+        <el-form-item :label="t('promptManagement.form.version')" prop="version">
           <el-input v-model="promptForm.version" :placeholder="t('promptManagement.form.versionPlaceholder')" />
         </el-form-item>
-        <el-form-item :label="t('promptManagement.form.content')">
+        <el-form-item :label="t('promptManagement.form.content')" prop="content">
           <el-input
             v-model="promptForm.content"
             type="textarea"
@@ -209,10 +215,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { Delete, Plus, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { listPrompts, createPrompt, deletePrompt, type HttpError } from '../api/prompt'
 import { listPromptClasses, type PromptClassStats } from '../api/promptClass'
 import { listPromptTags, type PromptTagStats } from '../api/promptTag'
@@ -344,6 +350,7 @@ const filteredPrompts = computed(() => {
 })
 
 const createDialogVisible = ref(false)
+const createFormRef = ref<FormInstance>()
 const promptForm = reactive<PromptFormState>({
   name: '',
   description: '',
@@ -353,6 +360,52 @@ const promptForm = reactive<PromptFormState>({
   version: '',
   content: ''
 })
+
+const createRules = computed<FormRules<PromptFormState>>(() => ({
+  name: [
+    {
+      validator: (_rule, value: string, callback) => {
+        if (value.trim()) {
+          callback()
+          return
+        }
+        callback(new Error(t('promptManagement.messages.missingRequired')))
+      },
+      trigger: 'blur'
+    }
+  ],
+  classId: [
+    {
+      required: true,
+      message: t('promptManagement.messages.selectClass'),
+      trigger: 'change'
+    }
+  ],
+  version: [
+    {
+      validator: (_rule, value: string, callback) => {
+        if (value.trim()) {
+          callback()
+          return
+        }
+        callback(new Error(t('promptManagement.messages.missingRequired')))
+      },
+      trigger: 'blur'
+    }
+  ],
+  content: [
+    {
+      validator: (_rule, value: string, callback) => {
+        if (value.trim()) {
+          callback()
+          return
+        }
+        callback(new Error(t('promptManagement.messages.missingRequired')))
+      },
+      trigger: 'blur'
+    }
+  ]
+}))
 
 function resetPromptForm() {
   promptForm.name = ''
@@ -367,27 +420,22 @@ function resetPromptForm() {
 function openCreateDialog() {
   resetPromptForm()
   createDialogVisible.value = true
+  nextTick(() => {
+    createFormRef.value?.clearValidate()
+  })
 }
 
 function isDeleting(id: number) {
   return deletingIds.value.includes(id)
 }
 
-function handleCreatePrompt() {
-  if (!promptForm.name.trim() || !promptForm.version.trim() || !promptForm.content.trim()) {
-    ElMessage.warning(t('promptManagement.messages.missingRequired'))
-    return
-  }
-  if (!promptForm.classId) {
-    ElMessage.warning(t('promptManagement.messages.selectClass'))
-    return
-  }
+async function handleCreatePrompt() {
   if (isSubmitting.value) {
     return
   }
 
-  if (!promptForm.classId) {
-    ElMessage.warning(t('promptManagement.messages.selectClass'))
+  const isValid = await createFormRef.value?.validate().catch(() => false)
+  if (!isValid) {
     return
   }
 

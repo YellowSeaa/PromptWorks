@@ -20,11 +20,11 @@ export interface PromptTagCreatePayload {
 }
 
 export async function listPromptTags(): Promise<PromptTagListResponse> {
-  return request<PromptTagListResponse>('/prompt-tags')
+  return request<PromptTagListResponse>('/prompt-tags/')
 }
 
 export async function createPromptTag(payload: PromptTagCreatePayload) {
-  return request<PromptTagStats>('/prompt-tags', {
+  return request<PromptTagStats>('/prompt-tags/', {
     method: 'POST',
     body: JSON.stringify(payload)
   })

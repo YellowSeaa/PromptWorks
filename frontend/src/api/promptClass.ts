@@ -30,12 +30,12 @@ export async function listPromptClasses(params: {
   if (typeof params.limit === 'number') searchParams.set('limit', String(params.limit))
   if (typeof params.offset === 'number') searchParams.set('offset', String(params.offset))
   const query = searchParams.toString()
-  const path = `/prompt-classes${query ? `?${query}` : ''}`
+  const path = `/prompt-classes/${query ? `?${query}` : ''}`
   return request<PromptClassStats[]>(path)
 }
 
 export async function createPromptClass(payload: PromptClassCreatePayload) {
-  return request<PromptClassStats>('/prompt-classes', {
+  return request<PromptClassStats>('/prompt-classes/', {
     method: 'POST',
     body: JSON.stringify(payload)
   })

@@ -38,7 +38,7 @@ export async function listPrompts(params: PromptListParams = {}): Promise<Prompt
   if (typeof params.limit === 'number') searchParams.set('limit', String(params.limit))
   if (typeof params.offset === 'number') searchParams.set('offset', String(params.offset))
   const query = searchParams.toString()
-  const path = `/prompts${query ? `?${query}` : ''}`
+  const path = `/prompts/${query ? `?${query}` : ''}`
   return request<Prompt[]>(path)
 }
 
