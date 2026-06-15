@@ -602,8 +602,8 @@ export const messages = {
         summaryPlaceholder: '简要说明本次更新要点',
         contentLabel: '内容正文',
         contentPlaceholder: '在这里粘贴完整 Prompt 内容',
-        referenceLabel: '引用版本',
-        referencePlaceholder: '可选择参考版本'
+        baseVersionLabel: '基于版本',
+        baseVersionPlaceholder: '选择后自动填入该版本内容'
       },
       actions: {
         submit: '提交',
@@ -1912,8 +1912,8 @@ export const messages = {
         summaryPlaceholder: 'Briefly describe what changed in this version',
         contentLabel: 'Content',
         contentPlaceholder: 'Paste the full prompt content here',
-        referenceLabel: 'Reference Version',
-        referencePlaceholder: 'Optional: choose a version to reference'
+        baseVersionLabel: 'Base Version',
+        baseVersionPlaceholder: 'Choose a version to fill its content'
       },
       actions: {
         submit: 'Submit',
