@@ -718,6 +718,27 @@ onUnmounted(() => {
   background: var(--el-color-primary-light-9);
 }
 
+.side-menu :deep(.el-menu-item:hover) {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.side-menu :deep(.el-menu-item:hover .el-icon),
+.side-menu :deep(.el-menu-item.is-active .el-icon) {
+  color: inherit;
+}
+
+.dark .side-menu :deep(.el-menu-item:hover),
+.dark .side-menu :deep(.el-menu-item.is-active) {
+  background: var(--el-color-primary-dark-2);
+  color: var(--el-text-color-primary);
+}
+
+.dark .side-menu :deep(.el-menu-item:hover .el-icon),
+.dark .side-menu :deep(.el-menu-item.is-active .el-icon) {
+  color: var(--el-text-color-primary);
+}
+
 .main-view {
   min-height: 100vh;
   padding: 0 24px 24px;

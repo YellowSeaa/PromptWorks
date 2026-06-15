@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const appVue = readFileSync(resolve(root, 'src/App.vue'), 'utf8')
+const usageManagementVue = readFileSync(resolve(root, 'src/views/UsageManagementView.vue'), 'utf8')
 const messages = readFileSync(resolve(root, 'src/i18n/messages.ts'), 'utf8')
 
 const checks = [
@@ -34,6 +35,13 @@ const checks = [
       !appVue.includes('<el-dropdown trigger="click" @command="handleThemeCommand">\n          <el-tooltip')
   },
   {
+    name: '深色模式下左侧菜单 hover 仍保持可读',
+    pass:
+      appVue.includes('.dark .side-menu :deep(.el-menu-item:hover)') &&
+      appVue.includes('--el-text-color-primary') &&
+      appVue.includes('color: var(--el-text-color-primary);')
+  },
+  {
     name: '语言入口使用合适图标且英文模式中文选项仍显示中文',
     pass:
       appVue.includes(':icon="Reading"') &&
@@ -54,6 +62,20 @@ const checks = [
       appVue.includes("type ThemeMode = 'system' | 'light' | 'dark'") &&
       appVue.includes('prefers-color-scheme: dark') &&
       messages.includes("themeSystem: '跟随系统'")
+  },
+  {
+    name: '用量监控统计卡片在桌面端保持一行',
+    pass:
+      usageManagementVue.includes('<div class="overview-row">') &&
+      usageManagementVue.includes('grid-template-columns: repeat(5, minmax(0, 1fr))') &&
+      !usageManagementVue.includes(':sm="6" v-for="card in overviewCards"')
+  },
+  {
+    name: '深色模式下模型表格当前行使用深色高亮',
+    pass:
+      usageManagementVue.includes('.dark .model-card :deep(.el-table__body tr.is-active > td)') &&
+      usageManagementVue.includes('--el-table-tr-bg-color') &&
+      usageManagementVue.includes('--el-fill-color-light')
   },
   {
     name: '中文菜单使用提示词管理和模型管理',

@@ -19,14 +19,14 @@
       />
     </div>
 
-    <el-row :gutter="16" class="overview-row">
-      <el-col :xs="12" :sm="6" v-for="card in overviewCards" :key="card.key">
+    <div class="overview-row">
+      <div v-for="card in overviewCards" :key="card.key" class="overview-col">
         <el-card shadow="hover" class="overview-card">
           <div class="overview-card__title">{{ card.title }}</div>
           <div class="overview-card__value">{{ card.formatter ? card.formatter() : formatNumber(card.value) }}</div>
         </el-card>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
 
     <el-row :gutter="16" class="detail-row">
       <el-col :xs="24" :lg="12" class="model-col">
@@ -558,7 +558,14 @@ onBeforeUnmount(() => {
 }
 
 .overview-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
   margin-top: 8px;
+}
+
+.overview-col {
+  min-width: 0;
 }
 
 .overview-card {
@@ -620,6 +627,17 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
+.dark .model-card :deep(.el-table__body tr.is-active > td) {
+  --el-table-tr-bg-color: var(--el-fill-color-light);
+
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+}
+
+.dark .model-card :deep(.el-table__body tr.is-active:hover > td) {
+  background-color: var(--el-fill-color-light);
+}
+
 .usage-chart {
   width: 100%;
   flex: 1;
@@ -650,5 +668,17 @@ onBeforeUnmount(() => {
 
 :deep(.is-active) {
   font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+  .overview-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .overview-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>
