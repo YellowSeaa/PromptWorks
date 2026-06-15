@@ -47,7 +47,7 @@
               <div class="section-header">
                 <div>
                   <h3>{{ t('promptTestOptimization.sections.summary') }}</h3>
-                  <p>{{ task.name }}</p>
+                  <p>{{ summaryMetaText }}</p>
                 </div>
                 <el-tag size="small" type="info">{{ scoringStatusText }}</el-tag>
               </div>
@@ -132,19 +132,16 @@
             </template>
 
             <div class="generator-row">
-              <el-select
-                v-model="selectedPromptVersionId"
-                class="version-select"
-                :placeholder="t('promptTestOptimization.messages.promptVersionRequired')"
-                @change="handlePromptVersionChange"
+              <el-button
+                class="version-manage-button"
+                :disabled="generating"
+                @click="openHistoryDialog"
               >
-                <el-option
-                  v-for="option in promptVersionOptions"
-                  :key="option.id"
-                  :label="option.label"
-                  :value="option.id"
-                />
-              </el-select>
+                {{ t('promptTestOptimization.actions.versionHistory') }}
+              </el-button>
+              <el-tag class="current-version-tag" type="info">
+                {{ selectedPromptVersionLabel }}
+              </el-tag>
               <el-select
                 v-model="optimizationModelKey"
                 filterable
@@ -232,46 +229,74 @@
               </div>
             </section>
           </el-card>
-
-          <el-card class="workbench-card" shadow="never">
-            <template #header>
-              <div class="workbench-header">
-                <div>
-                  <h3>{{ t('promptTestOptimization.sections.history') }}</h3>
-                  <p>{{ currentPromptMeta }}</p>
-                </div>
-                <el-switch
-                  v-model="showAllHistory"
-                  :active-text="t('promptTestOptimization.actions.showAllHistory')"
-                  @change="handleHistoryScopeChange"
-                />
-              </div>
-            </template>
-            <div v-if="recommendationHistory.length" class="history-list">
-              <button
-                v-for="item in recommendationHistory"
-                :key="item.id"
-                type="button"
-                class="history-item"
-                :class="{ 'history-item--active': recommendation?.id === item.id }"
-                @click="applyRecommendation(item)"
-              >
-                <span>{{ recommendationHistoryMeta(item) }}</span>
-                <el-tag
-                  size="small"
-                  :type="item.status === 'failed' ? 'danger' : item.status === 'completed' ? 'success' : 'warning'"
-                >
-                  {{ t(`promptTestOptimization.status.${item.status}`) }}
-                </el-tag>
-              </button>
-            </div>
-            <el-empty v-else :description="t('promptTestOptimization.empty.noHistory')" />
-          </el-card>
         </main>
       </div>
     </template>
 
     <el-empty v-else :description="t('promptTestOptimization.empty.noTask')" />
+
+    <el-dialog
+      v-model="historyDialog.visible"
+      :title="t('promptTestOptimization.historyDialog.title')"
+      width="860px"
+    >
+      <div class="history-dialog">
+        <section class="history-dialog__pane">
+          <div class="history-dialog__header">
+            <h4>{{ t('promptTestOptimization.historyDialog.versionTitle') }}</h4>
+            <p>{{ t('promptTestOptimization.historyDialog.versionDesc') }}</p>
+          </div>
+          <div v-if="promptVersionOptions.length" class="version-option-list">
+            <button
+              v-for="option in promptVersionOptions"
+              :key="option.id"
+              type="button"
+              class="version-option"
+              :class="{ 'version-option--active': selectedPromptVersionId === option.id }"
+              :disabled="generating"
+              @click="handlePromptVersionChange(option.id)"
+            >
+              <span>{{ option.version }}</span>
+              <small>{{ option.label }}</small>
+            </button>
+          </div>
+          <el-empty v-else :description="t('promptTestOptimization.empty.promptUnknown')" />
+        </section>
+
+        <section class="history-dialog__pane">
+          <div class="history-dialog__header history-dialog__header--inline">
+            <div>
+              <h4>{{ t('promptTestOptimization.sections.history') }}</h4>
+              <p>{{ currentPromptMeta }}</p>
+            </div>
+            <el-switch
+              v-model="showAllHistory"
+              :active-text="t('promptTestOptimization.actions.showAllHistory')"
+              @change="handleHistoryScopeChange"
+            />
+          </div>
+          <div v-if="recommendationHistory.length" class="history-list">
+            <button
+              v-for="item in recommendationHistory"
+              :key="item.id"
+              type="button"
+              class="history-item"
+              :class="{ 'history-item--active': recommendation?.id === item.id }"
+              @click="applyRecommendation(item)"
+            >
+              <span>{{ recommendationHistoryMeta(item) }}</span>
+              <el-tag
+                size="small"
+                :type="item.status === 'failed' ? 'danger' : item.status === 'completed' ? 'success' : 'warning'"
+              >
+                {{ t(`promptTestOptimization.status.${item.status}`) }}
+              </el-tag>
+            </button>
+          </div>
+          <el-empty v-else :description="t('promptTestOptimization.empty.noHistory')" />
+        </section>
+      </div>
+    </el-dialog>
 
     <el-dialog
       v-model="versionDialog.visible"
@@ -366,8 +391,13 @@ const loading = ref(false)
 const generating = ref(false)
 const creatingVersion = ref(false)
 const errorMessage = ref<string | null>(null)
+let recommendationRefreshToken = 0
 
 const adviceFields = ['overall_advice', 'parameter_advice', 'model_advice', 'validation_plan']
+
+const historyDialog = reactive({
+  visible: false
+})
 
 const versionDialog = reactive({
   visible: false,
@@ -501,6 +531,23 @@ const currentPromptMeta = computed(() => {
   return `${prompt.name} · ${version.version}`
 })
 
+const selectedPromptVersionLabel = computed(() => {
+  if (!selectedPromptVersionId.value) {
+    return t('promptTestOptimization.messages.promptVersionRequired')
+  }
+  const matched = promptVersionOptions.value.find(
+    (option) => option.id === selectedPromptVersionId.value
+  )
+  return matched?.version ?? `#${selectedPromptVersionId.value}`
+})
+
+const summaryMetaText = computed(() =>
+  t('promptTestOptimization.labels.summaryMeta', {
+    task: task.value?.name ?? '-',
+    version: selectedPromptVersionLabel.value
+  })
+)
+
 const targetScores = computed(() => {
   const ids = targetUnitIds.value
   if (!ids.size) return scoringSummary.value?.scores ?? []
@@ -598,11 +645,28 @@ function recommendationText(key: string): string {
       : content?.[key]
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
+  return formatAdviceValue(value)
+}
+
+function formatAdviceValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value.trim()
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatAdviceValue(item))
+      .filter(Boolean)
+      .join('\n')
   }
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => {
+        const text = formatAdviceValue(item)
+        return text ? `${key}：${text}` : ''
+      })
+      .filter(Boolean)
+      .join('\n')
+  }
+  return String(value)
 }
 
 function promptVersionLabel(versionId: number | null | undefined): string {
@@ -618,7 +682,24 @@ function recommendationHistoryMeta(item: PromptTestOptimizationRecommendation): 
   })
 }
 
-function applyRecommendation(item: PromptTestOptimizationRecommendation | null) {
+async function applyRecommendation(item: PromptTestOptimizationRecommendation | null) {
+  recommendationRefreshToken += 1
+  const versionId = item?.prompt_version_id ?? null
+  if (
+    versionId &&
+    versionId !== selectedPromptVersionId.value &&
+    promptVersionOptions.value.some((option) => option.id === versionId)
+  ) {
+    const taskId = routeTaskId.value
+    selectedPromptVersionId.value = versionId
+    if (taskId) {
+      await router.replace({
+        name: 'prompt-test-optimization',
+        params: route.params,
+        query: { ...route.query, promptVersionId: String(versionId) }
+      })
+    }
+  }
   recommendation.value = item
   applyRecommendationDraft()
 }
@@ -675,19 +756,44 @@ function resolveRoutePromptVersionId(): number | null {
 
 async function refreshRecommendationHistory(taskId: number) {
   const versionId = selectedPromptVersionId.value
+  const includeAllHistory = showAllHistory.value
+  const requestToken = ++recommendationRefreshToken
   const history = await listPromptTestOptimizationRecommendations(
     taskId,
-    showAllHistory.value ? null : versionId
+    includeAllHistory ? null : versionId
   )
+  if (
+    requestToken !== recommendationRefreshToken ||
+    selectedPromptVersionId.value !== versionId ||
+    showAllHistory.value !== includeAllHistory
+  ) {
+    return
+  }
   recommendationHistory.value = history
 }
 
 async function refreshRecommendationForTarget(taskId: number) {
   const versionId = selectedPromptVersionId.value
-  recommendation.value = versionId
-    ? await getLatestPromptTestOptimizationRecommendation(taskId, versionId).catch(() => null)
-    : null
-  await refreshRecommendationHistory(taskId)
+  const includeAllHistory = showAllHistory.value
+  const requestToken = ++recommendationRefreshToken
+  const [latest, history] = await Promise.all([
+    versionId
+      ? getLatestPromptTestOptimizationRecommendation(taskId, versionId).catch(() => null)
+      : Promise.resolve(null),
+    listPromptTestOptimizationRecommendations(
+      taskId,
+      includeAllHistory ? null : versionId
+    )
+  ])
+  if (
+    requestToken !== recommendationRefreshToken ||
+    selectedPromptVersionId.value !== versionId ||
+    showAllHistory.value !== includeAllHistory
+  ) {
+    return
+  }
+  recommendation.value = latest
+  recommendationHistory.value = history
   applyRecommendationDraft()
 }
 
@@ -787,6 +893,7 @@ async function handleGenerateRecommendation() {
 }
 
 async function handlePromptVersionChange(value: string | number | boolean | null | undefined) {
+  if (generating.value) return
   const taskId = routeTaskId.value
   const parsed = Number(value)
   const versionId = Number.isInteger(parsed) && parsed > 0 ? parsed : null
@@ -801,6 +908,10 @@ async function handlePromptVersionChange(value: string | number | boolean | null
     })
     await refreshRecommendationForTarget(taskId)
   }
+}
+
+function openHistoryDialog() {
+  historyDialog.visible = true
 }
 
 async function handleHistoryScopeChange() {
@@ -1059,8 +1170,13 @@ onMounted(() => {
   width: min(380px, 100%);
 }
 
-.version-select {
-  width: min(320px, 100%);
+.version-manage-button {
+  min-width: 128px;
+}
+
+.current-version-tag {
+  max-width: min(240px, 100%);
+  overflow: hidden;
 }
 
 .recommendation-alert {
@@ -1105,6 +1221,73 @@ onMounted(() => {
 .revision-tip {
   color: var(--el-color-warning);
   font-size: 13px;
+}
+
+.history-dialog {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  gap: 16px;
+}
+
+.history-dialog__pane {
+  min-width: 0;
+}
+
+.history-dialog__header {
+  margin-bottom: 12px;
+}
+
+.history-dialog__header--inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.history-dialog__header h4,
+.history-dialog__header p {
+  margin: 0;
+}
+
+.history-dialog__header p {
+  margin-top: 4px;
+  color: var(--text-weak-color);
+  font-size: 13px;
+}
+
+.version-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.version-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.version-option--active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
+}
+
+.version-option small {
+  color: var(--text-weak-color);
 }
 
 .history-list {
@@ -1153,6 +1336,10 @@ onMounted(() => {
 
   .model-select {
     width: 100%;
+  }
+
+  .history-dialog {
+    grid-template-columns: 1fr;
   }
 }
 </style>

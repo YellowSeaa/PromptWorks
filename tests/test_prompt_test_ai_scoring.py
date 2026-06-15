@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -633,6 +634,71 @@ def test_create_optimization_recommendation_filters_target_prompt_version(
     assert '"unit_id":' in captured["prompt"]
     assert f'"prompt_version_id": {version_a.id}' not in captured["prompt"]
     assert recommendation.content["parameter_advice"] == "保持当前参数。"
+
+
+def test_create_optimization_recommendation_normalizes_parameter_advice_object(
+    db_session, monkeypatch
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+
+    def fake_post(*_, **__):
+        return DummyResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "overall_advice": "补充步骤说明。",
+                                    "parameter_advice": {
+                                        "temperature": "保持默认温度，避免创造性过强。",
+                                        "top_p": "无需调整。",
+                                    },
+                                    "model_advice": "当前模型可继续使用。",
+                                    "prompt_revision": "请分步骤回答。",
+                                    "validation_plan": "用退款问题重测。",
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("app.services.prompt_test_ai_scoring.httpx.post", fake_post)
+
+    recommendation = prompt_test_ai_scoring.create_optimization_recommendation(
+        db_session,
+        task_id=experiment.unit.task_id,
+        prompt_version_id=experiment.unit.prompt_version_id,
+        evaluator_provider_id=model.provider_id,
+        evaluator_model_id=model.id,
+        evaluator_model_name=model.name,
+        language="zh-CN",
+    )
+
+    assert recommendation.content["parameter_advice"] == (
+        "temperature：保持默认温度，避免创造性过强。\ntop_p：无需调整。"
+    )
 
 
 def test_recommendation_history_can_filter_by_prompt_version(db_session):
