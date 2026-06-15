@@ -148,6 +148,8 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
         "run_index",
         "latency_ms",
         "tokens_used",
+        "total_cost",
+        "cost_currency",
         "temperature",
         "temperature_mode",
         "parameter_set",
@@ -171,6 +173,8 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
                     (output.get("prompt_tokens") or 0)
                     + (output.get("completion_tokens") or 0)
                 )
+                total_cost = output.get("total_cost")
+                cost_currency = output.get("cost_currency")
                 parameters = output.get("parameters")
                 if not isinstance(parameters, dict):
                     parameters = {}
@@ -189,6 +193,8 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
                         "run_index": _safe_int(run_index) or index,
                         "latency_ms": _safe_int(latency),
                         "tokens_used": _safe_int(total_tokens),
+                        "total_cost": total_cost,
+                        "cost_currency": cost_currency,
                         "temperature": unit.temperature,
                         "temperature_mode": temperature_mode,
                         "parameter_set": extra.get("parameter_label"),

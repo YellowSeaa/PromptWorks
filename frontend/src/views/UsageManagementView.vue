@@ -23,7 +23,7 @@
       <el-col :xs="12" :sm="6" v-for="card in overviewCards" :key="card.key">
         <el-card shadow="hover" class="overview-card">
           <div class="overview-card__title">{{ card.title }}</div>
-          <div class="overview-card__value">{{ formatNumber(card.value) }}</div>
+          <div class="overview-card__value">{{ card.formatter ? card.formatter() : formatNumber(card.value) }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -39,6 +39,7 @@
                 <el-option :label="t('usageManagement.modelCard.sortOptions.callCount')" value="callCount" />
                 <el-option :label="t('usageManagement.modelCard.sortOptions.inputTokens')" value="inputTokens" />
                 <el-option :label="t('usageManagement.modelCard.sortOptions.outputTokens')" value="outputTokens" />
+                <el-option :label="t('usageManagement.modelCard.sortOptions.totalCost')" value="totalCost" />
               </el-select>
             </div>
           </template>
@@ -63,6 +64,9 @@
             </el-table-column>
             <el-table-column prop="callCount" :label="t('usageManagement.modelCard.columns.callCount')" min-width="120">
               <template #default="{ row }">{{ formatNumber(row.callCount) }}</template>
+            </el-table-column>
+            <el-table-column prop="totalCost" :label="t('usageManagement.modelCard.columns.totalCost')" min-width="130">
+              <template #default="{ row }">{{ formatCurrency(row.totalCost, row.costCurrency) }}</template>
             </el-table-column>
           </el-table>
         </el-card>
@@ -104,6 +108,8 @@ interface UsagePoint {
   inputTokens: number
   outputTokens: number
   callCount: number
+  totalCost: number
+  costCurrency: string
 }
 
 interface ModelSummary {
@@ -114,6 +120,8 @@ interface ModelSummary {
   inputTokens: number
   outputTokens: number
   callCount: number
+  totalCost: number
+  costCurrency: string
 }
 
 interface UsageOverviewTotals {
@@ -121,6 +129,8 @@ interface UsageOverviewTotals {
   inputTokens: number
   outputTokens: number
   callCount: number
+  totalCost: number
+  costCurrency: string
 }
 
 const { t, locale } = useI18n()
@@ -158,7 +168,7 @@ const overviewLoading = ref(false)
 const modelLoading = ref(false)
 const chartLoading = ref(false)
 
-const sortKey = ref<'totalTokens' | 'callCount' | 'inputTokens' | 'outputTokens'>('totalTokens')
+const sortKey = ref<'totalTokens' | 'callCount' | 'inputTokens' | 'outputTokens' | 'totalCost'>('totalCost')
 
 const numberLocale = computed(() => (locale.value === 'zh-CN' ? 'zh-CN' : 'en-US'))
 
@@ -213,22 +223,31 @@ const overviewCards = computed(() => {
       acc.inputTokens += item.inputTokens
       acc.outputTokens += item.outputTokens
       acc.callCount += item.callCount
+      acc.totalCost += item.totalCost
       return acc
     },
-    { totalTokens: 0, inputTokens: 0, outputTokens: 0, callCount: 0 }
+    { totalTokens: 0, inputTokens: 0, outputTokens: 0, callCount: 0, totalCost: 0 }
   )
   const source: UsageOverviewTotals =
     overviewData.value ?? {
       totalTokens: fallback.totalTokens,
       inputTokens: fallback.inputTokens,
       outputTokens: fallback.outputTokens,
-      callCount: fallback.callCount
+      callCount: fallback.callCount,
+      totalCost: fallback.totalCost,
+      costCurrency: modelSummaries.value[0]?.costCurrency ?? 'CNY'
     }
   return [
     { key: 'totalTokens', title: t('usageManagement.overview.cards.totalTokens'), value: source.totalTokens },
     { key: 'inputTokens', title: t('usageManagement.overview.cards.inputTokens'), value: source.inputTokens },
     { key: 'outputTokens', title: t('usageManagement.overview.cards.outputTokens'), value: source.outputTokens },
-    { key: 'callCount', title: t('usageManagement.overview.cards.callCount'), value: source.callCount }
+    { key: 'callCount', title: t('usageManagement.overview.cards.callCount'), value: source.callCount },
+    {
+      key: 'totalCost',
+      title: t('usageManagement.overview.cards.totalCost'),
+      value: source.totalCost,
+      formatter: () => formatCurrency(source.totalCost, source.costCurrency)
+    }
   ]
 })
 
@@ -267,7 +286,9 @@ async function refreshUsageData() {
           totalTokens: overviewResp.total_tokens,
           inputTokens: overviewResp.input_tokens,
           outputTokens: overviewResp.output_tokens,
-          callCount: overviewResp.call_count
+          callCount: overviewResp.call_count,
+          totalCost: overviewResp.total_cost ?? 0,
+          costCurrency: overviewResp.cost_currency ?? 'CNY'
         }
       : null
 
@@ -278,7 +299,9 @@ async function refreshUsageData() {
       totalTokens: item.total_tokens ?? 0,
       inputTokens: item.input_tokens ?? 0,
       outputTokens: item.output_tokens ?? 0,
-      callCount: item.call_count ?? 0
+      callCount: item.call_count ?? 0,
+      totalCost: item.total_cost ?? 0,
+      costCurrency: item.cost_currency ?? 'CNY'
     }))
 
     modelSummaries.value = mappedModels
@@ -329,7 +352,9 @@ async function loadTimeseriesForActiveModel(params = getDateParams()) {
       date: item.date,
       inputTokens: item.input_tokens ?? 0,
       outputTokens: item.output_tokens ?? 0,
-      callCount: item.call_count ?? 0
+      callCount: item.call_count ?? 0,
+      totalCost: item.total_cost ?? 0,
+      costCurrency: item.cost_currency ?? 'CNY'
     }))
     updateChart()
   } catch (error) {
@@ -362,6 +387,14 @@ function formatNumber(value?: number | null) {
   return safeValue.toLocaleString(numberLocale.value)
 }
 
+function formatCurrency(value?: number | null, currency = 'CNY') {
+  const safeValue = value ?? 0
+  return `${currency} ${safeValue.toLocaleString(numberLocale.value, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6
+  })}`
+}
+
 const chartRef = ref<HTMLDivElement | null>(null)
 let chartInstance: ECharts | null = null
 let chartContainerObserver: ResizeObserver | null = null
@@ -385,8 +418,10 @@ function updateChart() {
   const dates = metrics.map((item) => item.date)
   const inputSeries = metrics.map((item) => item.inputTokens)
   const outputSeries = metrics.map((item) => item.outputTokens)
+  const costSeries = metrics.map((item) => item.totalCost)
   const legendInput = t('usageManagement.chart.legend.input')
   const legendOutput = t('usageManagement.chart.legend.output')
+  const legendCost = t('usageManagement.chart.legend.cost')
   const stackLabel = t('usageManagement.chart.stack')
 
   const option: EChartsOption = {
@@ -394,7 +429,7 @@ function updateChart() {
       trigger: 'axis'
     },
     legend: {
-      data: [legendInput, legendOutput],
+      data: [legendInput, legendOutput, legendCost],
       top: 10
     },
     grid: {
@@ -409,9 +444,16 @@ function updateChart() {
       boundaryGap: false,
       data: dates
     },
-    yAxis: {
-      type: 'value'
-    },
+    yAxis: [
+      {
+        type: 'value',
+        name: 'Tokens'
+      },
+      {
+        type: 'value',
+        name: t('usageManagement.chart.costAxis')
+      }
+    ],
     series: [
       {
         name: legendInput,
@@ -428,6 +470,14 @@ function updateChart() {
         areaStyle: {},
         emphasis: { focus: 'series' },
         data: outputSeries
+      },
+      {
+        name: legendCost,
+        type: 'line',
+        yAxisIndex: 1,
+        smooth: true,
+        emphasis: { focus: 'series' },
+        data: costSeries
       }
     ]
   }

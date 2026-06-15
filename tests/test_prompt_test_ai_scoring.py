@@ -967,6 +967,50 @@ def test_recommendation_prompt_uses_compact_output_excerpt(db_session):
     assert "PromptTestOutputScore" not in prompt
 
 
+def test_recommendation_prompt_includes_cost_context(db_session):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    experiment.outputs = [
+        {
+            "run_index": 1,
+            "output_text": "您可以在订单详情页申请退款。",
+            "latency_ms": 10,
+            "total_tokens": 20,
+            "total_cost": 0.036,
+            "cost_currency": "CNY",
+        }
+    ]
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+    task = prompt_test_ai_scoring._load_task_with_outputs(
+        db_session, experiment.unit.task_id
+    )
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+
+    prompt = prompt_test_ai_scoring._build_recommendation_prompt(task, summary, "zh-CN")
+
+    assert "total_cost" in prompt
+    assert "cost_currency" in prompt
+    assert "0.036" in prompt
+
+
 def test_prompt_test_ai_scoring_api_triggers_and_retries_score(
     client, db_session, monkeypatch
 ):

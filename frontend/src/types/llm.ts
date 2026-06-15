@@ -14,8 +14,21 @@ export interface LLMModel {
   quota: string | null
   concurrency_limit: number
   context_length: number | null
+  cost_currency: string
+  cost_display_currency: string
+  cost_exchange_rate: number
+  cost_pricing_unit: number
+  cost_input_per_unit: number | null
+  cost_output_per_unit: number | null
+  cost_tiers: LLMCostTier[] | null
   created_at: string
   updated_at: string
+}
+
+export interface LLMCostTier {
+  up_to_context_tokens: number
+  input_per_unit?: number | null
+  output_per_unit?: number | null
 }
 
 export interface LLMProvider {
@@ -60,6 +73,13 @@ export interface LLMModelCreatePayload {
   quota?: string | null
   concurrency_limit?: number
   context_length?: number | null
+  cost_currency?: string
+  cost_display_currency?: string
+  cost_exchange_rate?: number
+  cost_pricing_unit?: number
+  cost_input_per_unit?: number | null
+  cost_output_per_unit?: number | null
+  cost_tiers?: LLMCostTier[] | null
 }
 
 export interface LLMModelUpdatePayload {
@@ -67,6 +87,13 @@ export interface LLMModelUpdatePayload {
   quota?: string | null
   concurrency_limit?: number
   context_length?: number | null
+  cost_currency?: string
+  cost_display_currency?: string
+  cost_exchange_rate?: number
+  cost_pricing_unit?: number
+  cost_input_per_unit?: number | null
+  cost_output_per_unit?: number | null
+  cost_tiers?: LLMCostTier[] | null
 }
 
 export interface ChatMessagePayload {

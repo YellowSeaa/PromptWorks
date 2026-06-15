@@ -388,6 +388,7 @@ export const messages = {
             quota: '配额策略',
             concurrency: '并发数',
             contextLength: '上下文长度',
+            cost: '成本',
             actions: '操作'
           },
           unlimitedContext: '不限制',
@@ -431,7 +432,16 @@ export const messages = {
         concurrencyPlaceholder: '并发请求上限，默认 5',
         contextLengthLabel: '上下文长度',
         contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
-        contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。'
+        contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。',
+        costSection: '成本配置',
+        costCurrencyLabel: '计价币种',
+        costDisplayCurrencyLabel: '展示币种',
+        costExchangeRateLabel: '汇率',
+        costPricingUnitLabel: '计价单位',
+        costInputLabel: '输入单价',
+        costOutputLabel: '输出单价',
+        costTierContextPlaceholder: '阶梯上限 tokens',
+        addCostTier: '添加阶梯价格'
       },
       confirmations: {
         removeModel: {
@@ -497,7 +507,8 @@ export const messages = {
           totalTokens: '总 Token 数',
           inputTokens: '输入 Token 数',
           outputTokens: '输出 Token 数',
-          callCount: '调用次数'
+          callCount: '调用次数',
+          totalCost: '总成本'
         }
       },
       modelCard: {
@@ -506,13 +517,15 @@ export const messages = {
           totalTokens: '按总 Token',
           callCount: '按调用次数',
           inputTokens: '按输入 Token',
-          outputTokens: '按输出 Token'
+          outputTokens: '按输出 Token',
+          totalCost: '按成本'
         },
         empty: '暂无用量数据',
         columns: {
           model: '模型',
           totalTokens: '总 Token',
-          callCount: '调用次数'
+          callCount: '调用次数',
+          totalCost: '成本'
         }
       },
       chart: {
@@ -520,8 +533,10 @@ export const messages = {
         defaultModel: '模型用量',
         legend: {
           input: '输入 Token',
-          output: '输出 Token'
+          output: '输出 Token',
+          cost: '成本'
         },
+        costAxis: '成本',
         stack: '总量'
       },
       messages: {
@@ -1698,6 +1713,7 @@ export const messages = {
             quota: 'Quota Policy',
             concurrency: 'Concurrency',
             contextLength: 'Context Length',
+            cost: 'Cost',
             actions: 'Actions'
           },
           unlimitedContext: 'Unlimited',
@@ -1741,7 +1757,16 @@ export const messages = {
         concurrencyPlaceholder: 'Max concurrent requests (default 5)',
         contextLengthLabel: 'Context Length',
         contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
-        contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.'
+        contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.',
+        costSection: 'Cost Settings',
+        costCurrencyLabel: 'Pricing Currency',
+        costDisplayCurrencyLabel: 'Display Currency',
+        costExchangeRateLabel: 'Exchange Rate',
+        costPricingUnitLabel: 'Pricing Unit',
+        costInputLabel: 'Input Price',
+        costOutputLabel: 'Output Price',
+        costTierContextPlaceholder: 'Tier max tokens',
+        addCostTier: 'Add Tier Price'
       },
       confirmations: {
         removeModel: {
@@ -1807,7 +1832,8 @@ export const messages = {
           totalTokens: 'Total Tokens',
           inputTokens: 'Input Tokens',
           outputTokens: 'Output Tokens',
-          callCount: 'Call Count'
+          callCount: 'Call Count',
+          totalCost: 'Total Cost'
         }
       },
       modelCard: {
@@ -1816,13 +1842,15 @@ export const messages = {
           totalTokens: 'Sort by total tokens',
           callCount: 'Sort by call count',
           inputTokens: 'Sort by input tokens',
-          outputTokens: 'Sort by output tokens'
+          outputTokens: 'Sort by output tokens',
+          totalCost: 'Sort by cost'
         },
         empty: 'No usage data available',
         columns: {
           model: 'Model',
           totalTokens: 'Total Tokens',
-          callCount: 'Call Count'
+          callCount: 'Call Count',
+          totalCost: 'Cost'
         }
       },
       chart: {
@@ -1830,8 +1858,10 @@ export const messages = {
         defaultModel: 'Model Usage',
         legend: {
           input: 'Input Tokens',
-          output: 'Output Tokens'
+          output: 'Output Tokens',
+          cost: 'Cost'
         },
+        costAxis: 'Cost',
         stack: 'Total'
       },
       messages: {

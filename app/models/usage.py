@@ -55,6 +55,13 @@ class LLMUsageLog(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    output_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_currency: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    cost_pricing_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONBCompat, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

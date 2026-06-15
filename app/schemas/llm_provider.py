@@ -3,7 +3,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class LLMCostTier(BaseModel):
+    up_to_context_tokens: int = Field(
+        ..., ge=1, le=2_000_000, description="该价格阶梯适用的最大上下文长度"
+    )
+    input_per_unit: float | None = Field(
+        default=None, ge=0, description="该阶梯每计价单位输入 tokens 成本"
+    )
+    output_per_unit: float | None = Field(
+        default=None, ge=0, description="该阶梯每计价单位输出 tokens 成本"
+    )
 
 
 class LLMModelBase(BaseModel):
@@ -24,6 +36,40 @@ class LLMModelBase(BaseModel):
         le=2_000_000,
         description="模型上下文长度，按近似 token 数配置；为空表示不截断",
     )
+    cost_currency: str = Field(default="USD", max_length=12, description="模型计价币种")
+    cost_display_currency: str = Field(
+        default="CNY", max_length=12, description="折算后的展示币种"
+    )
+    cost_exchange_rate: float = Field(
+        default=7.2, gt=0, description="从计价币种折算到展示币种的汇率"
+    )
+    cost_pricing_unit: int = Field(
+        default=1_000_000, ge=1, le=1_000_000_000, description="计价 tokens 单位"
+    )
+    cost_input_per_unit: float | None = Field(
+        default=None, ge=0, description="默认每计价单位输入 tokens 成本"
+    )
+    cost_output_per_unit: float | None = Field(
+        default=None, ge=0, description="默认每计价单位输出 tokens 成本"
+    )
+    cost_tiers: list[LLMCostTier] | None = Field(
+        default=None, description="按上下文长度匹配的阶梯价格"
+    )
+
+    @field_validator("cost_currency", "cost_display_currency")
+    @classmethod
+    def normalize_currency(cls, value: str) -> str:
+        text = value.strip().upper()
+        return text or "CNY"
+
+    @field_validator("cost_tiers")
+    @classmethod
+    def sort_cost_tiers(
+        cls, value: list[LLMCostTier] | None
+    ) -> list[LLMCostTier] | None:
+        if value is None:
+            return None
+        return sorted(value, key=lambda item: item.up_to_context_tokens)
 
 
 class LLMModelCreate(LLMModelBase):
@@ -45,6 +91,29 @@ class LLMModelUpdate(BaseModel):
         le=2_000_000,
         description="模型上下文长度，按近似 token 数配置；为空表示不截断",
     )
+    cost_currency: str | None = Field(default=None, max_length=12)
+    cost_display_currency: str | None = Field(default=None, max_length=12)
+    cost_exchange_rate: float | None = Field(default=None, gt=0)
+    cost_pricing_unit: int | None = Field(default=None, ge=1, le=1_000_000_000)
+    cost_input_per_unit: float | None = Field(default=None, ge=0)
+    cost_output_per_unit: float | None = Field(default=None, ge=0)
+    cost_tiers: list[LLMCostTier] | None = None
+
+    @field_validator("cost_currency", "cost_display_currency")
+    @classmethod
+    def normalize_optional_currency(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip().upper() or None
+
+    @field_validator("cost_tiers")
+    @classmethod
+    def sort_optional_cost_tiers(
+        cls, value: list[LLMCostTier] | None
+    ) -> list[LLMCostTier] | None:
+        if value is None:
+            return None
+        return sorted(value, key=lambda item: item.up_to_context_tokens)
 
 
 class LLMModelRead(LLMModelBase):
@@ -131,6 +200,11 @@ class LLMUsageLogRead(BaseModel):
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    input_cost: float | None = None
+    output_cost: float | None = None
+    total_cost: float | None = None
+    cost_currency: str | None = None
+    cost_pricing_snapshot: dict[str, Any] | None = None
     prompt_id: int | None
     prompt_version_id: int | None
     created_at: datetime
