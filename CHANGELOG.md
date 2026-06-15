@@ -1,3 +1,10 @@
+## [1.2.1-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0...v1.2.1-beta.1) (2026-06-15)
+
+### Bug Fixes
+
+* 保持 AI 优化历史版本状态一致 ([0398c76](https://github.com/YellowSeaa/PromptWorks/commit/0398c76c89a954e2273b5033bdc0d0a63a8addd2))
+* 修复测试任务 AI 优化页交互 ([8224581](https://github.com/YellowSeaa/PromptWorks/commit/8224581f0117e841b05ae23d56f7702c9bcb8da1))
+
 ## [1.2.0](https://github.com/YellowSeaa/PromptWorks/compare/v1.1.0...v1.2.0) (2026-06-13)
 
 ### Features
