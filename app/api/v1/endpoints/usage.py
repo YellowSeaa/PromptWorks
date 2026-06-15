@@ -54,6 +54,8 @@ def _map_model_summary(entity: ModelUsageSummaryEntity) -> UsageModelSummary:
         input_tokens=entity.input_tokens,
         output_tokens=entity.output_tokens,
         call_count=entity.call_count,
+        total_cost=entity.total_cost,
+        cost_currency=entity.cost_currency,
     )
 
 
@@ -63,6 +65,8 @@ def _map_timeseries_point(entity: UsageTimeseriesPointEntity) -> UsageTimeseries
         input_tokens=entity.input_tokens,
         output_tokens=entity.output_tokens,
         call_count=entity.call_count,
+        total_cost=entity.total_cost,
+        cost_currency=entity.cost_currency,
     )
 
 
@@ -84,6 +88,8 @@ def read_usage_overview(
         input_tokens=overview.input_tokens,
         output_tokens=overview.output_tokens,
         call_count=overview.call_count,
+        total_cost=overview.total_cost,
+        cost_currency=overview.cost_currency,
     )
 
 

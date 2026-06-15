@@ -86,6 +86,8 @@ def test_usage_overview_and_models(client: TestClient, db_session: Session) -> N
         "input_tokens": 32,
         "output_tokens": 42,
         "call_count": 5,
+        "total_cost": 0.0,
+        "cost_currency": "CNY",
     }
 
     models_resp = client.get("/api/v1/usage/models")
@@ -104,6 +106,8 @@ def test_usage_overview_and_models(client: TestClient, db_session: Session) -> N
     assert gpt4_summary["output_tokens"] == 29
     assert gpt4_summary["call_count"] == 3
     assert gpt4_summary["model_key"] == f"{provider_id}::gpt-4"
+    assert gpt4_summary["total_cost"] == 0.0
+    assert gpt4_summary["cost_currency"] == "CNY"
 
     claude_summary = payload[2]
     assert claude_summary["model_key"] == f"{another_id}::claude-3"
@@ -150,6 +154,8 @@ def test_usage_timeseries_and_filters(client: TestClient, db_session: Session) -
         "input_tokens": 29,
         "output_tokens": 40,
         "call_count": 4,
+        "total_cost": 0.0,
+        "cost_currency": "CNY",
     }
 
 

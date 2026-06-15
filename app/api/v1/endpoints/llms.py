@@ -34,6 +34,7 @@ from app.schemas.llm_provider import (
 )
 from app.services.llm_usage import list_quick_test_usage_logs
 from app.services.llm_context import truncate_messages_for_context
+from app.services.model_costs import apply_cost_to_usage_log
 from app.services.system_settings import (
     DEFAULT_QUICK_TEST_TIMEOUT,
     get_testing_timeout_config,
@@ -321,6 +322,11 @@ def list_quick_test_history(
                 prompt_tokens=log.prompt_tokens,
                 completion_tokens=log.completion_tokens,
                 total_tokens=log.total_tokens,
+                input_cost=log.input_cost,
+                output_cost=log.output_cost,
+                total_cost=log.total_cost,
+                cost_currency=log.cost_currency,
+                cost_pricing_snapshot=log.cost_pricing_snapshot,
                 prompt_id=log.prompt_id,
                 prompt_version_id=log.prompt_version_id,
                 created_at=log.created_at,
@@ -512,16 +518,8 @@ def update_llm_model(
         )
 
     update_data = payload.model_dump(exclude_unset=True)
-    concurrency = update_data.get("concurrency_limit")
-    if concurrency is not None:
-        model.concurrency_limit = concurrency
-    if "context_length" in update_data:
-        model.context_length = update_data["context_length"]
-
-    if "capability" in update_data:
-        model.capability = update_data["capability"]
-    if "quota" in update_data:
-        model.quota = update_data["quota"]
+    for key, value in update_data.items():
+        setattr(model, key, value)
 
     db.commit()
     db.refresh(model)
@@ -755,6 +753,7 @@ def invoke_llm(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
         )
+        apply_cost_to_usage_log(log_entry, target_model)
 
         try:
             db.add(log_entry)
@@ -981,6 +980,7 @@ async def stream_invoke_llm(
             completion_tokens=summary.get("completion_tokens"),
             total_tokens=summary.get("total_tokens"),
         )
+        apply_cost_to_usage_log(log_entry, target_model)
         try:
             db.add(log_entry)
             db.commit()

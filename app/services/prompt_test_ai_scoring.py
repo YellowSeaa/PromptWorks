@@ -1088,6 +1088,8 @@ def _compact_recommendation_output(output: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "latency_ms": output.get("latency_ms"),
         "total_tokens": output.get("total_tokens"),
+        "total_cost": output.get("total_cost"),
+        "cost_currency": output.get("cost_currency"),
     }
 
 

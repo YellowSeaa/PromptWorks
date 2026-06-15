@@ -147,6 +147,14 @@
                         </el-tag>
                       </template>
                     </el-table-column>
+                    <el-table-column
+                      :label="t('llmManagement.card.table.columns.cost')"
+                      min-width="180"
+                    >
+                      <template #default="{ row }">
+                        {{ formatModelCost(row) }}
+                      </template>
+                    </el-table-column>
                     <el-table-column :label="t('llmManagement.card.table.columns.actions')" width="220" align="center">
                       <template #default="{ row }">
                         <div class="provider-card__model-actions">
@@ -362,6 +370,103 @@
             :placeholder="t('llmManagement.modelDialog.contextLengthPlaceholder')"
           />
         </el-form-item>
+        <el-divider content-position="left">{{ t('llmManagement.modelDialog.costSection') }}</el-divider>
+        <el-row :gutter="12">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('llmManagement.modelDialog.costCurrencyLabel')">
+              <el-input v-model="modelForm.costCurrency" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('llmManagement.modelDialog.costDisplayCurrencyLabel')">
+              <el-input v-model="modelForm.costDisplayCurrency" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('llmManagement.modelDialog.costExchangeRateLabel')">
+              <el-input-number
+                v-model="modelForm.costExchangeRate"
+                class="model-number-input"
+                :min="0.000001"
+                :step="0.1"
+                controls-position="right"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
+              <el-input-number
+                v-model="modelForm.costPricingUnit"
+                class="model-number-input"
+                :min="1"
+                :step="1000"
+                controls-position="right"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
+              <el-input-number
+                v-model="modelForm.costInputPerUnit"
+                class="model-number-input"
+                :min="0"
+                :step="0.01"
+                controls-position="right"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
+              <el-input-number
+                v-model="modelForm.costOutputPerUnit"
+                class="model-number-input"
+                :min="0"
+                :step="0.01"
+                controls-position="right"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <div class="cost-tier-list">
+          <div
+            v-for="(tier, index) in modelForm.costTiers"
+            :key="index"
+            class="cost-tier-row"
+          >
+            <el-input-number
+              v-model="tier.upToContextTokens"
+              class="cost-tier-row__input"
+              :min="1"
+              :step="1024"
+              controls-position="right"
+              :placeholder="t('llmManagement.modelDialog.costTierContextPlaceholder')"
+            />
+            <el-input-number
+              v-model="tier.inputPerUnit"
+              class="cost-tier-row__input"
+              :min="0"
+              :step="0.01"
+              controls-position="right"
+              :placeholder="t('llmManagement.modelDialog.costInputLabel')"
+            />
+            <el-input-number
+              v-model="tier.outputPerUnit"
+              class="cost-tier-row__input"
+              :min="0"
+              :step="0.01"
+              controls-position="right"
+              :placeholder="t('llmManagement.modelDialog.costOutputLabel')"
+            />
+            <el-button text type="danger" :icon="Delete" @click="removeCostTier(index)" />
+          </div>
+          <el-button text type="primary" :icon="Plus" @click="addCostTier">
+            {{ t('llmManagement.modelDialog.addCostTier') }}
+          </el-button>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="modelDialogVisible = false">{{ t('common.cancel') }}</el-button>
@@ -405,6 +510,19 @@ interface ProviderCardModel {
   quota: string | null
   concurrencyLimit: number
   contextLength: number | null
+  costCurrency: string
+  costDisplayCurrency: string
+  costExchangeRate: number
+  costPricingUnit: number
+  costInputPerUnit: number | null
+  costOutputPerUnit: number | null
+  costTiers: CostTierForm[]
+}
+
+interface CostTierForm {
+  upToContextTokens: number | null
+  inputPerUnit: number | null
+  outputPerUnit: number | null
 }
 
 interface ProviderCard {
@@ -583,7 +701,18 @@ function mapProviderToCard(
       capability: model.capability,
       quota: model.quota,
       concurrencyLimit: model.concurrency_limit,
-      contextLength: model.context_length
+      contextLength: model.context_length,
+      costCurrency: model.cost_currency,
+      costDisplayCurrency: model.cost_display_currency,
+      costExchangeRate: model.cost_exchange_rate,
+      costPricingUnit: model.cost_pricing_unit,
+      costInputPerUnit: model.cost_input_per_unit,
+      costOutputPerUnit: model.cost_output_per_unit,
+      costTiers: (model.cost_tiers ?? []).map((tier) => ({
+        upToContextTokens: tier.up_to_context_tokens,
+        inputPerUnit: tier.input_per_unit ?? null,
+        outputPerUnit: tier.output_per_unit ?? null
+      }))
     })),
     collapsed: collapsedState.get(provider.id) ?? true
   }
@@ -681,7 +810,14 @@ const modelForm = reactive({
   capability: '',
   quota: '',
   concurrency: 5,
-  contextLength: null as number | null
+  contextLength: null as number | null,
+  costCurrency: 'USD',
+  costDisplayCurrency: 'CNY',
+  costExchangeRate: 7.2,
+  costPricingUnit: 1000000,
+  costInputPerUnit: null as number | null,
+  costOutputPerUnit: null as number | null,
+  costTiers: [] as CostTierForm[]
 })
 const isEditingModel = ref(false)
 const editingModelId = ref<number | null>(null)
@@ -695,7 +831,49 @@ function handleAddModel(providerId: number) {
   modelForm.quota = ''
   modelForm.concurrency = 5
   modelForm.contextLength = null
+  resetModelCostForm()
   modelDialogVisible.value = true
+}
+
+function resetModelCostForm() {
+  modelForm.costCurrency = 'USD'
+  modelForm.costDisplayCurrency = 'CNY'
+  modelForm.costExchangeRate = 7.2
+  modelForm.costPricingUnit = 1000000
+  modelForm.costInputPerUnit = null
+  modelForm.costOutputPerUnit = null
+  modelForm.costTiers = []
+}
+
+function buildCostPayload() {
+  const tiers = modelForm.costTiers
+    .filter((tier) => tier.upToContextTokens && tier.upToContextTokens > 0)
+    .map((tier) => ({
+      up_to_context_tokens: Math.trunc(Number(tier.upToContextTokens)),
+      input_per_unit: tier.inputPerUnit ?? null,
+      output_per_unit: tier.outputPerUnit ?? null
+    }))
+  return {
+    cost_currency: modelForm.costCurrency.trim().toUpperCase() || 'USD',
+    cost_display_currency: modelForm.costDisplayCurrency.trim().toUpperCase() || 'CNY',
+    cost_exchange_rate: Number(modelForm.costExchangeRate) || 1,
+    cost_pricing_unit: Math.trunc(Number(modelForm.costPricingUnit) || 1000000),
+    cost_input_per_unit: modelForm.costInputPerUnit,
+    cost_output_per_unit: modelForm.costOutputPerUnit,
+    cost_tiers: tiers.length ? tiers : null
+  }
+}
+
+function addCostTier() {
+  modelForm.costTiers.push({
+    upToContextTokens: modelForm.contextLength ?? null,
+    inputPerUnit: modelForm.costInputPerUnit,
+    outputPerUnit: modelForm.costOutputPerUnit
+  })
+}
+
+function removeCostTier(index: number) {
+  modelForm.costTiers.splice(index, 1)
 }
 
 async function submitModel() {
@@ -741,7 +919,8 @@ async function submitModel() {
         capability: capabilityValue ? capabilityValue : null,
         quota: quotaValue ? quotaValue : null,
         concurrency_limit: concurrencyValue,
-        context_length: contextLengthValue
+        context_length: contextLengthValue,
+        ...buildCostPayload()
       })
       ElMessage.success(t('llmManagement.messages.updateModelSuccess'))
     } else {
@@ -750,7 +929,8 @@ async function submitModel() {
         capability: capabilityValue || undefined,
         quota: quotaValue || undefined,
         concurrency_limit: concurrencyValue,
-        context_length: contextLengthValue
+        context_length: contextLengthValue,
+        ...buildCostPayload()
       })
       ElMessage.success(t('llmManagement.messages.createModelSuccess'))
     }
@@ -778,6 +958,13 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.quota = model.quota ?? ''
   modelForm.concurrency = model.concurrencyLimit
   modelForm.contextLength = model.contextLength
+  modelForm.costCurrency = model.costCurrency
+  modelForm.costDisplayCurrency = model.costDisplayCurrency
+  modelForm.costExchangeRate = model.costExchangeRate
+  modelForm.costPricingUnit = model.costPricingUnit
+  modelForm.costInputPerUnit = model.costInputPerUnit
+  modelForm.costOutputPerUnit = model.costOutputPerUnit
+  modelForm.costTiers = model.costTiers.map((tier) => ({ ...tier }))
   modelDialogVisible.value = true
 }
 
@@ -786,6 +973,13 @@ function formatContextLength(value: number | null) {
     return t('llmManagement.card.table.unlimitedContext')
   }
   return value.toLocaleString()
+}
+
+function formatModelCost(model: ProviderCardModel) {
+  const input = model.costInputPerUnit ?? 0
+  const output = model.costOutputPerUnit ?? 0
+  const unit = model.costPricingUnit.toLocaleString()
+  return `${model.costDisplayCurrency} ${input}/${output} / ${unit}`
 }
 
 async function handleDeleteProvider(card: ProviderCard) {
@@ -1124,6 +1318,23 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   width: 100%;
 }
 
+.cost-tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cost-tier-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.cost-tier-row__input {
+  width: 100%;
+}
+
 .emoji-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
@@ -1179,6 +1390,10 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
     align-self: flex-end;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .cost-tier-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

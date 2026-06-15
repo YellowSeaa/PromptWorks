@@ -29,6 +29,8 @@ def _add_usage(
     prompt_tokens: int,
     completion_tokens: int,
     created_at: datetime,
+    total_cost: float | None = None,
+    cost_currency: str | None = "CNY",
 ) -> LLMUsageLog:
     log = LLMUsageLog(
         provider_id=provider_id,
@@ -38,6 +40,8 @@ def _add_usage(
         completion_tokens=completion_tokens,
         total_tokens=prompt_tokens + completion_tokens,
         latency_ms=100,
+        total_cost=total_cost,
+        cost_currency=cost_currency,
         created_at=created_at,
     )
     db_session.add(log)
@@ -56,6 +60,7 @@ def test_calculate_usage_overview_with_data(db_session):
         model_name="model-a",
         prompt_tokens=10,
         completion_tokens=20,
+        total_cost=0.216,
         created_at=ts,
     )
     overview = usage_dashboard.calculate_usage_overview(db_session)
@@ -64,6 +69,8 @@ def test_calculate_usage_overview_with_data(db_session):
         input_tokens=10,
         output_tokens=20,
         call_count=1,
+        total_cost=0.216,
+        cost_currency="CNY",
     )
 
     filtered = usage_dashboard.calculate_usage_overview(
@@ -72,6 +79,7 @@ def test_calculate_usage_overview_with_data(db_session):
         end_date=ts.date(),
     )
     assert filtered.total_tokens == 30
+    assert filtered.total_cost == 0.216
 
 
 def test_aggregate_usage_by_model_groups_results(db_session):
@@ -83,6 +91,7 @@ def test_aggregate_usage_by_model_groups_results(db_session):
         model_name="model-a",
         prompt_tokens=5,
         completion_tokens=5,
+        total_cost=0.5,
         created_at=base_time,
     )
     _add_usage(
@@ -91,11 +100,12 @@ def test_aggregate_usage_by_model_groups_results(db_session):
         model_name="model-b",
         prompt_tokens=2,
         completion_tokens=1,
+        total_cost=0.9,
         created_at=base_time,
     )
     summaries = usage_dashboard.aggregate_usage_by_model(db_session)
-    assert [item.model_name for item in summaries] == ["model-a", "model-b"]
-    assert summaries[0].total_tokens == 10
+    assert [item.model_name for item in summaries] == ["model-b", "model-a"]
+    assert summaries[0].total_cost == 0.9
     assert summaries[0].provider_name == "Analytics"
 
 
@@ -109,6 +119,7 @@ def test_get_model_usage_timeseries_handles_strings(db_session):
         model_name="model-timeseries",
         prompt_tokens=3,
         completion_tokens=4,
+        total_cost=0.7,
         created_at=first_day,
     )
     _add_usage(
@@ -117,6 +128,7 @@ def test_get_model_usage_timeseries_handles_strings(db_session):
         model_name="model-timeseries",
         prompt_tokens=1,
         completion_tokens=2,
+        total_cost=0.2,
         created_at=second_day,
     )
 
@@ -127,6 +139,7 @@ def test_get_model_usage_timeseries_handles_strings(db_session):
     )
     assert len(with_provider) == 1
     assert with_provider[0].input_tokens == 3
+    assert with_provider[0].total_cost == 0.7
 
     without_provider = usage_dashboard.get_model_usage_timeseries(
         db_session,

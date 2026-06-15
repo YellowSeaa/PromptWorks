@@ -24,6 +24,7 @@ from app.models.prompt_test import (
 )
 from app.models.usage import LLMUsageLog
 from app.services.llm_context import truncate_messages_for_context
+from app.services.model_costs import apply_cost_to_usage_log, calculate_model_call_cost
 from app.services.test_run import (
     DEFAULT_CONCURRENCY_LIMIT,
     REQUEST_SLEEP_RANGE,
@@ -650,6 +651,12 @@ def _execute_single_round(
         total_tokens = prompt_tokens + completion_tokens
 
     variables = _extract_variables(context)
+    cost = calculate_model_call_cost(
+        model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
 
     return {
         "run_index": run_index,
@@ -661,6 +668,11 @@ def _execute_single_round(
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
+        "input_cost": cost.input_cost,
+        "output_cost": cost.output_cost,
+        "total_cost": cost.total_cost,
+        "cost_currency": cost.currency,
+        "cost_pricing_snapshot": cost.pricing_snapshot,
         "latency_ms": latency_ms,
         "raw_response": payload_obj,
     }
@@ -893,7 +905,7 @@ def _build_usage_log(
 
     latency_value = _safe_int_value("latency_ms")
 
-    return LLMUsageLog(
+    log = LLMUsageLog(
         provider_id=provider.id,
         model_id=model.id if model else None,
         model_name=model.name if model else unit.model_name,
@@ -909,6 +921,8 @@ def _build_usage_log(
         completion_tokens=_safe_int_value("completion_tokens"),
         total_tokens=_safe_int_value("total_tokens"),
     )
+    apply_cost_to_usage_log(log, model)
+    return log
 
 
 def _resolve_base_url(provider: LLMProvider) -> str:
