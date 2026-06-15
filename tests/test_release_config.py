@@ -6,6 +6,9 @@ import re
 import subprocess
 from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -140,3 +143,11 @@ def test_alembic_revision_ids_fit_version_column_limit():
         assert len(revision) <= 32, (
             f"{migration_path.name} 的 revision 过长({len(revision)}): {revision}"
         )
+
+
+def test_alembic_has_single_migration_head():
+    config = Config(str(ROOT / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+
+    assert len(heads) == 1, f"Alembic 迁移存在多个 head: {heads}"
