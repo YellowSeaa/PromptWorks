@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = 'http://localhost:8000/api/v1'
+const DEFAULT_BASE_URL = '/api/v1'
 
 function normalizeBaseUrl(url: string | undefined): string {
   if (!url) return DEFAULT_BASE_URL
