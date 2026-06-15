@@ -1,3 +1,13 @@
+## [1.3.0-beta.2](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-06-15)
+
+### Features
+
+* 增加模型调用成本计算 ([60ee0e8](https://github.com/YellowSeaa/PromptWorks/commit/60ee0e856c35e9aaba4333fdfa4c06a66fa84055))
+
+### Bug Fixes
+
+* 修复前端部署与提示词表单交互问题 ([3b2b31f](https://github.com/YellowSeaa/PromptWorks/commit/3b2b31f53d96dcaa6fa4777101737bcf4bf618c8))
+
 ## [1.3.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.1-beta.1...v1.3.0-beta.1) (2026-06-15)
 
 ### Features
