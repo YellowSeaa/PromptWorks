@@ -1,3 +1,9 @@
+## [1.3.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.1-beta.1...v1.3.0-beta.1) (2026-06-15)
+
+### Features
+
+* 支持基于历史版本创建Prompt版本 ([db55859](https://github.com/YellowSeaa/PromptWorks/commit/db558594f78191a83505d28ec37049a51ca1892f))
+
 ## [1.2.1-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0...v1.2.1-beta.1) (2026-06-15)
 
 ### Bug Fixes
