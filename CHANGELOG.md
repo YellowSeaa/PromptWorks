@@ -1,3 +1,11 @@
+## [1.3.0-beta.4](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.3...v1.3.0-beta.4) (2026-06-16)
+
+### Bug Fixes
+
+* 优化模型成本配置表单 ([db27077](https://github.com/YellowSeaa/PromptWorks/commit/db27077c3c2b68cf0ceb26c0e9f7c92f547df46b))
+* 修复用量监控与侧边栏深色样式 ([921a91a](https://github.com/YellowSeaa/PromptWorks/commit/921a91a2c9b5580202edf9d8eacc6ed0d0f91419))
+* 重算用量监控成本展示 ([4040e0f](https://github.com/YellowSeaa/PromptWorks/commit/4040e0f5493f323c0ad3d4984d29afbbb29a2e38))
+
 ## [1.3.0-beta.3](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.2...v1.3.0-beta.3) (2026-06-15)
 
 ### Bug Fixes
