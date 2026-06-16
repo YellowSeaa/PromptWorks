@@ -1049,6 +1049,18 @@ export const messages = {
         createSuccess: '测试任务创建成功，已提交执行，共生成 {count} 个单元',
         createFailed: '创建测试任务失败，请稍后重试',
         retryPrefillFailed: '复制原任务配置失败，请稍后重试'
+      },
+      variableWarning: {
+        dialogTitle: '变量样本风险提示',
+        title: '检测到变量样本可能影响测试结果：',
+        missingPrefix: '缺少变量',
+        extraPrefix: '额外变量',
+        emptyPrefix: '空变量值',
+        versionPrefix: '版本',
+        rowsPrefix: '行',
+        continueHint: '这些问题不会阻止创建任务，但可能导致占位符原样进入模型、部分变量未被使用，或空值参与测试。仍要继续创建测试任务吗？',
+        confirm: '继续创建',
+        cancel: '返回修改'
       }
     },
     promptTestResult: {
@@ -2391,6 +2403,18 @@ export const messages = {
         createSuccess: 'Test task created and submitted. {count} units scheduled.',
         createFailed: 'Failed to create test task. Please try again later.',
         retryPrefillFailed: 'Failed to copy the original task configuration. Please try again later.'
+      },
+      variableWarning: {
+        dialogTitle: 'Variable Sample Warning',
+        title: 'Variable samples may affect the test results:',
+        missingPrefix: 'Missing variables',
+        extraPrefix: 'Extra variables',
+        emptyPrefix: 'Empty variable values',
+        versionPrefix: 'Version',
+        rowsPrefix: 'Rows',
+        continueHint: 'These issues will not block task creation, but placeholders may be sent to the model unchanged, some variables may be unused, or empty values may be tested. Continue creating the test task?',
+        confirm: 'Continue',
+        cancel: 'Go Back'
       }
     },
     promptTestResult: {

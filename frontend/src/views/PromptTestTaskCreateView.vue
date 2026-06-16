@@ -393,7 +393,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { listPrompts, getPrompt } from '../api/prompt'
 import { listLLMProviders } from '../api/llmProvider'
@@ -403,6 +403,11 @@ import type { Prompt } from '../types/prompt'
 import type { AnalysisModuleDefinition } from '../types/analysis'
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
+import {
+  analyzePromptVariableWarnings,
+  buildPromptVariableWarningMessage,
+  type PromptVariableVersion
+} from '../utils/promptVariableWarnings'
 
 const route = useRoute()
 const router = useRouter()
@@ -1508,6 +1513,46 @@ async function handleSubmit() {
   if (!Number.isInteger(unitForm.rounds) || unitForm.rounds < 1) {
     ElMessage.warning(t('promptTestCreate.messages.roundsInvalid'))
     return
+  }
+
+  const variableWarnings = analyzePromptVariableWarnings({
+    versions: selectedPromptVersions.value
+      .map((version): PromptVariableVersion | null => {
+        const source = selectedPrompt.value?.versions.find((item) => item.id === version.id)
+        if (!source) return null
+        return {
+          id: source.id,
+          label: version.version,
+          content: source.content
+        }
+      })
+      .filter((version): version is PromptVariableVersion => Boolean(version)),
+    sampleHeaders: unitForm.variableHeaders,
+    sampleRows: unitForm.variablesPreview
+  })
+  if (variableWarnings.length) {
+    try {
+      await ElMessageBox.confirm(
+        buildPromptVariableWarningMessage(variableWarnings, {
+          title: t('promptTestCreate.variableWarning.title'),
+          missingPrefix: t('promptTestCreate.variableWarning.missingPrefix'),
+          extraPrefix: t('promptTestCreate.variableWarning.extraPrefix'),
+          emptyPrefix: t('promptTestCreate.variableWarning.emptyPrefix'),
+          versionPrefix: t('promptTestCreate.variableWarning.versionPrefix'),
+          rowsPrefix: t('promptTestCreate.variableWarning.rowsPrefix'),
+          continueHint: t('promptTestCreate.variableWarning.continueHint')
+        }),
+        t('promptTestCreate.variableWarning.dialogTitle'),
+        {
+          confirmButtonText: t('promptTestCreate.variableWarning.confirm'),
+          cancelButtonText: t('promptTestCreate.variableWarning.cancel'),
+          type: 'warning',
+          distinguishCancelAndClose: true
+        }
+      )
+    } catch {
+      return
+    }
   }
 
   let preparedParameterSets: Array<{
