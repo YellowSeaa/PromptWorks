@@ -324,6 +324,9 @@
               :rows="6"
               :placeholder="t('promptTestCreate.form.placeholders.inputSamples')"
             />
+            <p class="form-tip">
+              {{ t('promptTestCreate.form.tips.manualFormat') }}
+            </p>
             <div class="variables-toolbar">
               <el-button size="small" type="primary" @click="handleParseVariablesText">
                 {{ t('promptTestCreate.form.actions.parseVariables') }}
