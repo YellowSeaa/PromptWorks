@@ -80,15 +80,12 @@
               >
                 <el-tooltip
                   :content="formatPromptVersionPreview(option.content)"
-                  placement="right"
+                  placement="top-start"
                   :show-after="250"
                   popper-class="prompt-version-preview-tooltip"
                 >
                   <div class="prompt-version-option">
                     <span class="prompt-version-option__label">{{ option.label }}</span>
-                    <span class="prompt-version-option__preview">
-                      {{ formatPromptVersionPreview(option.content) }}
-                    </span>
                   </div>
                 </el-tooltip>
               </el-option>
@@ -1505,11 +1502,11 @@ function cloneData<T>(data: T): T {
 }
 
 function formatPromptVersionPreview(content: string): string {
-  const normalized = content.replace(/\s+/g, ' ').trim()
-  if (!normalized) {
+  const preview = content.trim()
+  if (!preview) {
     return t('promptTestCreate.form.tips.emptyPromptContent')
   }
-  return normalized.length > 160 ? `${normalized.slice(0, 160)}...` : normalized
+  return preview
 }
 
 async function handleSubmit() {
@@ -1888,26 +1885,22 @@ onMounted(() => {
 
 .prompt-version-option {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
   min-width: 0;
-  line-height: 1.4;
+  height: 100%;
+  line-height: inherit;
 }
 
 .prompt-version-option__label {
-  font-weight: 600;
-}
-
-.prompt-version-option__preview {
+  display: block;
   overflow: hidden;
-  color: var(--text-weak-color);
-  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 :global(.prompt-version-preview-tooltip) {
   max-width: min(520px, calc(100vw - 48px));
+  text-align: left;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.6;
