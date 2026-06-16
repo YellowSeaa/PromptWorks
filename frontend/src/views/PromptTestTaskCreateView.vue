@@ -393,7 +393,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -408,7 +408,7 @@ import type { LLMProvider } from '../types/llm'
 import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
 import {
   analyzePromptVariableWarnings,
-  buildPromptVariableWarningMessage,
+  buildPromptVariableWarningSections,
   type PromptVariableVersion
 } from '../utils/promptVariableWarnings'
 
@@ -1536,15 +1536,7 @@ async function handleSubmit() {
   if (variableWarnings.length) {
     try {
       await ElMessageBox.confirm(
-        buildPromptVariableWarningMessage(variableWarnings, {
-          title: t('promptTestCreate.variableWarning.title'),
-          missingPrefix: t('promptTestCreate.variableWarning.missingPrefix'),
-          extraPrefix: t('promptTestCreate.variableWarning.extraPrefix'),
-          emptyPrefix: t('promptTestCreate.variableWarning.emptyPrefix'),
-          versionPrefix: t('promptTestCreate.variableWarning.versionPrefix'),
-          rowsPrefix: t('promptTestCreate.variableWarning.rowsPrefix'),
-          continueHint: t('promptTestCreate.variableWarning.continueHint')
-        }),
+        renderVariableWarningContent(variableWarnings),
         t('promptTestCreate.variableWarning.dialogTitle'),
         {
           confirmButtonText: t('promptTestCreate.variableWarning.confirm'),
@@ -1717,6 +1709,43 @@ async function handleSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+function renderVariableWarningContent(warnings: ReturnType<typeof analyzePromptVariableWarnings>) {
+  const sections = buildPromptVariableWarningSections(warnings, {
+    missingPrefix: t('promptTestCreate.variableWarning.missingPrefix'),
+    extraPrefix: t('promptTestCreate.variableWarning.extraPrefix'),
+    emptyPrefix: t('promptTestCreate.variableWarning.emptyPrefix'),
+    versionPrefix: t('promptTestCreate.variableWarning.versionPrefix'),
+    rowsPrefix: t('promptTestCreate.variableWarning.rowsPrefix')
+  })
+  return h('div', { class: 'variable-warning-content' }, [
+    h('p', { class: 'variable-warning-title' }, t('promptTestCreate.variableWarning.title')),
+    h(
+      'div',
+      { class: 'variable-warning-list' },
+      sections.map((section) =>
+        h('p', { class: 'variable-warning-line' }, [
+          section.versionLabel
+            ? h('span', { class: 'variable-warning-version' }, [
+                `${t('promptTestCreate.variableWarning.versionPrefix')} ${section.versionLabel}：`
+              ])
+            : null,
+          h('span', { class: 'variable-warning-prefix' }, `${section.prefix} `),
+          ...section.variables.flatMap((variable, index) => [
+            index > 0 ? h('span', { class: 'variable-warning-separator' }, ', ') : null,
+            h('span', { class: 'variable-warning-token' }, variable)
+          ]),
+          section.rows?.length
+            ? h('span', { class: 'variable-warning-rows' }, [
+                ` (${t('promptTestCreate.variableWarning.rowsPrefix')} ${section.rows.join(', ')})`
+              ])
+            : null
+        ])
+      )
+    ),
+    h('p', { class: 'variable-warning-hint' }, t('promptTestCreate.variableWarning.continueHint'))
+  ])
 }
 
 onMounted(() => {
@@ -1904,6 +1933,50 @@ onMounted(() => {
 
 .hidden-file-input {
   display: none;
+}
+
+:global(.variable-warning-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  line-height: 1.7;
+}
+
+:global(.variable-warning-title),
+:global(.variable-warning-line),
+:global(.variable-warning-hint) {
+  margin: 0;
+}
+
+:global(.variable-warning-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:global(.variable-warning-line) {
+  overflow-wrap: anywhere;
+}
+
+:global(.variable-warning-version) {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+:global(.variable-warning-token) {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+:global(.variable-warning-hint) {
+  color: var(--el-text-color-regular);
 }
 
 .variables-preview-wrapper {

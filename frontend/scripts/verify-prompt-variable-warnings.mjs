@@ -33,6 +33,7 @@ try {
   const {
     analyzePromptVariableWarnings,
     buildPromptVariableWarningMessage,
+    buildPromptVariableWarningSections,
     extractPromptVariables
   } = await import(`${moduleUrl}?cache=${Date.now()}`)
 
@@ -85,6 +86,34 @@ try {
   assert.match(message, /版本 v2：缺少变量 tone/)
   assert.match(message, /版本 v1：额外变量 style/)
   assert.match(message, /仍要继续创建测试任务吗？/)
+
+  const sections = buildPromptVariableWarningSections(multiVersionWarnings, {
+    missingPrefix: '缺少变量',
+    extraPrefix: '额外变量',
+    emptyPrefix: '空变量值',
+    versionPrefix: '版本',
+    rowsPrefix: '行'
+  })
+  assert.deepEqual(sections, [
+    {
+      type: 'extra',
+      versionLabel: 'v1',
+      prefix: '额外变量',
+      variables: ['style']
+    },
+    {
+      type: 'missing',
+      versionLabel: 'v2',
+      prefix: '缺少变量',
+      variables: ['tone']
+    },
+    {
+      type: 'extra',
+      versionLabel: 'v2',
+      prefix: '额外变量',
+      variables: ['style']
+    }
+  ])
 } finally {
   rmSync(tempDir, { recursive: true, force: true })
 }

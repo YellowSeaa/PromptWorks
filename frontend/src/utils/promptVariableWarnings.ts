@@ -23,6 +23,19 @@ export interface PromptVariableWarningLabels {
   continueHint: string
 }
 
+export type PromptVariableWarningSectionLabels = Pick<
+  PromptVariableWarningLabels,
+  'missingPrefix' | 'extraPrefix' | 'emptyPrefix' | 'versionPrefix' | 'rowsPrefix'
+>
+
+export interface PromptVariableWarningSection {
+  type: PromptVariableWarningType
+  versionLabel?: string
+  prefix: string
+  variables: string[]
+  rows?: number[]
+}
+
 const VARIABLE_PATTERN = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g
 const SYSTEM_VARIABLES = new Set(['run_index'])
 
@@ -119,6 +132,19 @@ export function buildPromptVariableWarningMessage(
   return [labels.title, '', ...lines, '', labels.continueHint].join('\n')
 }
 
+export function buildPromptVariableWarningSections(
+  warnings: PromptVariableWarning[],
+  labels: PromptVariableWarningSectionLabels
+): PromptVariableWarningSection[] {
+  return warnings.map((warning) => ({
+    type: warning.type,
+    ...(warning.versionLabel ? { versionLabel: warning.versionLabel } : {}),
+    prefix: warningPrefix(warning.type, labels),
+    variables: warning.variables,
+    ...(warning.rows?.length ? { rows: warning.rows } : {})
+  }))
+}
+
 function looksLikeJsonProperty(content: string, start: number, length: number): boolean {
   const before = content[start - 1]
   const after = content[start + length]
@@ -140,4 +166,13 @@ function buildWarning(
   versionLabel?: string
 ): PromptVariableWarning {
   return versionLabel ? { type, versionLabel, variables } : { type, variables }
+}
+
+function warningPrefix(
+  type: PromptVariableWarningType,
+  labels: PromptVariableWarningSectionLabels
+): string {
+  if (type === 'missing') return labels.missingPrefix
+  if (type === 'extra') return labels.extraPrefix
+  return labels.emptyPrefix
 }
