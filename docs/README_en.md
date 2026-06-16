@@ -2,21 +2,40 @@
 
 [中文](../README.md) | English | [Update](../CHANGELOG.md)
 
-# PromptWorks Overview
+# PromptWorks: A Prompt Evaluation and Optimization Workspace for Teams
 
-PromptWorks is a full-stack solution focused on prompt asset management and large-model operations. The repository hosts a FastAPI backend together with a Vue + Element Plus frontend. The platform supports full prompt lifecycle management, model configuration, version comparison, and evaluation experiments, providing teams with a unified collaboration and testing workbench.
+PromptWorks is a full-stack solution for prompt asset management, batch evaluation, and AI-assisted optimization. The repository hosts a FastAPI backend together with a Vue + Element Plus frontend. It helps teams turn prompts from scattered “write-and-run” text snippets into versioned, testable, scoreable, and continuously improvable AI assets.
+
+The platform is built around a complete workflow: **manage prompts → configure test tasks → run multi-model / multi-version evaluations → diagnose with AI scoring → generate optimization recommendations → save improvements as new versions**. Whether you are building customer-service scripts, information extraction prompts, intelligent Q&A, or internal business assistants, the same workflow helps you continuously validate and improve prompt quality.
 
 ![](frontend_en.png)
 
 ## ✨ Core Capabilities
-- **Prompt Management**: Create prompts, iterate versions, organize them with tags, and retain a complete audit trail.
-- **Version Comparison**: Provide diff views to quickly identify content changes introduced by prompt updates.
-- **Model Operations**: Centrally manage available model services and invocation quotas to support A/B experiments.
-- **AI Scoring & Optimization**: Score test outputs on a 0-100 scale, summarize dimension scores and reasoning, then use the dedicated optimization workspace to generate prompt revisions and save them as new versions.
-- **Evaluation & Testing**: Expose experiment execution and metric recording capabilities on the backend, while the frontend ships with pre-configured testing panels ready for integration.
+- **AI Scoring & Optimization**: Score test outputs on a 0-100 scale, display dimension scores such as accuracy, completeness, clarity, and stability, then generate prompt revisions, parameter advice, model advice, and validation plans from the scoring rationale.
+- **Full Prompt Lifecycle Management**: Create prompts, iterate versions, organize them with tags, track authorship, and retain audit records so every prompt change remains traceable.
+- **Batch Evaluation & Testing**: Generate minimal test units around prompt versions, models, parameter sets, and test samples, with support for repeated runs, result comparison, and progress tracking.
+- **Version Comparison & Promotion**: Review version diffs and save rewritten drafts from the AI optimization workspace as new prompt versions.
+- **Model Operations & Usage Monitoring**: Centrally manage model providers, model configuration, and invocation records to support model selection, cost review, and A/B experiments.
+
+## 🧠 AI Evaluation and Optimization Loop
+
+The latest PromptWorks experience puts more emphasis on AI evaluation and automated optimization. You can create a test task first, run real outputs across different prompt versions, models, or parameter combinations, and then use a selected evaluator model to score each output. PromptWorks summarizes average scores, dimension scores, scoring rationale, and low-score issues. In the dedicated AI optimization workspace, it uses those scoring results to produce concrete rewrite suggestions instead of a vague high-level judgment.
+
+This loop is especially useful when prompts look similar but production behavior is unstable. Teams can see whether a result failed because of weak accuracy, missing information, unclear wording, or model / parameter instability, then bring the optimized prompt draft, parameter advice, and validation plan back into the next test cycle.
+
+- **Scoring Diagnosis**: Record total scores, dimension scores, and scoring rationale for each output to locate concrete failure causes.
+- **Optimization Recommendations**: Generate overall advice, parameter advice, model advice, and follow-up validation plans.
+- **Prompt Revision**: Produce an editable rewritten prompt that can be copied or saved as a new version.
+- **Continuous Iteration**: Compare performance before and after optimization in the same task workflow, reducing the cost of tuning prompts by intuition alone.
 
 ### AI Scoring & Optimization Workspace
 ![AI Scoring and Optimization Workspace](frontend-ai-en.png)
+
+## 🎯 Use Cases
+- **Team Prompt Asset Management**: Maintain business prompts, version history, and collaboration metadata in one place instead of scattered documents, chats, or personal scripts.
+- **Prompt Regression Testing**: Compare old and new outputs in batches before releasing a prompt update, reducing quality risks from prompt changes.
+- **Model Selection and Parameter Tuning**: Use the same test samples to compare model quality, temperature, Top-P, and other configuration choices.
+- **Quality Review and Optimization Records**: Turn scoring rationale, optimization recommendations, and validation plans into a repeatable prompt iteration process.
 
 ## 🧱 Tech Stack
 - **Backend**: Python 3.10+, FastAPI, SQLAlchemy, Alembic, Redis, Celery.
@@ -173,9 +192,9 @@ npm run build
 ```
 
 ## 📡 API & Frontend Integration
-- Backend exposes endpoints such as `/api/v1/prompts` and `/api/v1/test_prompt` for the frontend. The current frontend example relies on local mock data and can be switched to live APIs in upcoming iterations.
-- The prompt detail view already contains a version diff component and testing panel, enabling end-to-end validation once wired to real endpoints.
-- The testing task list defaults to the new task entry point, with the legacy “Create Test Task” button hidden and wording aligned to “Create Test Task” in the new flow.
+- Backend exposes endpoints such as `/api/v1/prompts`, `/api/v1/prompt-test`, and `/api/v1/llms` to support prompt management, test tasks, AI scoring, optimization recommendations, and model configuration.
+- The frontend already connects prompt detail, version comparison, test task results, AI scoring, and the AI optimization workspace, forming an end-to-end loop from prompt creation to testing, diagnosis, rewriting, and new-version creation.
+- The testing task list defaults to the new task entry point, while the task result page hosts test outputs, the AI scoring entry point, and the optimization entry point.
 
 ## 🤝 Contribution Guidelines
 1. Create a feature branch and follow the “format → type check → test” workflow.
