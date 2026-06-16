@@ -5,6 +5,8 @@ export interface UsageOverviewResponse {
   input_tokens: number
   output_tokens: number
   call_count: number
+  total_cost: number
+  cost_currency: string
 }
 
 export interface UsageModelSummaryResponse {
@@ -15,6 +17,8 @@ export interface UsageModelSummaryResponse {
   input_tokens: number
   output_tokens: number
   call_count: number
+  total_cost: number
+  cost_currency: string
 }
 
 export interface UsageTimeseriesPointResponse {
@@ -22,6 +26,8 @@ export interface UsageTimeseriesPointResponse {
   input_tokens: number
   output_tokens: number
   call_count: number
+  total_cost: number
+  cost_currency: string
 }
 
 export interface UsageQueryParams {

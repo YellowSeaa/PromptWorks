@@ -10,7 +10,7 @@ import type {
   LLMInvokePayload
 } from '../types/llm'
 
-const BASE_PATH = '/llm-providers'
+const BASE_PATH = '/llm-providers/'
 const DEFAULT_INVOKE_TIMEOUT_MS = 15_000
 
 export class RequestTimeoutError extends Error {
@@ -21,7 +21,7 @@ export class RequestTimeoutError extends Error {
 }
 
 export function listCommonLLMProviders(): Promise<KnownLLMProvider[]> {
-  return request<KnownLLMProvider[]>(`${BASE_PATH}/common`, {
+  return request<KnownLLMProvider[]>(`${BASE_PATH}common`, {
     method: 'GET'
   })
 }
@@ -43,7 +43,7 @@ export function updateLLMProvider(
   providerId: number,
   payload: LLMProviderUpdatePayload
 ): Promise<LLMProvider> {
-  return request<LLMProvider>(`${BASE_PATH}/${providerId}`, {
+  return request<LLMProvider>(`${BASE_PATH}${providerId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   })
@@ -53,7 +53,7 @@ export function createLLMModel(
   providerId: number,
   payload: LLMModelCreatePayload
 ): Promise<LLMModel> {
-  return request<LLMModel>(`${BASE_PATH}/${providerId}/models`, {
+  return request<LLMModel>(`${BASE_PATH}${providerId}/models`, {
     method: 'POST',
     body: JSON.stringify(payload)
   })
@@ -64,20 +64,20 @@ export function updateLLMModel(
   modelId: number,
   payload: LLMModelUpdatePayload
 ): Promise<LLMModel> {
-  return request<LLMModel>(`${BASE_PATH}/${providerId}/models/${modelId}`, {
+  return request<LLMModel>(`${BASE_PATH}${providerId}/models/${modelId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   })
 }
 
 export function deleteLLMModel(providerId: number, modelId: number): Promise<void> {
-  return request<void>(`${BASE_PATH}/${providerId}/models/${modelId}`, {
+  return request<void>(`${BASE_PATH}${providerId}/models/${modelId}`, {
     method: 'DELETE'
   })
 }
 
 export function deleteLLMProvider(providerId: number): Promise<void> {
-  return request<void>(`${BASE_PATH}/${providerId}`, {
+  return request<void>(`${BASE_PATH}${providerId}`, {
     method: 'DELETE'
   })
 }
@@ -91,7 +91,7 @@ export async function invokeLLMProvider(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    return await request(`${BASE_PATH}/${providerId}/invoke`, {
+    return await request(`${BASE_PATH}${providerId}/invoke`, {
       method: 'POST',
       body: JSON.stringify(payload),
       signal: controller.signal

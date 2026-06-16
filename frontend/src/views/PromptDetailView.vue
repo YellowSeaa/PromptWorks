@@ -121,7 +121,13 @@
         </el-form>
         <template #footer>
           <el-button @click="closeMetaDialog" :disabled="isMetaSaving">{{ t('common.cancel') }}</el-button>
-          <el-button type="primary" :loading="isMetaSaving" :disabled="!canSaveMeta" @click="handleSaveMeta">
+          <el-button
+            type="primary"
+            :loading="isMetaSaving"
+            :disabled="!canSaveMeta"
+            @mousedown.prevent.stop="handleSaveMeta"
+            @click="handleSaveMeta"
+          >
             {{ t('common.save') }}
           </el-button>
         </template>
@@ -795,6 +801,9 @@ function extractTestRunError(error: unknown): string {
 }
 
 async function handleSaveMeta() {
+  if (isMetaSaving.value) {
+    return
+  }
   const prompt = detail.value
   if (!prompt) {
     return
@@ -816,6 +825,7 @@ async function handleSaveMeta() {
     ElMessage.success(t('promptDetail.messages.updateSuccess'))
     await refreshDetail()
     await fetchMeta()
+    metaDialogVisible.value = false
   } catch (error) {
     ElMessage.error(extractMetaError(error))
   } finally {

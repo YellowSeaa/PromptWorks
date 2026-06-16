@@ -19,6 +19,7 @@ from app.models.result import Result
 from app.models.test_run import TestRun, TestRunStatus
 from app.models.usage import LLMUsageLog
 from app.services.llm_context import truncate_messages_for_context
+from app.services.model_costs import apply_cost_to_usage_log
 from app.services.system_settings import (
     DEFAULT_TEST_TASK_TIMEOUT,
     get_testing_timeout_config,
@@ -469,6 +470,7 @@ def _invoke_llm_once(
         if isinstance(total_tokens, (int, float))
         else None,
     )
+    apply_cost_to_usage_log(usage_log, model)
 
     return result, usage_log
 

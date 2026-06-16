@@ -6,7 +6,7 @@
         <p class="page-desc">{{ t('testJobManagement.headerDescription') }}</p>
       </div>
       <div class="page-header__actions">
-        <el-button type="primary" plain :icon="Memo" @click="handleCreateNewTask">
+        <el-button type="primary" :icon="Memo" @click="handleCreateNewTask">
           {{ t('testJobManagement.createButtonNew') }}
         </el-button>
         <el-button
@@ -86,6 +86,16 @@
               </el-tag>
             </div>
             <p class="table-subtitle">{{ t('testJobManagement.table.promptPrefix') }}{{ row.promptName }}</p>
+            <el-space wrap class="version-tags task-version-tags">
+              <el-tag
+                v-for="label in row.versionLabels"
+                :key="label"
+                size="small"
+                type="info"
+              >
+                {{ label }}
+              </el-tag>
+            </el-space>
             <p v-if="row.description" class="table-subtitle">
               {{ t('testJobManagement.table.notePrefix') }}{{ row.description }}
             </p>
@@ -106,16 +116,6 @@
                 ·
                 {{ t('testJobManagement.table.repetitionsPrefix', { count: row.repetitions }) }}
               </span>
-              <el-space wrap class="version-tags">
-                <el-tag
-                  v-for="label in row.versionLabels"
-                  :key="label"
-                  size="small"
-                  type="info"
-                >
-                  {{ label }}
-                </el-tag>
-              </el-space>
             </div>
           </template>
         </el-table-column>
@@ -1270,6 +1270,10 @@ async function handleDelete(job: AggregatedJobRow) {
 
 .version-tags {
   margin-top: 4px;
+}
+
+.task-version-tags {
+  margin-top: 6px;
 }
 
 .table-failure {

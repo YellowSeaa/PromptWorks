@@ -80,11 +80,15 @@ def _create_prompt_test_task_with_results(db_session: Session) -> PromptTestTask
                 "run_index": 1,
                 "latency_ms": 120,
                 "total_tokens": 80,
+                "total_cost": 0.12,
+                "cost_currency": "CNY",
             },
             {
                 "run_index": 2,
                 "latency_ms": 180,
                 "total_tokens": 100,
+                "total_cost": 0.18,
+                "cost_currency": "CNY",
             },
         ],
     )
@@ -236,17 +240,22 @@ def test_execute_prompt_test_task_analysis(client, db_session: Session):
     assert row["sample_count"] == 2
     assert row["avg_latency_ms"] == pytest.approx(150.0)
     assert row["avg_tokens"] == pytest.approx(90.0)
+    assert row["total_cost"] == pytest.approx(0.3)
+    assert row["avg_cost"] == pytest.approx(0.15)
+    assert row["cost_currency"] == "CNY"
     assert row["avg_throughput_tokens_per_s"] == pytest.approx(611.11, rel=1e-3)
 
     extra = payload["extra"]
     assert extra is not None
     charts = extra.get("charts") or []
     assert charts
+    assert any(chart["id"] == "total_cost" for chart in charts)
     assert charts[0]["meta"]["unit_labels"][0] == "单元1"
     unit_links = extra.get("unit_links") or []
     assert unit_links and unit_links[0]["label"] == "单元1"
     insight_details = extra.get("insight_details") or []
     assert insight_details
+    assert any(detail["type"] == "cost_minimum" for detail in insight_details)
 
 
 def test_prompt_test_analysis_skips_failed_samples(client, db_session: Session):

@@ -6,6 +6,9 @@ import re
 import subprocess
 from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -103,6 +106,13 @@ def test_ci_runs_semantic_release_on_main_and_dev_and_tags_images_by_release_ver
     assert "frontend-v${RELEASE_VERSION}" in workflow
 
 
+def test_docker_compose_allows_localhost_and_loopback_frontend_origins():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert '"http://localhost:18080"' in compose
+    assert '"http://127.0.0.1:18080"' in compose
+
+
 def test_ci_uses_resolvable_setup_uv_version_tag():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     match = re.search(r"uses:\s+astral-sh/setup-uv@(v[^\s]+)", workflow)
@@ -140,3 +150,11 @@ def test_alembic_revision_ids_fit_version_column_limit():
         assert len(revision) <= 32, (
             f"{migration_path.name} 的 revision 过长({len(revision)}): {revision}"
         )
+
+
+def test_alembic_has_single_migration_head():
+    config = Config(str(ROOT / "alembic.ini"))
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+
+    assert len(heads) == 1, f"Alembic 迁移存在多个 head: {heads}"

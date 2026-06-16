@@ -108,6 +108,16 @@ def _build_summary(data_frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[Any, st
         working_df["_tokens_used"] = pd.Series(
             data=[None] * len(working_df), index=working_df.index, dtype="float64"
         )
+    if "total_cost" in working_df.columns:
+        working_df["_total_cost"] = pd.to_numeric(
+            working_df["total_cost"], errors="coerce"
+        )
+    else:
+        working_df["_total_cost"] = pd.Series(
+            data=[None] * len(working_df), index=working_df.index, dtype="float64"
+        )
+    if "cost_currency" not in working_df.columns:
+        working_df["cost_currency"] = "CNY"
 
     if "unit_id" not in working_df.columns:
         working_df["unit_id"] = 1
@@ -140,6 +150,7 @@ def _build_summary(data_frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[Any, st
 
         latency_series = subset["_latency_ms"].dropna()
         tokens_series = subset["_tokens_used"].dropna()
+        cost_series = subset["_total_cost"].dropna()
         combined_series = subset.dropna(subset=["_latency_ms", "_tokens_used"])
 
         latency_avg = (
@@ -182,6 +193,19 @@ def _build_summary(data_frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[Any, st
             valid_throughput = token_per_second.dropna()
             throughput = _round(valid_throughput.mean())
             tokens_per_request = _round(combined_series["_tokens_used"].mean())
+        cost_total = _round(cost_series.sum(), 6) if not cost_series.empty else None
+        cost_avg = _round(cost_series.mean(), 6) if not cost_series.empty else None
+        cost_currency = _safe_str(
+            next(
+                (
+                    item
+                    for item in subset["cost_currency"].dropna().astype(str).tolist()
+                    if item.strip()
+                ),
+                "CNY",
+            ),
+            "CNY",
+        )
 
         records.append(
             {
@@ -199,6 +223,9 @@ def _build_summary(data_frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[Any, st
                 "total_tokens": tokens_total,
                 "avg_tokens_per_request": tokens_per_request,
                 "avg_throughput_tokens_per_s": throughput,
+                "total_cost": cost_total,
+                "avg_cost": cost_avg,
+                "cost_currency": cost_currency,
             }
         )
 
@@ -316,6 +343,24 @@ def _build_columns_meta() -> list[AnalysisColumnMeta]:
             label="平均吞吐量(tokens/s)",
             description="单位时间内的 tokens 处理速度。",
             visualizable=["bar", "line"],
+        ),
+        AnalysisColumnMeta(
+            name="total_cost",
+            label="总成本",
+            description="该单元全部请求的折算成本。",
+            visualizable=["bar"],
+        ),
+        AnalysisColumnMeta(
+            name="avg_cost",
+            label="平均成本/请求",
+            description="单次请求的平均折算成本。",
+            visualizable=["bar", "line"],
+        ),
+        AnalysisColumnMeta(
+            name="cost_currency",
+            label="成本币种",
+            description="成本展示使用的币种。",
+            visualizable=[],
         ),
     ]
 
@@ -449,6 +494,38 @@ def _build_insights(
             }
         )
 
+    cost_df = summary_df.dropna(subset=["avg_cost"])
+    if not cost_df.empty:
+        cheapest = cost_df.sort_values("avg_cost", ascending=True).iloc[0]
+        cheapest_id = _normalize_unit_id(cheapest["unit_id"], None)
+        cheapest_label = label_map.get(
+            cheapest_id,
+            _safe_str(
+                cheapest.get("unit_label"),
+                _safe_str(cheapest["unit_name"], "总体"),
+            ),
+        )
+        currency = _safe_str(cheapest.get("cost_currency"), "CNY")
+        insights.append(
+            f"平均成本最低的单元是 {cheapest['unit_name']}，约 {cheapest['avg_cost']} {currency}/请求。"
+        )
+        details.append(
+            {
+                "type": "cost_minimum",
+                "unit": {
+                    "unit_id": cheapest_id,
+                    "unit_name": _safe_str(cheapest["unit_name"], "总体"),
+                    "label": cheapest_label,
+                    "value": (
+                        float(cheapest["avg_cost"])
+                        if cheapest["avg_cost"] is not None
+                        else None
+                    ),
+                    "unit": f"{currency}/请求",
+                },
+            }
+        )
+
     if not insights:
         insights.append("可进一步补充耗时或 tokens 数据，以生成对比洞察。")
 
@@ -575,6 +652,26 @@ def _build_chart_configs(
                 "description": "单位时间处理 tokens 的速度",
                 "unit": "tokens/s",
                 "color": "#FAC858",
+            },
+        ),
+        (
+            "total_cost",
+            {
+                "chart_id": "total_cost",
+                "title": "总成本对比",
+                "description": "比较各测试单元的折算总成本",
+                "unit": "成本",
+                "color": "#9A60B4",
+            },
+        ),
+        (
+            "avg_cost",
+            {
+                "chart_id": "avg_cost",
+                "title": "平均成本/请求",
+                "description": "比较各测试单元的单次请求成本",
+                "unit": "成本",
+                "color": "#EA7CCC",
             },
         ),
     ]

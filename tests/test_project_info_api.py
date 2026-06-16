@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -24,6 +25,14 @@ def _current_version() -> str:
     return json.loads(
         (ROOT / "frontend" / "src" / "version.json").read_text(encoding="utf-8")
     )["version"]
+
+
+def _next_patch_version() -> str:
+    match = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", _current_version())
+    if not match:
+        return "v999.0.0"
+    major, minor, patch = (int(part) for part in match.groups())
+    return f"v{major}.{minor}.{patch + 1}"
 
 
 def _seed_project_assets(db_session: Session) -> None:
@@ -115,13 +124,15 @@ def test_project_info_summary_returns_metadata_and_counts(
 def test_project_info_check_version_uses_latest_release(
     client: TestClient, monkeypatch
 ) -> None:
+    latest_version = _next_patch_version()
+
     class DummyResponse:
         status_code = 200
 
         def json(self) -> dict[str, str]:
             return {
-                "tag_name": "v1.2.0",
-                "html_url": "https://github.com/YellowSeaa/PromptWorks/releases/tag/v1.2.0",
+                "tag_name": latest_version,
+                "html_url": f"https://github.com/YellowSeaa/PromptWorks/releases/tag/{latest_version}",
             }
 
     def fake_get(url: str, timeout: float, headers: dict[str, str]) -> DummyResponse:
@@ -137,10 +148,10 @@ def test_project_info_check_version_uses_latest_release(
     assert response.status_code == 200
     payload = response.json()
     assert payload["current"] == _current_version()
-    assert payload["latest"] == "v1.2.0"
+    assert payload["latest"] == latest_version
     assert payload["has_update"] is True
     assert payload["check_status"] == "update_available"
-    assert payload["release_url"].endswith("/v1.2.0")
+    assert payload["release_url"].endswith(f"/{latest_version}")
     assert payload["update_guidance"]["deployment_type"] in {
         "source",
         "docker",

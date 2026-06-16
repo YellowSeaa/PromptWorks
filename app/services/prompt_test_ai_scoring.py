@@ -626,7 +626,43 @@ def _invoke_recommendation_llm(
             timeout_config.ai_optimization_timeout or DEFAULT_AI_OPTIMIZATION_TIMEOUT
         ),
     )
-    return _parse_json_object(_extract_output_text(raw_response)), raw_response
+    content = _parse_json_object(_extract_output_text(raw_response))
+    return _normalize_recommendation_content(content), raw_response
+
+
+def _normalize_recommendation_content(content: dict[str, Any]) -> dict[str, Any]:
+    """将模型返回的建议内容归一成前端可直接展示的自然语言字段。"""
+
+    normalized = dict(content)
+    if "parameter_advice" not in normalized and normalized.get("temperature_advice"):
+        normalized["parameter_advice"] = normalized["temperature_advice"]
+    if "parameter_advice" in normalized:
+        normalized["parameter_advice"] = _format_recommendation_advice(
+            normalized["parameter_advice"]
+        )
+    return normalized
+
+
+def _format_recommendation_advice(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, Mapping):
+        lines = []
+        for key, item in value.items():
+            text = _format_recommendation_advice(item)
+            if text:
+                lines.append(f"{key}：{text}")
+        return "\n".join(lines)
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        lines = []
+        for item in value:
+            text = _format_recommendation_advice(item)
+            if text:
+                lines.append(text)
+        return "\n".join(lines)
+    return str(value).strip()
 
 
 def _post_chat_completion(
@@ -1052,6 +1088,8 @@ def _compact_recommendation_output(output: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "latency_ms": output.get("latency_ms"),
         "total_tokens": output.get("total_tokens"),
+        "total_cost": output.get("total_cost"),
+        "cost_currency": output.get("cost_currency"),
     }
 
 

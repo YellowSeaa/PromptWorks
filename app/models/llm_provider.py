@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -12,6 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.db.types import JSONBCompat
 from app.models.base import Base
 
 if TYPE_CHECKING:  # pragma: no cover - 类型检查辅助
@@ -83,6 +85,21 @@ class LLMModel(Base):
         Integer, nullable=False, default=5, server_default="5"
     )
     context_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_currency: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="USD", server_default="USD"
+    )
+    cost_display_currency: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="CNY", server_default="CNY"
+    )
+    cost_exchange_rate: Mapped[float] = mapped_column(
+        Float, nullable=False, default=7.2, server_default="7.2"
+    )
+    cost_pricing_unit: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1_000_000, server_default="1000000"
+    )
+    cost_input_per_unit: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_output_per_unit: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_tiers: Mapped[list[dict] | None] = mapped_column(JSONBCompat, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

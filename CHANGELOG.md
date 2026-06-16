@@ -1,3 +1,52 @@
+## [1.3.0-beta.5](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.4...v1.3.0-beta.5) (2026-06-16)
+
+### Features
+
+* 添加测试任务变量样本风险提示 ([17f8546](https://github.com/YellowSeaa/PromptWorks/commit/17f8546916e4c756ea6051748f5fda1306d8ed3f))
+
+### Bug Fixes
+
+* 优化变量样本风险提示展示 ([5cba87a](https://github.com/YellowSeaa/PromptWorks/commit/5cba87a9545e0cc704511cf017d78c45bd64e79a))
+* 修复 Docker CORS 与版本预览 ([a4a3e19](https://github.com/YellowSeaa/PromptWorks/commit/a4a3e19fd4ef5346d8597ff863e73c622cbc0d7e))
+* 明确测试样本手动输入格式提示 ([1f9a673](https://github.com/YellowSeaa/PromptWorks/commit/1f9a6737416e3be5d279479b258823b776b8f4d7))
+
+## [1.3.0-beta.4](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.3...v1.3.0-beta.4) (2026-06-16)
+
+### Bug Fixes
+
+* 优化模型成本配置表单 ([db27077](https://github.com/YellowSeaa/PromptWorks/commit/db27077c3c2b68cf0ceb26c0e9f7c92f547df46b))
+* 修复用量监控与侧边栏深色样式 ([921a91a](https://github.com/YellowSeaa/PromptWorks/commit/921a91a2c9b5580202edf9d8eacc6ed0d0f91419))
+* 重算用量监控成本展示 ([4040e0f](https://github.com/YellowSeaa/PromptWorks/commit/4040e0f5493f323c0ad3d4984d29afbbb29a2e38))
+
+## [1.3.0-beta.3](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.2...v1.3.0-beta.3) (2026-06-15)
+
+### Bug Fixes
+
+* 合并模型成本迁移头 ([d6b0a57](https://github.com/YellowSeaa/PromptWorks/commit/d6b0a573f5ae7e8b20c344149677a7190ec5d5fc))
+
+## [1.3.0-beta.2](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.1...v1.3.0-beta.2) (2026-06-15)
+
+### Features
+
+* 增加模型调用成本计算 ([60ee0e8](https://github.com/YellowSeaa/PromptWorks/commit/60ee0e856c35e9aaba4333fdfa4c06a66fa84055))
+
+### Bug Fixes
+
+* 修复前端部署与提示词表单交互问题 ([3b2b31f](https://github.com/YellowSeaa/PromptWorks/commit/3b2b31f53d96dcaa6fa4777101737bcf4bf618c8))
+
+## [1.3.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.1-beta.1...v1.3.0-beta.1) (2026-06-15)
+
+### Features
+
+* 支持基于历史版本创建Prompt版本 ([db55859](https://github.com/YellowSeaa/PromptWorks/commit/db558594f78191a83505d28ec37049a51ca1892f))
+
+## [1.2.1-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.2.0...v1.2.1-beta.1) (2026-06-15)
+
+### Bug Fixes
+
+* 保持 AI 优化历史版本状态一致 ([0398c76](https://github.com/YellowSeaa/PromptWorks/commit/0398c76c89a954e2273b5033bdc0d0a63a8addd2))
+* 修复测试任务 AI 优化页交互 ([8224581](https://github.com/YellowSeaa/PromptWorks/commit/8224581f0117e841b05ae23d56f7702c9bcb8da1))
+
 ## [1.2.0](https://github.com/YellowSeaa/PromptWorks/compare/v1.1.0...v1.2.0) (2026-06-13)
 
 ### Features

@@ -388,6 +388,7 @@ export const messages = {
             quota: '配额策略',
             concurrency: '并发数',
             contextLength: '上下文长度',
+            cost: '成本',
             actions: '操作'
           },
           unlimitedContext: '不限制',
@@ -431,7 +432,31 @@ export const messages = {
         concurrencyPlaceholder: '并发请求上限，默认 5',
         contextLengthLabel: '上下文长度',
         contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
-        contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。'
+        contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。',
+        costSection: '成本配置',
+        costDefaultNote: '默认按人民币计价；如果需要外币或阶梯价格，再到高级设置里修改币种、汇率和阶梯规则。',
+        costPricingSectionTitle: '计费规则',
+        costPricingSectionHint: '先填计价单位和单价，普通模型到这里就够了。',
+        costAdvancedTitle: '高级设置',
+        costCurrencySectionTitle: '币种设置',
+        costCurrencySectionHint: '先确认是否启用外币计价，再填写币种和汇率。',
+        costCurrencyEnabled: '已启用外币',
+        costCurrencyDisabled: '未启用',
+        costCurrencyToggleTitle: '启用外币计价',
+        costCurrencyToggleHint: '默认按人民币计价；只有模型账单是外币时才开启。',
+        costCurrencyDefaultStatus: '当前使用默认人民币计价',
+        costCurrencyDefaultNote: '默认值为 CNY / 1；保持人民币时不需要额外换算。',
+        costCurrencyLabel: '计价币种',
+        costExchangeRateLabel: '汇率',
+        costPricingUnitLabel: '计价单位',
+        costInputLabel: '输入单价',
+        costOutputLabel: '输出单价',
+        costTierTitle: '阶梯价格',
+        costTierHint: '只有模型按上下文窗口或用量区间分档计价时才需要配置。',
+        costTierContextLabel: '上下文上限 tokens',
+        costTierActionLabel: '操作',
+        costTierContextPlaceholder: '阶梯上限 tokens',
+        addCostTier: '添加阶梯价格'
       },
       confirmations: {
         removeModel: {
@@ -497,7 +522,8 @@ export const messages = {
           totalTokens: '总 Token 数',
           inputTokens: '输入 Token 数',
           outputTokens: '输出 Token 数',
-          callCount: '调用次数'
+          callCount: '调用次数',
+          totalCost: '总成本'
         }
       },
       modelCard: {
@@ -506,13 +532,15 @@ export const messages = {
           totalTokens: '按总 Token',
           callCount: '按调用次数',
           inputTokens: '按输入 Token',
-          outputTokens: '按输出 Token'
+          outputTokens: '按输出 Token',
+          totalCost: '按成本'
         },
         empty: '暂无用量数据',
         columns: {
           model: '模型',
           totalTokens: '总 Token',
-          callCount: '调用次数'
+          callCount: '调用次数',
+          totalCost: '成本'
         }
       },
       chart: {
@@ -520,8 +548,10 @@ export const messages = {
         defaultModel: '模型用量',
         legend: {
           input: '输入 Token',
-          output: '输出 Token'
+          output: '输出 Token',
+          cost: '成本'
         },
+        costAxis: '成本',
         stack: '总量'
       },
       messages: {
@@ -602,8 +632,8 @@ export const messages = {
         summaryPlaceholder: '简要说明本次更新要点',
         contentLabel: '内容正文',
         contentPlaceholder: '在这里粘贴完整 Prompt 内容',
-        referenceLabel: '引用版本',
-        referencePlaceholder: '可选择参考版本'
+        baseVersionLabel: '基于版本',
+        baseVersionPlaceholder: '选择后自动填入该版本内容'
       },
       actions: {
         submit: '提交',
@@ -958,7 +988,8 @@ export const messages = {
           models: '请选择模型提供者与模型（可多选）',
           parameterSetName: '参数集 {index}',
           extraParameters: '如需覆盖 max_tokens、stop 等参数，请输入 JSON 对象',
-          inputSamples: '每行一个样本，例如：\n你好\n请介绍 PromptWorks',
+          inputSamples:
+            '首行填写变量名，用逗号、分号或 Tab 分隔；后续每行是一组变量值。\n例如：\ntext,tone\n你好,正式\n请介绍 PromptWorks,简洁',
           analysisModules: '请选择需要自动执行的分析模块',
           aiScoringModel: '请选择评分模型'
         },
@@ -967,10 +998,12 @@ export const messages = {
           noModels: '暂无可用模型，请先在 LLM 管理中添加模型后再试。',
           rounds: '建议与样本数量保持一致，若不足将循环使用样本。',
           baseUnitName: '用于生成最终单元名称，自动附加模型、版本与参数集信息。',
-          samples: '逐行输入样本，执行时按顺序取值；为空则按轮次重复同一提示。',
+          samples: '按 CSV/TSV 格式输入变量样本，执行时按顺序取值；为空则按轮次重复同一提示。',
+          manualFormat: '手动输入也按 CSV/TSV 格式解析：首行是变量名，后续每行是一组变量值；字段可用逗号、分号或 Tab 分隔。',
           csvFormat: '支持 CSV/TXT 文件，首行定义字段名，后续每行为一组变量。',
           noSamples: '暂未导入变量样本，提交后将使用统一提示。',
           variableCount: '当前已解析 {count} 条变量样本。',
+          emptyPromptContent: '该版本暂无 Prompt 内容',
           datasetTooltip:
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
           combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
@@ -1019,6 +1052,18 @@ export const messages = {
         createSuccess: '测试任务创建成功，已提交执行，共生成 {count} 个单元',
         createFailed: '创建测试任务失败，请稍后重试',
         retryPrefillFailed: '复制原任务配置失败，请稍后重试'
+      },
+      variableWarning: {
+        dialogTitle: '变量样本风险提示',
+        title: '检测到变量样本可能影响测试结果：',
+        missingPrefix: '缺少变量',
+        extraPrefix: '额外变量',
+        emptyPrefix: '空变量值',
+        versionPrefix: '版本',
+        rowsPrefix: '行',
+        continueHint: '这些问题不会阻止创建任务，但可能导致占位符原样进入模型、部分变量未被使用，或空值参与测试。仍要继续创建测试任务吗？',
+        confirm: '继续创建',
+        cancel: '返回修改'
       }
     },
     promptTestResult: {
@@ -1248,6 +1293,7 @@ export const messages = {
       labels: {
         averageScore: '平均分',
         scoreProgress: '已评分 {completed}/{total}',
+        summaryMeta: '{task} · Prompt 版本 {version}',
         recommendationMeta: '模型：{model} · 生成时间：{time}',
         targetVersion: '目标版本',
         historyMeta: '{version} · {model} · {time}'
@@ -1264,7 +1310,13 @@ export const messages = {
         regenerate: '重新生成',
         copy: '复制改写',
         createVersion: '新增版本',
+        versionHistory: '版本与历史',
         showAllHistory: '全部记录'
+      },
+      historyDialog: {
+        title: '版本与历史记录',
+        versionTitle: '目标版本',
+        versionDesc: '生成优化时会锁定当前选择的 Prompt 版本。'
       },
       placeholders: {
         model: '选择优化模型',
@@ -1691,6 +1743,7 @@ export const messages = {
             quota: 'Quota Policy',
             concurrency: 'Concurrency',
             contextLength: 'Context Length',
+            cost: 'Cost',
             actions: 'Actions'
           },
           unlimitedContext: 'Unlimited',
@@ -1734,7 +1787,31 @@ export const messages = {
         concurrencyPlaceholder: 'Max concurrent requests (default 5)',
         contextLengthLabel: 'Context Length',
         contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
-        contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.'
+        contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.',
+        costSection: 'Cost Settings',
+        costDefaultNote: 'Default pricing uses CNY. Use advanced settings for foreign currency, exchange rate, or tiered pricing.',
+        costPricingSectionTitle: 'Pricing Rules',
+        costPricingSectionHint: 'Fill the pricing unit and unit prices first. That is enough for most models.',
+        costAdvancedTitle: 'Advanced Settings',
+        costCurrencySectionTitle: 'Currency Settings',
+        costCurrencySectionHint: 'Confirm whether foreign-currency pricing is enabled before editing currency and exchange rate.',
+        costCurrencyEnabled: 'Foreign currency enabled',
+        costCurrencyDisabled: 'Not enabled',
+        costCurrencyToggleTitle: 'Enable foreign-currency pricing',
+        costCurrencyToggleHint: 'Default pricing uses CNY. Enable this only when the provider bill is in another currency.',
+        costCurrencyDefaultStatus: 'Currently using default CNY pricing',
+        costCurrencyDefaultNote: 'Default is CNY / 1. Keep it unchanged when pricing in RMB.',
+        costCurrencyLabel: 'Pricing Currency',
+        costExchangeRateLabel: 'Exchange Rate',
+        costPricingUnitLabel: 'Pricing Unit',
+        costInputLabel: 'Input Price',
+        costOutputLabel: 'Output Price',
+        costTierTitle: 'Tiered Pricing',
+        costTierHint: 'Configure this only when pricing varies by context window or usage tier.',
+        costTierContextLabel: 'Context Limit (tokens)',
+        costTierActionLabel: 'Action',
+        costTierContextPlaceholder: 'Tier max tokens',
+        addCostTier: 'Add Tier Price'
       },
       confirmations: {
         removeModel: {
@@ -1800,7 +1877,8 @@ export const messages = {
           totalTokens: 'Total Tokens',
           inputTokens: 'Input Tokens',
           outputTokens: 'Output Tokens',
-          callCount: 'Call Count'
+          callCount: 'Call Count',
+          totalCost: 'Total Cost'
         }
       },
       modelCard: {
@@ -1809,13 +1887,15 @@ export const messages = {
           totalTokens: 'Sort by total tokens',
           callCount: 'Sort by call count',
           inputTokens: 'Sort by input tokens',
-          outputTokens: 'Sort by output tokens'
+          outputTokens: 'Sort by output tokens',
+          totalCost: 'Sort by cost'
         },
         empty: 'No usage data available',
         columns: {
           model: 'Model',
           totalTokens: 'Total Tokens',
-          callCount: 'Call Count'
+          callCount: 'Call Count',
+          totalCost: 'Cost'
         }
       },
       chart: {
@@ -1823,8 +1903,10 @@ export const messages = {
         defaultModel: 'Model Usage',
         legend: {
           input: 'Input Tokens',
-          output: 'Output Tokens'
+          output: 'Output Tokens',
+          cost: 'Cost'
         },
+        costAxis: 'Cost',
         stack: 'Total'
       },
       messages: {
@@ -1905,8 +1987,8 @@ export const messages = {
         summaryPlaceholder: 'Briefly describe what changed in this version',
         contentLabel: 'Content',
         contentPlaceholder: 'Paste the full prompt content here',
-        referenceLabel: 'Reference Version',
-        referencePlaceholder: 'Optional: choose a version to reference'
+        baseVersionLabel: 'Base Version',
+        baseVersionPlaceholder: 'Choose a version to fill its content'
       },
       actions: {
         submit: 'Submit',
@@ -2263,7 +2345,8 @@ export const messages = {
           models: 'Pick one or more provider models',
           parameterSetName: 'Parameter Set {index}',
           extraParameters: 'Override max_tokens, stop, etc. using a JSON object',
-          inputSamples: 'One sample per line, e.g.\nHello\nWhat is PromptWorks?',
+          inputSamples:
+            'First row: variable names separated by commas, semicolons, or tabs; each following row is one variable sample.\nExample:\ntext,tone\nHello,formal\nExplain PromptWorks,concise',
           analysisModules: 'Select analysis modules to auto-run after completion',
           aiScoringModel: 'Select a scoring model'
         },
@@ -2272,10 +2355,12 @@ export const messages = {
           noModels: 'No models found. Add models under LLM Management and retry.',
           rounds: 'Recommended to match the number of samples. Samples loop when rounds exceed inputs.',
           baseUnitName: 'Used to build unit names. Model, version, and parameter set labels will be appended.',
-          samples: 'Provide one sample per line. Leave blank to reuse the same prompt for every round.',
+          samples: 'Enter variable samples in CSV/TSV format. Leave blank to reuse the same prompt for every round.',
+          manualFormat: 'Manual input is parsed as CSV/TSV: the first row defines variable names, and each following row is one variable sample. Separate fields with commas, semicolons, or tabs.',
           csvFormat: 'CSV/TXT supported. First row defines headers, subsequent rows define variable values.',
           noSamples: 'No variable samples yet. Default prompt will be reused for each round.',
           variableCount: '{count} variable samples parsed.',
+          emptyPromptContent: 'This version has no prompt content.',
           datasetTooltip:
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
           combinationCount: '{count} minimal test units will be generated.',
@@ -2324,6 +2409,18 @@ export const messages = {
         createSuccess: 'Test task created and submitted. {count} units scheduled.',
         createFailed: 'Failed to create test task. Please try again later.',
         retryPrefillFailed: 'Failed to copy the original task configuration. Please try again later.'
+      },
+      variableWarning: {
+        dialogTitle: 'Variable Sample Warning',
+        title: 'Variable samples may affect the test results:',
+        missingPrefix: 'Missing variables',
+        extraPrefix: 'Extra variables',
+        emptyPrefix: 'Empty variable values',
+        versionPrefix: 'Version',
+        rowsPrefix: 'Rows',
+        continueHint: 'These issues will not block task creation, but placeholders may be sent to the model unchanged, some variables may be unused, or empty values may be tested. Continue creating the test task?',
+        confirm: 'Continue',
+        cancel: 'Go Back'
       }
     },
     promptTestResult: {
@@ -2553,6 +2650,7 @@ export const messages = {
       labels: {
         averageScore: 'Average Score',
         scoreProgress: 'Scored {completed}/{total}',
+        summaryMeta: '{task} · Prompt version {version}',
         recommendationMeta: 'Model: {model} · Generated: {time}',
         targetVersion: 'Target Version',
         historyMeta: '{version} · {model} · {time}'
@@ -2569,7 +2667,13 @@ export const messages = {
         regenerate: 'Regenerate',
         copy: 'Copy Revision',
         createVersion: 'Create Version',
+        versionHistory: 'Versions & History',
         showAllHistory: 'All Records'
+      },
+      historyDialog: {
+        title: 'Versions & History',
+        versionTitle: 'Target Version',
+        versionDesc: 'Generation locks to the currently selected Prompt version.'
       },
       placeholders: {
         model: 'Select optimization model',
