@@ -1,3 +1,15 @@
+## [1.3.0-beta.5](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.4...v1.3.0-beta.5) (2026-06-16)
+
+### Features
+
+* 添加测试任务变量样本风险提示 ([17f8546](https://github.com/YellowSeaa/PromptWorks/commit/17f8546916e4c756ea6051748f5fda1306d8ed3f))
+
+### Bug Fixes
+
+* 优化变量样本风险提示展示 ([5cba87a](https://github.com/YellowSeaa/PromptWorks/commit/5cba87a9545e0cc704511cf017d78c45bd64e79a))
+* 修复 Docker CORS 与版本预览 ([a4a3e19](https://github.com/YellowSeaa/PromptWorks/commit/a4a3e19fd4ef5346d8597ff863e73c622cbc0d7e))
+* 明确测试样本手动输入格式提示 ([1f9a673](https://github.com/YellowSeaa/PromptWorks/commit/1f9a6737416e3be5d279479b258823b776b8f4d7))
+
 ## [1.3.0-beta.4](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0-beta.3...v1.3.0-beta.4) (2026-06-16)
 
 ### Bug Fixes
