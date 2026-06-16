@@ -324,6 +324,9 @@
               :rows="6"
               :placeholder="t('promptTestCreate.form.placeholders.inputSamples')"
             />
+            <p class="form-tip">
+              {{ t('promptTestCreate.form.tips.manualFormat') }}
+            </p>
             <div class="variables-toolbar">
               <el-button size="small" type="primary" @click="handleParseVariablesText">
                 {{ t('promptTestCreate.form.actions.parseVariables') }}
@@ -390,10 +393,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { listPrompts, getPrompt } from '../api/prompt'
 import { listLLMProviders } from '../api/llmProvider'
@@ -403,6 +406,11 @@ import type { Prompt } from '../types/prompt'
 import type { AnalysisModuleDefinition } from '../types/analysis'
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
+import {
+  analyzePromptVariableWarnings,
+  buildPromptVariableWarningSections,
+  type PromptVariableVersion
+} from '../utils/promptVariableWarnings'
 
 const route = useRoute()
 const router = useRouter()
@@ -1510,6 +1518,38 @@ async function handleSubmit() {
     return
   }
 
+  const variableWarnings = analyzePromptVariableWarnings({
+    versions: selectedPromptVersions.value
+      .map((version): PromptVariableVersion | null => {
+        const source = selectedPrompt.value?.versions.find((item) => item.id === version.id)
+        if (!source) return null
+        return {
+          id: source.id,
+          label: version.version,
+          content: source.content
+        }
+      })
+      .filter((version): version is PromptVariableVersion => Boolean(version)),
+    sampleHeaders: unitForm.variableHeaders,
+    sampleRows: unitForm.variablesPreview
+  })
+  if (variableWarnings.length) {
+    try {
+      await ElMessageBox.confirm(
+        renderVariableWarningContent(variableWarnings),
+        t('promptTestCreate.variableWarning.dialogTitle'),
+        {
+          confirmButtonText: t('promptTestCreate.variableWarning.confirm'),
+          cancelButtonText: t('promptTestCreate.variableWarning.cancel'),
+          type: 'warning',
+          distinguishCancelAndClose: true
+        }
+      )
+    } catch {
+      return
+    }
+  }
+
   let preparedParameterSets: Array<{
     id: number
     label: string
@@ -1669,6 +1709,43 @@ async function handleSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+function renderVariableWarningContent(warnings: ReturnType<typeof analyzePromptVariableWarnings>) {
+  const sections = buildPromptVariableWarningSections(warnings, {
+    missingPrefix: t('promptTestCreate.variableWarning.missingPrefix'),
+    extraPrefix: t('promptTestCreate.variableWarning.extraPrefix'),
+    emptyPrefix: t('promptTestCreate.variableWarning.emptyPrefix'),
+    versionPrefix: t('promptTestCreate.variableWarning.versionPrefix'),
+    rowsPrefix: t('promptTestCreate.variableWarning.rowsPrefix')
+  })
+  return h('div', { class: 'variable-warning-content' }, [
+    h('p', { class: 'variable-warning-title' }, t('promptTestCreate.variableWarning.title')),
+    h(
+      'div',
+      { class: 'variable-warning-list' },
+      sections.map((section) =>
+        h('p', { class: 'variable-warning-line' }, [
+          section.versionLabel
+            ? h('span', { class: 'variable-warning-version' }, [
+                `${t('promptTestCreate.variableWarning.versionPrefix')} ${section.versionLabel}：`
+              ])
+            : null,
+          h('span', { class: 'variable-warning-prefix' }, `${section.prefix} `),
+          ...section.variables.flatMap((variable, index) => [
+            index > 0 ? h('span', { class: 'variable-warning-separator' }, ', ') : null,
+            h('span', { class: 'variable-warning-token' }, variable)
+          ]),
+          section.rows?.length
+            ? h('span', { class: 'variable-warning-rows' }, [
+                ` (${t('promptTestCreate.variableWarning.rowsPrefix')} ${section.rows.join(', ')})`
+              ])
+            : null
+        ])
+      )
+    ),
+    h('p', { class: 'variable-warning-hint' }, t('promptTestCreate.variableWarning.continueHint'))
+  ])
 }
 
 onMounted(() => {
@@ -1856,6 +1933,50 @@ onMounted(() => {
 
 .hidden-file-input {
   display: none;
+}
+
+:global(.variable-warning-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  line-height: 1.7;
+}
+
+:global(.variable-warning-title),
+:global(.variable-warning-line),
+:global(.variable-warning-hint) {
+  margin: 0;
+}
+
+:global(.variable-warning-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:global(.variable-warning-line) {
+  overflow-wrap: anywhere;
+}
+
+:global(.variable-warning-version) {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+:global(.variable-warning-token) {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+:global(.variable-warning-hint) {
+  color: var(--el-text-color-regular);
 }
 
 .variables-preview-wrapper {

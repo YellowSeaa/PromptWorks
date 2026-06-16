@@ -988,7 +988,8 @@ export const messages = {
           models: '请选择模型提供者与模型（可多选）',
           parameterSetName: '参数集 {index}',
           extraParameters: '如需覆盖 max_tokens、stop 等参数，请输入 JSON 对象',
-          inputSamples: '每行一个样本，例如：\n你好\n请介绍 PromptWorks',
+          inputSamples:
+            '首行填写变量名，用逗号、分号或 Tab 分隔；后续每行是一组变量值。\n例如：\ntext,tone\n你好,正式\n请介绍 PromptWorks,简洁',
           analysisModules: '请选择需要自动执行的分析模块',
           aiScoringModel: '请选择评分模型'
         },
@@ -997,7 +998,8 @@ export const messages = {
           noModels: '暂无可用模型，请先在 LLM 管理中添加模型后再试。',
           rounds: '建议与样本数量保持一致，若不足将循环使用样本。',
           baseUnitName: '用于生成最终单元名称，自动附加模型、版本与参数集信息。',
-          samples: '逐行输入样本，执行时按顺序取值；为空则按轮次重复同一提示。',
+          samples: '按 CSV/TSV 格式输入变量样本，执行时按顺序取值；为空则按轮次重复同一提示。',
+          manualFormat: '手动输入也按 CSV/TSV 格式解析：首行是变量名，后续每行是一组变量值；字段可用逗号、分号或 Tab 分隔。',
           csvFormat: '支持 CSV/TXT 文件，首行定义字段名，后续每行为一组变量。',
           noSamples: '暂未导入变量样本，提交后将使用统一提示。',
           variableCount: '当前已解析 {count} 条变量样本。',
@@ -1049,6 +1051,18 @@ export const messages = {
         createSuccess: '测试任务创建成功，已提交执行，共生成 {count} 个单元',
         createFailed: '创建测试任务失败，请稍后重试',
         retryPrefillFailed: '复制原任务配置失败，请稍后重试'
+      },
+      variableWarning: {
+        dialogTitle: '变量样本风险提示',
+        title: '检测到变量样本可能影响测试结果：',
+        missingPrefix: '缺少变量',
+        extraPrefix: '额外变量',
+        emptyPrefix: '空变量值',
+        versionPrefix: '版本',
+        rowsPrefix: '行',
+        continueHint: '这些问题不会阻止创建任务，但可能导致占位符原样进入模型、部分变量未被使用，或空值参与测试。仍要继续创建测试任务吗？',
+        confirm: '继续创建',
+        cancel: '返回修改'
       }
     },
     promptTestResult: {
@@ -2330,7 +2344,8 @@ export const messages = {
           models: 'Pick one or more provider models',
           parameterSetName: 'Parameter Set {index}',
           extraParameters: 'Override max_tokens, stop, etc. using a JSON object',
-          inputSamples: 'One sample per line, e.g.\nHello\nWhat is PromptWorks?',
+          inputSamples:
+            'First row: variable names separated by commas, semicolons, or tabs; each following row is one variable sample.\nExample:\ntext,tone\nHello,formal\nExplain PromptWorks,concise',
           analysisModules: 'Select analysis modules to auto-run after completion',
           aiScoringModel: 'Select a scoring model'
         },
@@ -2339,7 +2354,8 @@ export const messages = {
           noModels: 'No models found. Add models under LLM Management and retry.',
           rounds: 'Recommended to match the number of samples. Samples loop when rounds exceed inputs.',
           baseUnitName: 'Used to build unit names. Model, version, and parameter set labels will be appended.',
-          samples: 'Provide one sample per line. Leave blank to reuse the same prompt for every round.',
+          samples: 'Enter variable samples in CSV/TSV format. Leave blank to reuse the same prompt for every round.',
+          manualFormat: 'Manual input is parsed as CSV/TSV: the first row defines variable names, and each following row is one variable sample. Separate fields with commas, semicolons, or tabs.',
           csvFormat: 'CSV/TXT supported. First row defines headers, subsequent rows define variable values.',
           noSamples: 'No variable samples yet. Default prompt will be reused for each round.',
           variableCount: '{count} variable samples parsed.',
@@ -2391,6 +2407,18 @@ export const messages = {
         createSuccess: 'Test task created and submitted. {count} units scheduled.',
         createFailed: 'Failed to create test task. Please try again later.',
         retryPrefillFailed: 'Failed to copy the original task configuration. Please try again later.'
+      },
+      variableWarning: {
+        dialogTitle: 'Variable Sample Warning',
+        title: 'Variable samples may affect the test results:',
+        missingPrefix: 'Missing variables',
+        extraPrefix: 'Extra variables',
+        emptyPrefix: 'Empty variable values',
+        versionPrefix: 'Version',
+        rowsPrefix: 'Rows',
+        continueHint: 'These issues will not block task creation, but placeholders may be sent to the model unchanged, some variables may be unused, or empty values may be tested. Continue creating the test task?',
+        confirm: 'Continue',
+        cancel: 'Go Back'
       }
     },
     promptTestResult: {
