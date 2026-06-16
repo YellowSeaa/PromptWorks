@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0...v1.3.1) (2026-06-16)
+
+### Bug Fixes
+
+* 调整版本选择悬浮预览展示 ([8a33742](https://github.com/YellowSeaa/PromptWorks/commit/8a3374211ec610a74c7c9f897599e31e03e52b57))
+
 ## [1.3.1-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0...v1.3.1-beta.1) (2026-06-16)
 
 ### Bug Fixes
