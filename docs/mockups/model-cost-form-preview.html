@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>模型成本配置预览</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #11151b;
+        --bg-elevated: #181d25;
+        --bg-card: #1f2530;
+        --bg-card-2: #232a36;
+        --line: #323a48;
+        --line-soft: #2a3140;
+        --text: #eef2f7;
+        --text-weak: #aeb7c5;
+        --text-soft: #7f8a9b;
+        --primary: #6ea8fe;
+        --primary-soft: rgba(110, 168, 254, 0.16);
+        --success: #5fd19a;
+        --warning: #f6c177;
+        --danger: #f38ba8;
+        --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+        --radius: 16px;
+        --radius-sm: 10px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top left, rgba(110, 168, 254, 0.1), transparent 30%),
+          linear-gradient(180deg, #0f1318 0%, var(--bg) 100%);
+        color: var(--text);
+        font-family:
+          "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      body {
+        padding: 28px;
+      }
+
+      .page {
+        max-width: 1440px;
+        margin: 0 auto;
+      }
+
+      .hero {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 20px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 6px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--text-weak);
+        font-size: 12px;
+        letter-spacing: 0;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.15;
+      }
+
+      .hero p {
+        margin: 10px 0 0;
+        max-width: 760px;
+        color: var(--text-weak);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .hero-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 240px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.02);
+        box-shadow: var(--shadow);
+      }
+
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--bg-card);
+        border: 1px solid var(--line-soft);
+        color: var(--text-weak);
+        font-size: 13px;
+      }
+
+      .meta-chip strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.95fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .panel {
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.02);
+        box-shadow: var(--shadow);
+      }
+
+      .panel-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .section {
+        padding: 18px;
+        border: 1px solid var(--line-soft);
+        border-radius: 14px;
+        background: var(--bg-card);
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .section-header h2 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.2;
+      }
+
+      .section-header p {
+        margin: 4px 0 0;
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line-soft);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-weak);
+        font-size: 12px;
+      }
+
+      .badge--accent {
+        border-color: rgba(110, 168, 254, 0.35);
+        color: #dbe8ff;
+        background: rgba(110, 168, 254, 0.12);
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .field--wide {
+        grid-column: 1 / -1;
+      }
+
+      .label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      label {
+        color: var(--text-weak);
+        font-size: 13px;
+      }
+
+      .hint {
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      input,
+      select {
+        width: 100%;
+        height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--bg-elevated);
+        color: var(--text);
+        outline: none;
+        font: inherit;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: rgba(110, 168, 254, 0.8);
+        box-shadow: 0 0 0 3px rgba(110, 168, 254, 0.16);
+      }
+
+      input::placeholder {
+        color: var(--text-soft);
+      }
+
+      .billing-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .inline-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(110, 168, 254, 0.08);
+        color: #dbe8ff;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .inline-note strong {
+        color: #ffffff;
+      }
+
+      details {
+        border: 1px solid var(--line-soft);
+        border-radius: 14px;
+        overflow: clip;
+        background: var(--bg-card);
+      }
+
+      summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        list-style: none;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .summary-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .summary-copy strong {
+        font-size: 15px;
+      }
+
+      .summary-copy span {
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .summary-pill {
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--text-weak);
+        font-size: 12px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      details[open] .summary-pill {
+        color: #dbe8ff;
+        border-color: rgba(110, 168, 254, 0.35);
+        background: rgba(110, 168, 254, 0.12);
+      }
+
+      .details-body {
+        border-top: 1px solid var(--line-soft);
+        padding: 16px 18px 18px;
+      }
+
+      .tier-table {
+        display: grid;
+        gap: 10px;
+      }
+
+      .tier-head {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr 0.9fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 0 4px;
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .tier-head span:last-child {
+        width: 40px;
+        text-align: center;
+      }
+
+      .billing-section {
+        margin-top: 14px;
+      }
+
+      .switch-row {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .switch-card {
+        padding: 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line-soft);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .switch-card__top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 10px;
+      }
+
+      .switch-card__top strong {
+        font-size: 13px;
+      }
+
+      .switch-card__top span {
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .tier-row {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr 0.9fr auto;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .tier-row .tiny {
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .currency-note {
+        margin-top: 10px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(95, 209, 154, 0.08);
+        border: 1px solid rgba(95, 209, 154, 0.18);
+        color: #d2f4e4;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .ghost-button,
+      .primary-button,
+      .danger-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 14px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .ghost-button {
+        border-color: var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-weak);
+      }
+
+      .primary-button {
+        background: linear-gradient(180deg, #7fb2ff 0%, #5b8ff0 100%);
+        color: white;
+        box-shadow: 0 12px 24px rgba(91, 143, 240, 0.25);
+      }
+
+      .danger-button {
+        width: 40px;
+        padding: 0;
+        border-color: rgba(243, 139, 168, 0.25);
+        background: rgba(243, 139, 168, 0.08);
+        color: #f8bacb;
+      }
+
+      .form-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line-soft);
+      }
+
+      .footer-copy {
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .preview {
+        position: sticky;
+        top: 20px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .preview-card {
+        padding: 18px;
+        border: 1px solid var(--line-soft);
+        border-radius: 14px;
+        background: var(--bg-card);
+      }
+
+      .preview-card h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .preview-card p {
+        margin: 0;
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .preview-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .preview-metric {
+        padding: 14px;
+        border-radius: 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--line);
+      }
+
+      .preview-metric span {
+        display: block;
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .preview-metric strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 20px;
+        line-height: 1.1;
+      }
+
+      .formula {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(110, 168, 254, 0.08);
+        border: 1px solid rgba(110, 168, 254, 0.18);
+        color: #dbe8ff;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .steps {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .step:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .step-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: #dbe8ff;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .step strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .step span {
+        color: var(--text-soft);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .mini-snapshot {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px dashed var(--line);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .mini-snapshot .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--text-weak);
+        font-size: 12px;
+      }
+
+      .mini-snapshot .row strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      @media (max-width: 1180px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .preview {
+          position: static;
+        }
+      }
+
+      @media (max-width: 860px) {
+        body {
+          padding: 16px;
+        }
+
+        .hero {
+          flex-direction: column;
+        }
+
+        .hero-meta {
+          min-width: 0;
+          width: 100%;
+        }
+
+        .form-grid,
+        .billing-grid,
+        .preview-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .tier-row {
+          grid-template-columns: 1fr;
+        }
+
+        .tier-head {
+          display: none;
+        }
+
+        .switch-card__top {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .form-footer {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .primary-button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">LLM 管理 / 模型成本配置预览</div>
+          <h1>先讲清楚“怎么计费”，再去填数字</h1>
+          <p>
+            这个预览把原本平铺的成本字段拆成了更顺手的顺序：默认人民币，先填单价，只有需要外币时才展开高级设置。
+            右侧会实时告诉你，这些值最终会怎么算成一次调用的成本。
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="meta-chip"><span>默认计价单位</span><strong>1,000,000 tokens</strong></div>
+          <div class="meta-chip"><span>默认展示币种</span><strong>CNY</strong></div>
+          <div class="meta-chip"><span>主流程</span><strong>基础信息 → 计费规则 → 高级设置</strong></div>
+        </div>
+      </header>
+
+      <main class="shell">
+        <section class="panel panel-stack">
+          <div class="section">
+          <div class="section-header">
+            <div>
+              <h2>1. 基础信息</h2>
+              <p>默认按人民币展示，不需要在主流程里想币种和汇率。</p>
+            </div>
+            <div class="badge-row">
+              <span class="badge badge--accent">最先填写</span>
+              <span class="badge">默认 CNY</span>
+            </div>
+          </div>
+
+          <div class="switch-card">
+            <div class="switch-card__top">
+              <strong>主流程默认值</strong>
+              <span>人民币 / 1</span>
+            </div>
+            <div class="inline-note" style="margin-top: 0;">
+              <strong>说明：</strong>
+              平时只需要填计费单位和单价。只有当模型价格不是人民币时，再去高级设置里切换币种并填写汇率。
+            </div>
+          </div>
+          </div>
+
+          <div class="section">
+            <div class="section-header">
+              <div>
+                <h2>2. 计费规则</h2>
+                <p>主表单只保留最常改的三个值：计价单位、输入单价、输出单价。</p>
+              </div>
+              <div class="badge-row">
+                <span class="badge badge--accent">核心配置</span>
+                <span class="badge">实时预览</span>
+              </div>
+            </div>
+
+            <div class="billing-grid">
+              <div class="field">
+                <div class="label-row">
+                  <label for="pricing-unit">计价单位</label>
+                </div>
+                <input id="pricing-unit" type="number" step="1000" value="1000000" />
+                <div class="hint">表示“每多少 token 计一次价”，常见是 1,000 或 1,000,000。</div>
+              </div>
+
+              <div class="field">
+                <div class="label-row">
+                  <label for="input-price">输入单价</label>
+                </div>
+                <input id="input-price" type="number" step="0.01" value="0.40" />
+                <div class="hint">按计价币种计价，代表输入 token 的价格。</div>
+              </div>
+
+              <div class="field">
+                <div class="label-row">
+                  <label for="output-price">输出单价</label>
+                </div>
+                <input id="output-price" type="number" step="0.01" value="1.20" />
+                <div class="hint">按计价币种计价，代表输出 token 的价格。</div>
+              </div>
+
+              <div class="field field--wide">
+                <div class="label-row">
+                  <label>这组字段怎么理解</label>
+                </div>
+                <div class="mini-snapshot">
+                  <div class="row"><span>换算逻辑</span><strong>单价 × 实际 token 数 ÷ 计价单位</strong></div>
+                  <div class="row"><span>默认币种</span><strong>人民币 CNY，汇率固定为 1</strong></div>
+                  <div class="row"><span>适用场景</span><strong>没有阶梯计费的普通模型</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <details open>
+            <summary>
+              <div class="summary-copy">
+                <strong>3. 高级设置</strong>
+                <span>只有当模型价格按上下文窗口分档，或需要单独折算时才展开。</span>
+              </div>
+              <span class="summary-pill">可折叠</span>
+            </summary>
+            <div class="details-body">
+            <div class="switch-row">
+              <div class="switch-card">
+                <div class="switch-card__top">
+                  <strong>币种设置</strong>
+                  <span>默认关闭</span>
+                </div>
+                <div class="form-grid">
+                  <div class="field">
+                    <div class="label-row">
+                      <label for="advanced-currency">计价币种</label>
+                    </div>
+                    <select id="advanced-currency">
+                      <option selected>CNY</option>
+                      <option>USD</option>
+                      <option>EUR</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <div class="label-row">
+                      <label for="advanced-rate">汇率</label>
+                    </div>
+                    <input id="advanced-rate" type="number" step="0.01" value="1.00" />
+                  </div>
+                </div>
+                <div class="currency-note">
+                  只要这里保持人民币，汇率就固定为 1；切换到其他币种后，才需要维护汇率。
+                </div>
+              </div>
+
+              <div class="switch-card">
+                <div class="switch-card__top">
+                  <strong>阶梯价格</strong>
+                  <span>按需开启</span>
+                </div>
+                <select id="tier-switch">
+                  <option>关闭</option>
+                  <option selected>开启</option>
+                </select>
+                <div class="hint" style="margin-top: 10px;">按上下文上限从小到大匹配，命中第一档即生效。</div>
+              </div>
+            </div>
+
+              <div class="tier-table">
+                <div class="tier-head" aria-hidden="true">
+                  <span>上下文上限 tokens</span>
+                  <span>输入单价</span>
+                  <span>输出单价</span>
+                  <span>操作</span>
+                </div>
+                <div class="tier-row">
+                  <input type="number" value="8000" placeholder="上限 tokens" />
+                  <input type="number" step="0.01" value="0.55" placeholder="输入单价" />
+                  <input type="number" step="0.01" value="1.10" placeholder="输出单价" />
+                  <button class="danger-button" type="button" aria-label="删除这一档">×</button>
+                </div>
+                <div class="tier-row">
+                  <input type="number" value="32000" placeholder="上限 tokens" />
+                  <input type="number" step="0.01" value="0.35" placeholder="输入单价" />
+                  <input type="number" step="0.01" value="0.85" placeholder="输出单价" />
+                  <button class="danger-button" type="button" aria-label="删除这一档">×</button>
+                </div>
+                <button class="ghost-button" type="button">+ 添加阶梯价格</button>
+              </div>
+            </div>
+          </details>
+
+          <div class="form-footer">
+            <div class="footer-copy">
+              保存后会影响模型列表、用量监控和成本统计。<br />
+              如果只是普通模型，通常只填基础信息和计费规则就够了。
+            </div>
+            <div class="badge-row">
+              <button class="ghost-button" type="button">恢复默认</button>
+              <button class="primary-button" type="button">保存配置</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="preview">
+          <section class="preview-card">
+            <h3>实时预览</h3>
+                <p>这块是最重要的：用户可以在填完后马上知道“一个请求大概多少钱”。默认按人民币展示。</p>
+
+            <div class="preview-grid">
+              <div class="preview-metric">
+                <span>1M 输入成本</span>
+                <strong id="preview-input-unit">CNY 0.40</strong>
+              </div>
+              <div class="preview-metric">
+                <span>1M 输出成本</span>
+                <strong id="preview-output-unit">CNY 1.20</strong>
+              </div>
+              <div class="preview-metric">
+                <span>示例请求成本</span>
+                <strong id="preview-request">CNY 0.01</strong>
+              </div>
+              <div class="preview-metric">
+                <span>当前币种</span>
+                <strong id="preview-display">CNY / 1</strong>
+              </div>
+            </div>
+
+            <div class="formula" id="formula-copy">
+              <div>示例：12,000 输入 tokens + 4,000 输出 tokens</div>
+              <div>输入成本 = 12,000 ÷ 1,000,000 × 0.40</div>
+              <div>输出成本 = 4,000 ÷ 1,000,000 × 1.20</div>
+              <div>合计 = 0.01 CNY</div>
+            </div>
+
+            <div class="mini-snapshot">
+              <div class="row"><span>主流程</span><strong>先看预览，再保存</strong></div>
+              <div class="row"><span>默认策略</span><strong>普通模型只填基础规则</strong></div>
+              <div class="row"><span>复杂场景</span><strong>再展开阶梯价格</strong></div>
+            </div>
+          </section>
+
+          <section class="preview-card">
+            <h3>这版的使用顺序</h3>
+            <div class="steps">
+              <div class="step">
+                <div class="step-index">1</div>
+                <div>
+                  <strong>先确认默认人民币</strong>
+                  <span>普通场景不用管币种和汇率，系统默认按 CNY 统计成本。</span>
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-index">2</div>
+                <div>
+                  <strong>再填单价</strong>
+                  <span>如果模型只需要固定输入/输出单价，就在这里填完，其他部分可以不看。</span>
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-index">3</div>
+                <div>
+                  <strong>有特殊规则再展开高级设置</strong>
+                  <span>币种、汇率、阶梯价格都放在折叠区，减少第一次使用的压力。</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script>
+      const currencySelect = document.getElementById('advanced-currency')
+      const displayCurrencySelect = document.getElementById('advanced-currency')
+      const pricingUnitInput = document.getElementById('pricing-unit')
+      const inputPriceInput = document.getElementById('input-price')
+      const outputPriceInput = document.getElementById('output-price')
+      const advancedRateInput = document.getElementById('advanced-rate')
+      const previewInputUnit = document.getElementById('preview-input-unit')
+      const previewOutputUnit = document.getElementById('preview-output-unit')
+      const previewRequest = document.getElementById('preview-request')
+      const previewDisplay = document.getElementById('preview-display')
+      const formulaCopy = document.getElementById('formula-copy')
+
+      const sampleInputTokens = 12000
+      const sampleOutputTokens = 4000
+
+      function formatMoney(value) {
+        return Number(value || 0).toFixed(2)
+      }
+
+      function updatePreview() {
+        const costCurrency = currencySelect.value
+        const displayCurrency = displayCurrencySelect.value
+        const pricingUnit = Number(pricingUnitInput.value || 1000000)
+        const inputPrice = Number(inputPriceInput.value || 0)
+        const outputPrice = Number(outputPriceInput.value || 0)
+        const advancedRate = Number(advancedRateInput.value || exchangeRate || 1)
+
+        const inputPerUnit = inputPrice
+        const outputPerUnit = outputPrice
+        const requestCost =
+          (sampleInputTokens / pricingUnit) * inputPrice + (sampleOutputTokens / pricingUnit) * outputPrice
+        const requestDisplayCost = requestCost * advancedRate
+        const requestInputCost = (1_000_000 / pricingUnit) * inputPrice
+        const requestOutputCost = (1_000_000 / pricingUnit) * outputPrice
+
+        previewInputUnit.textContent = `${costCurrency} ${formatMoney(requestInputCost)}`
+        previewOutputUnit.textContent = `${costCurrency} ${formatMoney(requestOutputCost)}`
+        previewRequest.textContent = `${costCurrency} ${formatMoney(requestCost)}`
+        previewDisplay.textContent = `${displayCurrency} / ${formatMoney(advancedRate)}`
+
+        formulaCopy.innerHTML = `
+          <div>示例：12,000 输入 tokens + 4,000 输出 tokens</div>
+          <div>输入成本 = 12,000 ÷ ${pricingUnit.toLocaleString()} × ${formatMoney(inputPerUnit)}</div>
+          <div>输出成本 = 4,000 ÷ ${pricingUnit.toLocaleString()} × ${formatMoney(outputPerUnit)}</div>
+          <div>合计 = ${formatMoney(requestCost)} ${costCurrency}，约 ${formatMoney(requestDisplayCost)} ${displayCurrency}</div>
+        `
+      }
+
+      ;[
+        currencySelect,
+        displayCurrencySelect,
+        exchangeRateInput,
+        pricingUnitInput,
+        inputPriceInput,
+        outputPriceInput,
+        advancedRateInput,
+      ].forEach((element) => {
+        element.addEventListener('input', updatePreview)
+        element.addEventListener('change', updatePreview)
+      })
+
+      updatePreview()
+    </script>
+  </body>
+</html>

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app.models.llm_provider import LLMProvider
+from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.usage import LLMUsageLog
 from app.services import usage_dashboard
 
@@ -21,6 +21,30 @@ def _create_provider(db_session) -> LLMProvider:
     return provider
 
 
+def _create_costed_model(
+    db_session,
+    *,
+    provider: LLMProvider,
+    name: str,
+    input_per_unit: float,
+    output_per_unit: float,
+    exchange_rate: float = 1.0,
+) -> LLMModel:
+    model = LLMModel(
+        provider_id=provider.id,
+        name=name,
+        cost_currency="CNY",
+        cost_display_currency="CNY",
+        cost_exchange_rate=exchange_rate,
+        cost_pricing_unit=1_000,
+        cost_input_per_unit=input_per_unit,
+        cost_output_per_unit=output_per_unit,
+    )
+    db_session.add(model)
+    db_session.commit()
+    return model
+
+
 def _add_usage(
     db_session,
     *,
@@ -31,10 +55,11 @@ def _add_usage(
     created_at: datetime,
     total_cost: float | None = None,
     cost_currency: str | None = "CNY",
+    model_id: int | None = None,
 ) -> LLMUsageLog:
     log = LLMUsageLog(
         provider_id=provider_id,
-        model_id=None,
+        model_id=model_id,
         model_name=model_name,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
@@ -196,3 +221,45 @@ def test_usage_queries_respect_date_filters(db_session):
         select(LLMUsageLog).where(LLMUsageLog.id == first.id)
     ).one()
     assert remaining.prompt_tokens == 4
+
+
+def test_usage_dashboard_recalculates_cost_from_current_model_pricing(db_session):
+    provider = _create_provider(db_session)
+    model = _create_costed_model(
+        db_session,
+        provider=provider,
+        name="model-costed",
+        input_per_unit=2.0,
+        output_per_unit=4.0,
+    )
+    created_at = datetime(2024, 5, 1, 10, tzinfo=timezone.utc)
+    _add_usage(
+        db_session,
+        provider_id=provider.id,
+        model_id=model.id,
+        model_name=model.name,
+        prompt_tokens=1_000,
+        completion_tokens=500,
+        total_cost=999.0,
+        created_at=created_at,
+    )
+
+    overview = usage_dashboard.calculate_usage_overview(db_session)
+    assert overview.total_cost == 4.0
+
+    model.cost_input_per_unit = 3.0
+    model.cost_output_per_unit = 6.0
+    db_session.commit()
+
+    overview = usage_dashboard.calculate_usage_overview(db_session)
+    assert overview.total_cost == 6.0
+
+    summaries = usage_dashboard.aggregate_usage_by_model(db_session)
+    assert summaries[0].total_cost == 6.0
+
+    timeseries = usage_dashboard.get_model_usage_timeseries(
+        db_session,
+        provider_id=provider.id,
+        model_name=model.name,
+    )
+    assert timeseries[0].total_cost == 6.0

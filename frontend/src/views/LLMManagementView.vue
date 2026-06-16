@@ -371,102 +371,155 @@
           />
         </el-form-item>
         <el-divider content-position="left">{{ t('llmManagement.modelDialog.costSection') }}</el-divider>
-        <el-row :gutter="12">
-          <el-col :xs="24" :sm="12">
-            <el-form-item :label="t('llmManagement.modelDialog.costCurrencyLabel')">
-              <el-input v-model="modelForm.costCurrency" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item :label="t('llmManagement.modelDialog.costDisplayCurrencyLabel')">
-              <el-input v-model="modelForm.costDisplayCurrency" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="12">
-          <el-col :xs="24" :sm="12">
-            <el-form-item :label="t('llmManagement.modelDialog.costExchangeRateLabel')">
-              <el-input-number
-                v-model="modelForm.costExchangeRate"
-                class="model-number-input"
-                :min="0.000001"
-                :step="0.1"
-                controls-position="right"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
-              <el-input-number
-                v-model="modelForm.costPricingUnit"
-                class="model-number-input"
-                :min="1"
-                :step="1000"
-                controls-position="right"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="12">
-          <el-col :xs="24" :sm="12">
-            <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
-              <el-input-number
-                v-model="modelForm.costInputPerUnit"
-                class="model-number-input"
-                :min="0"
-                :step="0.01"
-                controls-position="right"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
-              <el-input-number
-                v-model="modelForm.costOutputPerUnit"
-                class="model-number-input"
-                :min="0"
-                :step="0.01"
-                controls-position="right"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <div class="cost-tier-list">
-          <div
-            v-for="(tier, index) in modelForm.costTiers"
-            :key="index"
-            class="cost-tier-row"
-          >
-            <el-input-number
-              v-model="tier.upToContextTokens"
-              class="cost-tier-row__input"
-              :min="1"
-              :step="1024"
-              controls-position="right"
-              :placeholder="t('llmManagement.modelDialog.costTierContextPlaceholder')"
-            />
-            <el-input-number
-              v-model="tier.inputPerUnit"
-              class="cost-tier-row__input"
-              :min="0"
-              :step="0.01"
-              controls-position="right"
-              :placeholder="t('llmManagement.modelDialog.costInputLabel')"
-            />
-            <el-input-number
-              v-model="tier.outputPerUnit"
-              class="cost-tier-row__input"
-              :min="0"
-              :step="0.01"
-              controls-position="right"
-              :placeholder="t('llmManagement.modelDialog.costOutputLabel')"
-            />
-            <el-button text type="danger" :icon="Delete" @click="removeCostTier(index)" />
-          </div>
-          <el-button text type="primary" :icon="Plus" @click="addCostTier">
-            {{ t('llmManagement.modelDialog.addCostTier') }}
-          </el-button>
+        <div class="cost-default-note">
+          {{ t('llmManagement.modelDialog.costDefaultNote') }}
         </div>
+        <div class="cost-pricing-section">
+          <div class="cost-section-header">
+            <div>
+              <h4>{{ t('llmManagement.modelDialog.costPricingSectionTitle') }}</h4>
+              <p>{{ t('llmManagement.modelDialog.costPricingSectionHint') }}</p>
+            </div>
+          </div>
+          <el-row :gutter="12">
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
+                <el-input-number
+                  v-model="modelForm.costPricingUnit"
+                  class="model-number-input"
+                  :min="1"
+                  :step="1000"
+                  controls-position="right"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
+                <el-input-number
+                  v-model="modelForm.costInputPerUnit"
+                  class="model-number-input"
+                  :min="0"
+                  :step="0.01"
+                  controls-position="right"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="12">
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
+                <el-input-number
+                  v-model="modelForm.costOutputPerUnit"
+                  class="model-number-input"
+                  :min="0"
+                  :step="0.01"
+                  controls-position="right"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+        <el-collapse class="cost-advanced-section">
+          <el-collapse-item :title="t('llmManagement.modelDialog.costAdvancedTitle')" name="advanced">
+            <div class="cost-section-header">
+              <div>
+                <h4>{{ t('llmManagement.modelDialog.costCurrencySectionTitle') }}</h4>
+                <p>{{ t('llmManagement.modelDialog.costCurrencySectionHint') }}</p>
+              </div>
+              <el-tag :type="modelForm.useCustomCurrency ? 'warning' : 'info'" effect="plain">
+                {{
+                  modelForm.useCustomCurrency
+                    ? t('llmManagement.modelDialog.costCurrencyEnabled')
+                    : t('llmManagement.modelDialog.costCurrencyDisabled')
+                }}
+              </el-tag>
+            </div>
+            <div class="cost-currency-toggle">
+              <div>
+                <strong>{{ t('llmManagement.modelDialog.costCurrencyToggleTitle') }}</strong>
+                <span>{{ t('llmManagement.modelDialog.costCurrencyToggleHint') }}</span>
+              </div>
+              <el-switch
+                v-model="modelForm.useCustomCurrency"
+                @change="handleCustomCurrencyToggle"
+              />
+            </div>
+            <div v-if="!modelForm.useCustomCurrency" class="cost-currency-summary">
+              <span>{{ t('llmManagement.modelDialog.costCurrencyDefaultStatus') }}</span>
+              <strong>CNY / 1</strong>
+            </div>
+            <el-row v-else :gutter="12">
+              <el-col :xs="24" :sm="12">
+                <el-form-item :label="t('llmManagement.modelDialog.costCurrencyLabel')">
+                  <el-input v-model="modelForm.costCurrency" />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <el-form-item :label="t('llmManagement.modelDialog.costExchangeRateLabel')">
+                  <el-input-number
+                    v-model="modelForm.costExchangeRate"
+                    class="model-number-input"
+                    :min="0.000001"
+                    :step="0.1"
+                    controls-position="right"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <div v-if="modelForm.useCustomCurrency" class="cost-default-note">
+              {{ t('llmManagement.modelDialog.costCurrencyDefaultNote') }}
+            </div>
+            <div class="cost-advanced-divider" />
+            <div class="cost-section-header">
+              <div>
+                <h4>{{ t('llmManagement.modelDialog.costTierTitle') }}</h4>
+                <p>{{ t('llmManagement.modelDialog.costTierHint') }}</p>
+              </div>
+            </div>
+            <div class="cost-tier-list">
+              <div class="cost-tier-row cost-tier-row--head" aria-hidden="true">
+                <span>{{ t('llmManagement.modelDialog.costTierContextLabel') }}</span>
+                <span>{{ t('llmManagement.modelDialog.costInputLabel') }}</span>
+                <span>{{ t('llmManagement.modelDialog.costOutputLabel') }}</span>
+                <span>{{ t('llmManagement.modelDialog.costTierActionLabel') }}</span>
+              </div>
+              <div
+                v-for="(tier, index) in modelForm.costTiers"
+                :key="index"
+                class="cost-tier-row"
+              >
+                <el-input-number
+                  v-model="tier.upToContextTokens"
+                  class="cost-tier-row__input"
+                  :min="1"
+                  :step="1024"
+                  controls-position="right"
+                  :placeholder="t('llmManagement.modelDialog.costTierContextPlaceholder')"
+                />
+                <el-input-number
+                  v-model="tier.inputPerUnit"
+                  class="cost-tier-row__input"
+                  :min="0"
+                  :step="0.01"
+                  controls-position="right"
+                  :placeholder="t('llmManagement.modelDialog.costInputLabel')"
+                />
+                <el-input-number
+                  v-model="tier.outputPerUnit"
+                  class="cost-tier-row__input"
+                  :min="0"
+                  :step="0.01"
+                  controls-position="right"
+                  :placeholder="t('llmManagement.modelDialog.costOutputLabel')"
+                />
+                <el-button text type="danger" :icon="Delete" @click="removeCostTier(index)" />
+              </div>
+              <el-button text type="primary" :icon="Plus" @click="addCostTier">
+                {{ t('llmManagement.modelDialog.addCostTier') }}
+              </el-button>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </el-form>
       <template #footer>
         <el-button @click="modelDialogVisible = false">{{ t('common.cancel') }}</el-button>
@@ -811,9 +864,10 @@ const modelForm = reactive({
   quota: '',
   concurrency: 5,
   contextLength: null as number | null,
-  costCurrency: 'USD',
+  useCustomCurrency: false,
+  costCurrency: 'CNY',
   costDisplayCurrency: 'CNY',
-  costExchangeRate: 7.2,
+  costExchangeRate: 1,
   costPricingUnit: 1000000,
   costInputPerUnit: null as number | null,
   costOutputPerUnit: null as number | null,
@@ -836,13 +890,27 @@ function handleAddModel(providerId: number) {
 }
 
 function resetModelCostForm() {
-  modelForm.costCurrency = 'USD'
+  modelForm.useCustomCurrency = false
+  modelForm.costCurrency = 'CNY'
   modelForm.costDisplayCurrency = 'CNY'
-  modelForm.costExchangeRate = 7.2
+  modelForm.costExchangeRate = 1
   modelForm.costPricingUnit = 1000000
   modelForm.costInputPerUnit = null
   modelForm.costOutputPerUnit = null
   modelForm.costTiers = []
+}
+
+function isCustomCurrency(currency: string, exchangeRate: number) {
+  const normalizedCurrency = currency.trim().toUpperCase()
+  return normalizedCurrency !== 'CNY' || Number(exchangeRate) !== 1
+}
+
+function handleCustomCurrencyToggle(value: string | number | boolean) {
+  if (!value) {
+    modelForm.costCurrency = 'CNY'
+    modelForm.costDisplayCurrency = 'CNY'
+    modelForm.costExchangeRate = 1
+  }
 }
 
 function buildCostPayload() {
@@ -854,9 +922,11 @@ function buildCostPayload() {
       output_per_unit: tier.outputPerUnit ?? null
     }))
   return {
-    cost_currency: modelForm.costCurrency.trim().toUpperCase() || 'USD',
+    cost_currency: modelForm.useCustomCurrency
+      ? modelForm.costCurrency.trim().toUpperCase() || 'CNY'
+      : 'CNY',
     cost_display_currency: modelForm.costDisplayCurrency.trim().toUpperCase() || 'CNY',
-    cost_exchange_rate: Number(modelForm.costExchangeRate) || 1,
+    cost_exchange_rate: modelForm.useCustomCurrency ? Number(modelForm.costExchangeRate) || 1 : 1,
     cost_pricing_unit: Math.trunc(Number(modelForm.costPricingUnit) || 1000000),
     cost_input_per_unit: modelForm.costInputPerUnit,
     cost_output_per_unit: modelForm.costOutputPerUnit,
@@ -958,6 +1028,7 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.quota = model.quota ?? ''
   modelForm.concurrency = model.concurrencyLimit
   modelForm.contextLength = model.contextLength
+  modelForm.useCustomCurrency = isCustomCurrency(model.costCurrency, model.costExchangeRate)
   modelForm.costCurrency = model.costCurrency
   modelForm.costDisplayCurrency = model.costDisplayCurrency
   modelForm.costExchangeRate = model.costExchangeRate
@@ -976,10 +1047,15 @@ function formatContextLength(value: number | null) {
 }
 
 function formatModelCost(model: ProviderCardModel) {
-  const input = model.costInputPerUnit ?? 0
-  const output = model.costOutputPerUnit ?? 0
+  const input = formatDisplayCostRate(model.costInputPerUnit, model.costExchangeRate)
+  const output = formatDisplayCostRate(model.costOutputPerUnit, model.costExchangeRate)
   const unit = model.costPricingUnit.toLocaleString()
   return `${model.costDisplayCurrency} ${input}/${output} / ${unit}`
+}
+
+function formatDisplayCostRate(value: number | null, exchangeRate: number) {
+  const displayValue = (value ?? 0) * (Number(exchangeRate) || 1)
+  return Number.isInteger(displayValue) ? `${displayValue}` : `${Number(displayValue.toFixed(6))}`
 }
 
 async function handleDeleteProvider(card: ProviderCard) {
@@ -1290,6 +1366,95 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   gap: 12px;
 }
 
+.cost-default-note {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  background: var(--el-fill-color-lighter);
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cost-pricing-section,
+.cost-advanced-section {
+  margin-bottom: 12px;
+}
+
+.cost-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cost-section-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cost-section-header p {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cost-currency-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  background: var(--el-fill-color-lighter);
+}
+
+.cost-currency-toggle strong,
+.cost-currency-toggle span {
+  display: block;
+}
+
+.cost-currency-toggle strong {
+  font-size: 13px;
+}
+
+.cost-currency-toggle span {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cost-currency-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-blank);
+  font-size: 12px;
+}
+
+.cost-currency-summary strong {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+}
+
+.cost-advanced-divider {
+  height: 1px;
+  margin: 18px 0 14px;
+  background: var(--el-border-color-lighter);
+}
+
 .form-label-with-help {
   display: inline-flex;
   align-items: center;
@@ -1326,9 +1491,19 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 
 .cost-tier-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
   gap: 8px;
   align-items: center;
+}
+
+.cost-tier-row--head {
+  padding: 0 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.cost-tier-row--head span:last-child {
+  text-align: center;
 }
 
 .cost-tier-row__input {
@@ -1394,6 +1569,17 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 
   .cost-tier-row {
     grid-template-columns: 1fr;
+  }
+
+  .cost-tier-row--head {
+    display: none;
+  }
+
+  .cost-section-header,
+  .cost-currency-toggle,
+  .cost-currency-summary {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>
