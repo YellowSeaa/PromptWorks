@@ -1003,6 +1003,7 @@ export const messages = {
           csvFormat: '支持 CSV/TXT 文件，首行定义字段名，后续每行为一组变量。',
           noSamples: '暂未导入变量样本，提交后将使用统一提示。',
           variableCount: '当前已解析 {count} 条变量样本。',
+          emptyPromptContent: '该版本暂无 Prompt 内容',
           datasetTooltip:
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
           combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
@@ -2359,6 +2360,7 @@ export const messages = {
           csvFormat: 'CSV/TXT supported. First row defines headers, subsequent rows define variable values.',
           noSamples: 'No variable samples yet. Default prompt will be reused for each round.',
           variableCount: '{count} variable samples parsed.',
+          emptyPromptContent: 'This version has no prompt content.',
           datasetTooltip:
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
           combinationCount: '{count} minimal test units will be generated.',

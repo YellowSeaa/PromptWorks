@@ -40,7 +40,7 @@ services:
       PROJECT_NAME: PromptWorks
       DATABASE_URL: postgresql+psycopg://promptworks:promptworks@postgres:5432/promptworks
       REDIS_URL: redis://redis:6379/0
-      BACKEND_CORS_ORIGINS: '["http://localhost:18080"]'
+      BACKEND_CORS_ORIGINS: '["http://localhost:18080","http://127.0.0.1:18080"]'
       BACKEND_CORS_ALLOW_CREDENTIALS: "true"
     depends_on:
       postgres:

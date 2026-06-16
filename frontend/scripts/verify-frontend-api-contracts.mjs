@@ -14,6 +14,7 @@ const llmApi = read('src/api/llmProvider.ts')
 const testRunApi = read('src/api/testRun.ts')
 const promptManagement = read('src/views/PromptManagementView.vue')
 const promptDetail = read('src/views/PromptDetailView.vue')
+const promptTestCreate = read('src/views/PromptTestTaskCreateView.vue')
 
 const checks = [
   {
@@ -61,6 +62,14 @@ const checks = [
       promptDetail.includes('await fetchMeta()\n    metaDialogVisible.value = false') &&
       promptDetail.indexOf('await updatePrompt(prompt.id') <
         promptDetail.indexOf('await fetchMeta()\n    metaDialogVisible.value = false')
+  },
+  {
+    name: '新建测试任务版本下拉支持悬停查看 Prompt 内容',
+    pass:
+      promptTestCreate.includes('<el-tooltip') &&
+      promptTestCreate.includes('formatPromptVersionPreview(option.content)') &&
+      promptTestCreate.includes('prompt-version-option__preview') &&
+      promptTestCreate.includes('content: version.content')
   }
 ]
 

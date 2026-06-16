@@ -77,7 +77,21 @@
                 :key="option.id"
                 :label="option.label"
                 :value="option.id"
-              />
+              >
+                <el-tooltip
+                  :content="formatPromptVersionPreview(option.content)"
+                  placement="right"
+                  :show-after="250"
+                  popper-class="prompt-version-preview-tooltip"
+                >
+                  <div class="prompt-version-option">
+                    <span class="prompt-version-option__label">{{ option.label }}</span>
+                    <span class="prompt-version-option__preview">
+                      {{ formatPromptVersionPreview(option.content) }}
+                    </span>
+                  </div>
+                </el-tooltip>
+              </el-option>
             </el-select>
             <p v-if="!versionOptions.length && taskForm.promptId" class="form-tip">
               {{ t('promptTestCreate.form.tips.noVersions') }}
@@ -437,6 +451,7 @@ interface VersionOption {
   promptName: string
   version: string
   label: string
+  content: string
   updatedAt: string
 }
 
@@ -544,6 +559,7 @@ const versionOptions = computed<VersionOption[]>(() => {
       promptName: prompt.name,
       version: version.version,
       label: `${prompt.name} · ${version.version}`,
+      content: version.content,
       updatedAt: version.updated_at
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -1488,6 +1504,14 @@ function cloneData<T>(data: T): T {
   return JSON.parse(JSON.stringify(data))
 }
 
+function formatPromptVersionPreview(content: string): string {
+  const normalized = content.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return t('promptTestCreate.form.tips.emptyPromptContent')
+  }
+  return normalized.length > 160 ? `${normalized.slice(0, 160)}...` : normalized
+}
+
 async function handleSubmit() {
   if (!taskForm.name.trim()) {
     ElMessage.warning(t('promptTestCreate.messages.taskNameRequired'))
@@ -1860,6 +1884,33 @@ onMounted(() => {
 
 .inline-control .el-slider {
   flex: 1;
+}
+
+.prompt-version-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.prompt-version-option__label {
+  font-weight: 600;
+}
+
+.prompt-version-option__preview {
+  overflow: hidden;
+  color: var(--text-weak-color);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.prompt-version-preview-tooltip) {
+  max-width: min(520px, calc(100vw - 48px));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
 }
 
 .parameter-set-list {

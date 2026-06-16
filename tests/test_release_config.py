@@ -106,6 +106,13 @@ def test_ci_runs_semantic_release_on_main_and_dev_and_tags_images_by_release_ver
     assert "frontend-v${RELEASE_VERSION}" in workflow
 
 
+def test_docker_compose_allows_localhost_and_loopback_frontend_origins():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert '"http://localhost:18080"' in compose
+    assert '"http://127.0.0.1:18080"' in compose
+
+
 def test_ci_uses_resolvable_setup_uv_version_tag():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     match = re.search(r"uses:\s+astral-sh/setup-uv@(v[^\s]+)", workflow)
