@@ -64,12 +64,18 @@ const checks = [
         promptDetail.indexOf('await fetchMeta()\n    metaDialogVisible.value = false')
   },
   {
-    name: '新建测试任务版本下拉支持悬停查看 Prompt 内容',
+    name: '新建测试任务版本下拉悬停显示限宽完整 Prompt 内容',
     pass:
       promptTestCreate.includes('<el-tooltip') &&
       promptTestCreate.includes('formatPromptVersionPreview(option.content)') &&
-      promptTestCreate.includes('prompt-version-option__preview') &&
-      promptTestCreate.includes('content: version.content')
+      promptTestCreate.includes('prompt-version-option__label') &&
+      promptTestCreate.includes('content: version.content') &&
+      promptTestCreate.includes('max-width: min(520px, calc(100vw - 48px))') &&
+      promptTestCreate.includes('white-space: pre-wrap') &&
+      promptTestCreate.includes('content.trim()') &&
+      !promptTestCreate.includes("replace(/\\s+/g, ' ')") &&
+      !promptTestCreate.includes('normalized.length > 160') &&
+      !promptTestCreate.includes('prompt-version-option__preview')
   }
 ]
 
