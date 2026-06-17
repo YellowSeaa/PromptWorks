@@ -6,7 +6,6 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import select
 
 from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.prompt import Prompt, PromptClass, PromptVersion
@@ -965,6 +964,167 @@ def test_recommendation_prompt_uses_compact_output_excerpt(db_session):
     assert "temperature_advice" not in prompt
     assert "prompt_revision 必须是完整可直接落库的新 Prompt 文本" in prompt
     assert "PromptTestOutputScore" not in prompt
+
+
+def test_recommendation_prompt_keeps_existing_behavior_without_semantic_summary(
+    db_session,
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+    task = prompt_test_ai_scoring._load_task_with_outputs(
+        db_session, experiment.unit.task_id
+    )
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+
+    prompt = prompt_test_ai_scoring._build_recommendation_prompt(task, summary, "zh-CN")
+
+    assert "semantic_summary" not in prompt
+    assert "语义分析摘要" not in prompt
+
+
+def test_recommendation_prompt_includes_semantic_summary_for_objective_direction(
+    db_session,
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+    task = prompt_test_ai_scoring._load_task_with_outputs(
+        db_session, experiment.unit.task_id
+    )
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+    summary["semantic_summary"] = {
+        "group_count": 2,
+        "group_summaries": [
+            {
+                "unit_id": experiment.unit_id,
+                "unit_name": experiment.unit.name,
+                "variable_case_hash": "hash-a",
+                "semantic_objective": "consistency",
+                "sample_count": 3,
+                "mean_pairwise_similarity": 0.92,
+                "semantic_dispersion": 0.08,
+                "outlier_count": 0,
+                "interpretation": "当前样本整体稳定，符合一致性目标。",
+            },
+            {
+                "unit_id": experiment.unit_id,
+                "unit_name": experiment.unit.name,
+                "variable_case_hash": "hash-b",
+                "semantic_objective": "diversity",
+                "sample_count": 2,
+                "mean_pairwise_similarity": 0.18,
+                "semantic_dispersion": 0.82,
+                "outlier_count": 1,
+                "interpretation": "当前样本存在过度收敛风险，应鼓励差异。",
+            },
+        ],
+    }
+
+    prompt = prompt_test_ai_scoring._build_recommendation_prompt(task, summary, "zh-CN")
+
+    assert "语义分析摘要" in prompt
+    assert '"objective": "consistency"' in prompt
+    assert '"objective": "diversity"' in prompt
+    assert "鼓励差异" in prompt
+    assert "越稳定越好" not in prompt
+    assert "不能把不同变量组合直接比较" in prompt
+
+
+@pytest.mark.parametrize(
+    ("objective", "expect_snippet", "forbid_snippet"),
+    [
+        ("consistency", "目标：一致性", "鼓励差异"),
+        ("diversity", "目标：多样性", "越稳定越好"),
+        ("balanced", "目标：平衡", "越稳定越好"),
+    ],
+)
+def test_recommendation_prompt_describes_semantic_objectives_in_the_right_direction(
+    db_session, objective, expect_snippet, forbid_snippet
+):
+    model = _create_provider_and_model(db_session)
+    experiment = _create_completed_experiment(db_session, model)
+    db_session.add(
+        PromptTestOutputScore(
+            task_id=experiment.unit.task_id,
+            unit_id=experiment.unit_id,
+            experiment_id=experiment.id,
+            run_index=1,
+            status=PromptTestOutputScoreStatus.COMPLETED,
+            evaluator_provider_id=model.provider_id,
+            evaluator_model_id=model.id,
+            evaluator_model_name=model.name,
+            language="zh-CN",
+            overall_score=72,
+            dimension_scores={"准确性": 72},
+            reason="回答略简略。",
+        )
+    )
+    db_session.commit()
+    task = prompt_test_ai_scoring._load_task_with_outputs(
+        db_session, experiment.unit.task_id
+    )
+    summary = prompt_test_ai_scoring.build_task_score_summary(
+        db_session, experiment.unit.task_id
+    )
+    summary["semantic_summary"] = {
+        "group_count": 1,
+        "group_summaries": [
+            {
+                "unit_id": experiment.unit_id,
+                "unit_name": experiment.unit.name,
+                "variable_case_hash": "hash-a",
+                "semantic_objective": objective,
+                "sample_count": 1,
+                "mean_pairwise_similarity": 0.73,
+                "semantic_dispersion": 0.27,
+                "outlier_count": 0,
+                "interpretation": "示例摘要。",
+            }
+        ],
+    }
+
+    prompt = prompt_test_ai_scoring._build_recommendation_prompt(task, summary, "zh-CN")
+
+    assert expect_snippet in prompt
+    assert forbid_snippet not in prompt
+    assert "样本不足" in prompt
 
 
 def test_recommendation_prompt_includes_cost_context(db_session):

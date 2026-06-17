@@ -184,3 +184,53 @@ def test_alembic_has_single_migration_head():
     heads = script.get_heads()
 
     assert len(heads) == 1, f"Alembic 迁移存在多个 head: {heads}"
+
+
+def test_llm_model_embedding_migration_exists_with_short_revision_id():
+    migration_files = sorted((ROOT / "alembic" / "versions").glob("*embedding*.py"))
+
+    assert migration_files, "缺少 embedding 模型配置迁移文件"
+
+    migration_path = migration_files[0]
+    module = ast.parse(migration_path.read_text(encoding="utf-8"))
+
+    revision = None
+    down_revision = None
+    column_names: set[str] = set()
+
+    for node in module.body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == "revision":
+                revision = ast.literal_eval(node.value)
+            if node.target.id == "down_revision":
+                down_revision = ast.literal_eval(node.value)
+        if isinstance(node, ast.FunctionDef) and node.name == "upgrade":
+            for stmt in ast.walk(node):
+                if (
+                    isinstance(stmt, ast.Call)
+                    and isinstance(stmt.func, ast.Attribute)
+                    and stmt.func.attr == "add_column"
+                    and len(stmt.args) >= 2
+                    and isinstance(stmt.args[1], ast.Call)
+                ):
+                    column_call = stmt.args[1]
+                    if (
+                        isinstance(column_call.func, ast.Attribute)
+                        and column_call.func.attr == "Column"
+                        and column_call.args
+                        and isinstance(column_call.args[0], ast.Constant)
+                    ):
+                        column_names.add(column_call.args[0].value)
+
+    assert revision is not None, f"{migration_path.name} 缺少 revision 定义"
+    assert len(revision) <= 32, (
+        f"{migration_path.name} 的 revision 过长({len(revision)}): {revision}"
+    )
+    assert down_revision == "20260615_merge_cost_heads"
+    assert column_names == {
+        "model_type",
+        "embedding_api_style",
+        "embedding_dimensions",
+        "embedding_batch_size",
+        "embedding_max_input_tokens",
+    }

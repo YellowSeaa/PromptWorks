@@ -79,6 +79,9 @@ class LLMModel(Base):
         ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    model_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="chat", server_default="chat"
+    )
     capability: Mapped[str | None] = mapped_column(String(120), nullable=True)
     quota: Mapped[str | None] = mapped_column(String(120), nullable=True)
     concurrency_limit: Mapped[int] = mapped_column(
@@ -100,6 +103,12 @@ class LLMModel(Base):
     cost_input_per_unit: Mapped[float | None] = mapped_column(Float, nullable=True)
     cost_output_per_unit: Mapped[float | None] = mapped_column(Float, nullable=True)
     cost_tiers: Mapped[list[dict] | None] = mapped_column(JSONBCompat, nullable=True)
+    embedding_api_style: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_batch_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_max_input_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

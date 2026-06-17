@@ -665,6 +665,110 @@
                     </template>
                   </ul>
                 </el-alert>
+                <div
+                  v-if="semanticAnalysisReportByModule[moduleId]"
+                  class="analysis-semantic-summary"
+                >
+                  <div class="analysis-semantic-summary__header">
+                    <div>
+                      <h5>{{ t('promptTestResult.analysis.semantic.title') }}</h5>
+                      <p>{{ t('promptTestResult.analysis.semantic.scope') }}</p>
+                    </div>
+                    <el-tag size="small" type="info">
+                      {{
+                        t('promptTestResult.analysis.semantic.groupCount', {
+                          count: semanticAnalysisReportByModule[moduleId]?.groupCount ?? 0
+                        })
+                      }}
+                    </el-tag>
+                  </div>
+                  <el-alert
+                    :title="getSemanticObjectiveDescription(semanticAnalysisReportByModule[moduleId])"
+                    type="success"
+                    show-icon
+                    :closable="false"
+                    class="analysis-semantic-summary__objective"
+                  />
+                  <el-descriptions
+                    :column="3"
+                    size="small"
+                    border
+                    class="analysis-semantic-summary__metrics"
+                  >
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.comparableGroups')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.comparableGroupCount ?? 0 }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.insufficientGroups')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.insufficientGroupCount ?? 0 }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.outlierGroups')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.outlierGroupCount ?? 0 }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.meanSimilarity')"
+                    >
+                      {{ formatSemanticMetric(semanticAnalysisReportByModule[moduleId]?.averageSimilarity) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.meanDispersion')"
+                    >
+                      {{ formatSemanticMetric(semanticAnalysisReportByModule[moduleId]?.averageDispersion) }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.outlierSamples')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.outlierSampleCount ?? 0 }}
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <div
+                    v-if="semanticAnalysisReportByModule[moduleId]?.insufficientGroups.length"
+                    class="analysis-semantic-summary__section"
+                  >
+                    <span class="analysis-semantic-summary__section-title">
+                      {{ t('promptTestResult.analysis.semantic.insufficientTitle') }}
+                    </span>
+                    <div class="analysis-semantic-summary__tags">
+                      <el-tag
+                        v-for="group in semanticAnalysisReportByModule[moduleId]?.insufficientGroups"
+                        :key="`insufficient-${group.key}`"
+                        size="small"
+                        type="warning"
+                        effect="plain"
+                      >
+                        {{ group.label }}
+                      </el-tag>
+                    </div>
+                  </div>
+                  <div
+                    v-if="semanticAnalysisReportByModule[moduleId]?.outlierGroups.length"
+                    class="analysis-semantic-summary__section"
+                  >
+                    <span class="analysis-semantic-summary__section-title">
+                      {{ t('promptTestResult.analysis.semantic.outlierTitle') }}
+                    </span>
+                    <ul class="analysis-semantic-summary__outliers">
+                      <li
+                        v-for="group in semanticAnalysisReportByModule[moduleId]?.outlierGroups"
+                        :key="`outlier-${group.key}`"
+                      >
+                        <span>{{ group.label }}</span>
+                        <span class="analysis-semantic-summary__muted">
+                          {{
+                            t('promptTestResult.analysis.semantic.outlierSamples', {
+                              samples: group.outlierOutputIds.join(', ') || '-'
+                            })
+                          }}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
                 <el-table
                   :data="moduleStates[moduleId].result.data"
                   size="small"
@@ -843,7 +947,9 @@ import type {
   AnalysisChartConfig,
   AnalysisUnitLink,
   AnalysisInsightDetail,
-  AnalysisInsightUnitRef
+  AnalysisInsightUnitRef,
+  SemanticAnalysisGroupSummary,
+  SemanticAnalysisObjective
 } from '../types/analysis'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
@@ -922,6 +1028,32 @@ interface CachedAnalysisSelection {
   moduleIds: string[]
 }
 
+interface SemanticAnalysisGroupView {
+  key: string
+  label: string
+  objective: SemanticAnalysisObjective | null
+  status: string | null
+  sampleCount: number | null
+  meanSimilarity: number | null
+  dispersion: number | null
+  outlierCount: number
+  outlierOutputIds: string[]
+}
+
+interface SemanticAnalysisReportView {
+  groupCount: number
+  comparableGroupCount: number
+  insufficientGroupCount: number
+  outlierGroupCount: number
+  outlierSampleCount: number
+  averageSimilarity: number | null
+  averageDispersion: number | null
+  objectives: SemanticAnalysisObjective[]
+  groups: SemanticAnalysisGroupView[]
+  insufficientGroups: SemanticAnalysisGroupView[]
+  outlierGroups: SemanticAnalysisGroupView[]
+}
+
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -947,6 +1079,16 @@ const rawResponseDialog = reactive({
 const optimizationVersionDialog = reactive({
   visible: false,
   selectedId: null as number | null
+})
+
+const semanticAnalysisReportByModule = computed<Record<string, SemanticAnalysisReportView | null>>(() => {
+  const reportMap: Record<string, SemanticAnalysisReportView | null> = {}
+  for (const [moduleId, state] of Object.entries(moduleStates)) {
+    reportMap[moduleId] = state.result?.module_id === 'semantic_consistency_diversity'
+      ? getSemanticAnalysisReport(moduleId)
+      : null
+  }
+  return reportMap
 })
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -2121,6 +2263,141 @@ function formatMetricValue(value: unknown): string {
   return numeric.toLocaleString(locale.value, {
     minimumFractionDigits: 0,
     maximumFractionDigits: fractionDigits
+  })
+}
+
+function formatSemanticMetric(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '-'
+  }
+  return Number(value).toFixed(3)
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
+function buildSemanticGroupView(
+  row: SemanticAnalysisGroupSummary,
+  index: number
+): SemanticAnalysisGroupView {
+  const unitName = typeof row.unit_name === 'string' && row.unit_name.trim()
+    ? row.unit_name.trim()
+    : null
+  const variableHash =
+    typeof row.variable_case_hash === 'string' && row.variable_case_hash.trim()
+      ? row.variable_case_hash.trim()
+      : null
+  const unitId = row.unit_id === null || row.unit_id === undefined ? null : String(row.unit_id)
+  const labelParts = [
+    unitName || (unitId ? `#${unitId}` : null) || t('promptTestResult.analysis.semantic.unknownUnit'),
+    variableHash ? variableHash.slice(0, 8) : t('promptTestResult.analysis.semantic.unknownGroup')
+  ].filter((part): part is string => Boolean(part))
+  return {
+    key: `${unitId ?? 'unknown'}-${variableHash ?? index}`,
+    label: labelParts.join(' · '),
+    objective: (row.semantic_objective as SemanticAnalysisObjective | null) ?? null,
+    status: typeof row.status === 'string' ? row.status : null,
+    sampleCount: toFiniteNumber(row.sample_count),
+    meanSimilarity:
+      toFiniteNumber(row.mean_pairwise_similarity) ??
+      toFiniteNumber(row.centroid_similarity_mean) ??
+      null,
+    dispersion: toFiniteNumber(row.semantic_dispersion),
+    outlierCount: toFiniteNumber(row.outlier_count) ?? 0,
+    outlierOutputIds: Array.isArray(row.outlier_output_ids)
+      ? row.outlier_output_ids.map((item) => String(item))
+      : []
+  }
+}
+
+function getSemanticAnalysisGroups(moduleId: string): SemanticAnalysisGroupView[] {
+  const state = getModuleState(moduleId)
+  const result = state?.result
+  if (!result || result.module_id !== 'semantic_consistency_diversity') {
+    return []
+  }
+  const summary = result.extra?.semantic_summary
+  const rows = Array.isArray(summary?.group_summaries) ? summary?.group_summaries : result.data
+  return rows
+    .map((row, index) =>
+      buildSemanticGroupView(row as SemanticAnalysisGroupSummary, index)
+    )
+    .filter((row) => row.sampleCount !== null || row.meanSimilarity !== null || row.dispersion !== null)
+}
+
+function getSemanticAnalysisReport(moduleId: string): SemanticAnalysisReportView | null {
+  const groups = getSemanticAnalysisGroups(moduleId)
+  if (!groups.length) {
+    return null
+  }
+  const comparableGroups = groups.filter((group) => (group.sampleCount ?? 0) >= 2)
+  const insufficientGroups = groups.filter((group) => (group.sampleCount ?? 0) < 2)
+  const outlierGroups = groups.filter((group) => group.outlierCount > 0)
+  const outlierSampleCount = outlierGroups.reduce(
+    (total, group) => total + group.outlierCount,
+    0
+  )
+  const validSimilarityGroups = comparableGroups.filter(
+    (group) => typeof group.meanSimilarity === 'number'
+  )
+  const validDispersionGroups = comparableGroups.filter(
+    (group) => typeof group.dispersion === 'number'
+  )
+  const objectiveSet = new Set<SemanticAnalysisObjective>()
+  groups.forEach((group) => {
+    if (group.objective) {
+      objectiveSet.add(group.objective)
+    }
+  })
+  return {
+    groupCount: groups.length,
+    comparableGroupCount: comparableGroups.length,
+    insufficientGroupCount: insufficientGroups.length,
+    outlierGroupCount: outlierGroups.length,
+    outlierSampleCount,
+    averageSimilarity: validSimilarityGroups.length
+      ? validSimilarityGroups.reduce((sum, group) => sum + (group.meanSimilarity ?? 0), 0) /
+        validSimilarityGroups.length
+      : null,
+    averageDispersion: validDispersionGroups.length
+      ? validDispersionGroups.reduce((sum, group) => sum + (group.dispersion ?? 0), 0) /
+        validDispersionGroups.length
+      : null,
+    objectives: Array.from(objectiveSet),
+    groups,
+    insufficientGroups,
+    outlierGroups
+  }
+}
+
+function getSemanticObjectiveDescription(
+  report: SemanticAnalysisReportView | null
+): string {
+  if (!report) {
+    return t('promptTestResult.analysis.semantic.noData')
+  }
+  const objectives = report.objectives
+  if (!objectives.length) {
+    return t('promptTestResult.analysis.semantic.scope')
+  }
+  const labels = objectives.map((objective) => {
+    if (objective === 'consistency') return t('promptTestResult.analysis.semantic.objectives.consistency')
+    if (objective === 'diversity') return t('promptTestResult.analysis.semantic.objectives.diversity')
+    if (objective === 'balanced') return t('promptTestResult.analysis.semantic.objectives.balanced')
+    return String(objective)
+  })
+  return t('promptTestResult.analysis.semantic.objectiveSummary', {
+    objectives: labels.join('、')
   })
 }
 
@@ -3388,6 +3665,80 @@ watch(
 
 .analysis-insight-list li {
   margin-bottom: 4px;
+}
+
+.analysis-semantic-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color-page);
+}
+
+.analysis-semantic-summary__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.analysis-semantic-summary__header h5 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.analysis-semantic-summary__header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-weak-color);
+}
+
+.analysis-semantic-summary__objective {
+  margin-bottom: 0;
+}
+
+.analysis-semantic-summary__metrics {
+  width: 100%;
+}
+
+.analysis-semantic-summary__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-semantic-summary__section-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.analysis-semantic-summary__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analysis-semantic-summary__outliers {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysis-semantic-summary__outliers li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.analysis-semantic-summary__muted {
+  color: var(--text-weak-color);
+  font-size: 12px;
 }
 
 .analysis-unit-chip {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
+from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.prompt import Prompt, PromptClass, PromptVersion
 from app.models.result import Result
 from app.models.test_run import TestRun, TestRunStatus
@@ -279,3 +280,82 @@ def test_prompt_test_analysis_skips_failed_samples(client, db_session: Session):
     assert row["avg_latency_ms"] == pytest.approx(150.0)
     assert row["avg_tokens"] == pytest.approx(105.0)
     assert row["avg_throughput_tokens_per_s"] == pytest.approx(725.0, rel=1e-3)
+
+
+def test_execute_semantic_analysis_resolves_embedding_model_from_ids(
+    client, db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    task = _create_prompt_test_task_with_results(db_session)
+    experiment = task.units[0].experiments[0]
+    experiment.outputs = [
+        {
+            "run_index": 1,
+            "output_text": "今天天气晴朗",
+            "variables": {"city": "杭州"},
+        },
+        {
+            "run_index": 2,
+            "output_text": "杭州今天阳光很好",
+            "variables": {"city": "杭州"},
+        },
+    ]
+    provider = LLMProvider(
+        provider_name="本地 embedding",
+        base_url="http://localhost:11434/v1",
+        api_key="",
+        is_custom=True,
+    )
+    model = LLMModel(
+        provider=provider,
+        name="embed-mini",
+        model_type="embedding",
+        embedding_api_style="openai_compatible",
+        embedding_dimensions=2,
+    )
+    db_session.add_all([provider, model])
+    db_session.commit()
+
+    class DummyEmbeddingClient:
+        def __init__(self, *, provider, model):
+            self.provider = provider
+            self.model = model
+
+        def embed_texts(self, request):
+            assert self.provider.id == provider.id
+            assert self.model.id == model.id
+            assert request.provider_id == provider.id
+            assert request.model_id == model.id
+            return type(
+                "EmbeddingResult",
+                (),
+                {
+                    "provider_id": request.provider_id,
+                    "model_id": request.model_id,
+                    "model_name": self.model.name,
+                    "embeddings": [[1.0, 0.0], [1.0, 0.0]],
+                },
+            )()
+
+    monkeypatch.setattr(
+        "app.services.analysis_modules.semantic_stability.EmbeddingClient",
+        DummyEmbeddingClient,
+    )
+
+    response = client.post(
+        "/api/v1/analysis/modules/execute",
+        json={
+            "module_id": "semantic_consistency_diversity",
+            "task_id": str(task.id),
+            "target_type": "prompt_test_task",
+            "parameters": {
+                "embedding_provider_id": provider.id,
+                "embedding_model_id": model.id,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["module_id"] == "semantic_consistency_diversity"
+    assert payload["data"][0]["mean_pairwise_similarity"] == pytest.approx(1.0)
+    assert payload["extra"]["semantic_summary"]["group_count"] == 1

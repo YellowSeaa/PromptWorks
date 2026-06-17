@@ -384,14 +384,23 @@ export const messages = {
           empty: '暂未配置模型',
           columns: {
             name: '模型名称',
+            modelType: '模型用途',
             capability: '能力标签',
             quota: '配额策略',
             concurrency: '并发数',
             contextLength: '上下文长度',
+            embeddingSummary: 'Embedding 摘要',
             cost: '成本',
             actions: '操作'
           },
           unlimitedContext: '不限制',
+          notApplicable: '不适用',
+          embeddingDimensions: '向量 {count} 维',
+          embeddingDimensionsUnset: '维度未设',
+          embeddingBatchSize: '批量 {count}',
+          embeddingBatchSizeUnset: '批量未设',
+          embeddingMaxInputTokens: '上限 {count} tokens',
+          embeddingMaxInputTokensUnset: '上限未设',
           edit: '编辑',
           check: '检测',
           remove: '删除'
@@ -424,6 +433,12 @@ export const messages = {
         editTitle: '编辑模型',
         nameLabel: '模型名称',
         namePlaceholder: '请输入模型名称',
+        modelTypeLabel: '模型用途',
+        modelTypes: {
+          chat: '对话',
+          embedding: 'Embedding',
+          rerank: '重排序'
+        },
         capabilityLabel: '能力标签',
         capabilityPlaceholder: '如 对话 / 推理（可选）',
         quotaLabel: '配额策略',
@@ -433,6 +448,18 @@ export const messages = {
         contextLengthLabel: '上下文长度',
         contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
         contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。',
+        embeddingSection: 'Embedding 配置',
+        embeddingDefaultNote: '仅在模型用途为 Embedding 时需要填写这组字段；对话和重排序模型会自动隐藏。',
+        embeddingApiStyleLabel: 'API 风格',
+        embeddingApiStyles: {
+          openaiCompatible: 'OpenAI 兼容'
+        },
+        embeddingDimensionsLabel: '向量维度',
+        embeddingDimensionsPlaceholder: '留空则按后端默认维度',
+        embeddingBatchSizeLabel: '批量大小',
+        embeddingBatchSizePlaceholder: '每批输入条数，默认 16',
+        embeddingMaxInputTokensLabel: '最大输入 tokens',
+        embeddingMaxInputTokensPlaceholder: '单次输入上限，留空表示不限制',
         costSection: '成本配置',
         costDefaultNote: '默认按人民币计价；如果需要外币或阶梯价格，再到高级设置里修改币种、汇率和阶梯规则。',
         costPricingSectionTitle: '计费规则',
@@ -1142,6 +1169,31 @@ export const messages = {
           line: '折线图',
           pie: '饼图'
         },
+        semantic: {
+          title: '语义一致性/多样性摘要',
+          scope: '仅比较同一任务、同一测试单元、同一变量组合下的输出；变量不同的样本不会横向比较。',
+          groupCount: '分组 {count} 个',
+          objectiveSummary: '当前语义目标：{objectives}。一致性关注稳定复现，多样性关注避免过度收敛，平衡目标关注相似度处于合理区间。',
+          noData: '暂无可展示的语义分析摘要。',
+          unknownUnit: '未知单元',
+          unknownGroup: '未知变量组合',
+          objectives: {
+            consistency: '一致性',
+            diversity: '多样性',
+            balanced: '平衡'
+          },
+          metrics: {
+            comparableGroups: '可比较组',
+            insufficientGroups: '样本不足组',
+            outlierGroups: '含异常组',
+            meanSimilarity: '平均相似度',
+            meanDispersion: '平均离散度',
+            outlierSamples: '异常样本数'
+          },
+          insufficientTitle: '样本不足组',
+          outlierTitle: '异常样本',
+          outlierSamples: '输出：{samples}'
+        },
         emptyData: '暂无分析数据',
         emptyCard: '尚未执行分析，点击右上角按钮开始。',
         missingModule: '分析模块信息缺失'
@@ -1739,14 +1791,23 @@ export const messages = {
           empty: 'No models configured',
           columns: {
             name: 'Model Name',
+            modelType: 'Model Use',
             capability: 'Capability Tags',
             quota: 'Quota Policy',
             concurrency: 'Concurrency',
             contextLength: 'Context Length',
+            embeddingSummary: 'Embedding Summary',
             cost: 'Cost',
             actions: 'Actions'
           },
           unlimitedContext: 'Unlimited',
+          notApplicable: 'N/A',
+          embeddingDimensions: '{count}-dim vector',
+          embeddingDimensionsUnset: 'Dimension unset',
+          embeddingBatchSize: 'Batch {count}',
+          embeddingBatchSizeUnset: 'Batch unset',
+          embeddingMaxInputTokens: 'Up to {count} tokens',
+          embeddingMaxInputTokensUnset: 'Limit unset',
           edit: 'Edit',
           check: 'Check',
           remove: 'Remove'
@@ -1779,6 +1840,12 @@ export const messages = {
         editTitle: 'Edit Model',
         nameLabel: 'Model Name',
         namePlaceholder: 'Enter model name',
+        modelTypeLabel: 'Model Use',
+        modelTypes: {
+          chat: 'Chat',
+          embedding: 'Embedding',
+          rerank: 'Rerank'
+        },
         capabilityLabel: 'Capability Tags',
         capabilityPlaceholder: 'e.g. Chat / Reasoning (optional)',
         quotaLabel: 'Quota Policy',
@@ -1788,6 +1855,18 @@ export const messages = {
         contextLengthLabel: 'Context Length',
         contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
         contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.',
+        embeddingSection: 'Embedding Settings',
+        embeddingDefaultNote: 'Only fill these fields when the model use is Embedding. Chat and rerank models hide them automatically.',
+        embeddingApiStyleLabel: 'API Style',
+        embeddingApiStyles: {
+          openaiCompatible: 'OpenAI Compatible'
+        },
+        embeddingDimensionsLabel: 'Vector Dimensions',
+        embeddingDimensionsPlaceholder: 'Leave blank to use the backend default',
+        embeddingBatchSizeLabel: 'Batch Size',
+        embeddingBatchSizePlaceholder: 'Inputs per batch, default 16',
+        embeddingMaxInputTokensLabel: 'Max Input Tokens',
+        embeddingMaxInputTokensPlaceholder: 'Leave blank for no limit',
         costSection: 'Cost Settings',
         costDefaultNote: 'Default pricing uses CNY. Use advanced settings for foreign currency, exchange rate, or tiered pricing.',
         costPricingSectionTitle: 'Pricing Rules',
@@ -2498,6 +2577,33 @@ export const messages = {
           bar: 'Bar',
           line: 'Line',
           pie: 'Pie'
+        },
+        semantic: {
+          title: 'Semantic Consistency / Diversity Summary',
+          scope:
+            'Only outputs within the same task, unit, and variable-case hash are compared. Samples with different variables are not compared across groups.',
+          groupCount: '{count} groups',
+          objectiveSummary:
+            'Current semantic targets: {objectives}. Consistency emphasizes stable reproduction, diversity avoids over-convergence, and balanced keeps similarity in a reasonable range.',
+          noData: 'No semantic analysis summary is available.',
+          unknownUnit: 'Unknown unit',
+          unknownGroup: 'Unknown variable case',
+          objectives: {
+            consistency: 'consistency',
+            diversity: 'diversity',
+            balanced: 'balanced'
+          },
+          metrics: {
+            comparableGroups: 'Comparable groups',
+            insufficientGroups: 'Insufficient groups',
+            outlierGroups: 'Groups with outliers',
+            meanSimilarity: 'Average similarity',
+            meanDispersion: 'Average dispersion',
+            outlierSamples: 'Outlier samples'
+          },
+          insufficientTitle: 'Insufficient-sample groups',
+          outlierTitle: 'Outlier samples',
+          outlierSamples: 'Outputs: {samples}'
         },
         emptyData: 'No analysis data available.',
         emptyCard: 'The analysis has not been executed yet. Use the action button above to start.',

@@ -118,6 +118,16 @@
                       min-width="140"
                     />
                     <el-table-column
+                      :label="t('llmManagement.card.table.columns.modelType')"
+                      min-width="120"
+                    >
+                      <template #default="{ row }">
+                        <el-tag size="small" :type="getModelTypeTagType(row.modelType)">
+                          {{ formatModelType(row.modelType) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
                       prop="capability"
                       :label="t('llmManagement.card.table.columns.capability')"
                       min-width="120"
@@ -145,6 +155,14 @@
                         <el-tag size="small" type="info">
                           {{ formatContextLength(row.contextLength) }}
                         </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column
+                      :label="t('llmManagement.card.table.columns.embeddingSummary')"
+                      min-width="180"
+                    >
+                      <template #default="{ row }">
+                        <span class="embedding-summary">{{ formatEmbeddingSummary(row) }}</span>
                       </template>
                     </el-table-column>
                     <el-table-column
@@ -319,6 +337,16 @@
             :disabled="isEditingModel"
           />
         </el-form-item>
+        <el-form-item :label="t('llmManagement.modelDialog.modelTypeLabel')">
+          <el-select v-model="modelForm.modelType" class="model-type-select">
+            <el-option
+              v-for="option in modelTypeOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item :label="t('llmManagement.modelDialog.capabilityLabel')">
           <el-input
             v-model="modelForm.capability"
@@ -342,7 +370,66 @@
             :placeholder="t('llmManagement.modelDialog.concurrencyPlaceholder')"
           />
         </el-form-item>
-        <el-form-item>
+        <template v-if="modelForm.modelType === 'embedding'">
+          <el-divider content-position="left">{{ t('llmManagement.modelDialog.embeddingSection') }}</el-divider>
+          <div class="cost-default-note">
+            {{ t('llmManagement.modelDialog.embeddingDefaultNote') }}
+          </div>
+          <el-row :gutter="12">
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.embeddingApiStyleLabel')">
+                <el-select v-model="modelForm.embeddingApiStyle" class="model-type-select">
+                  <el-option
+                    v-for="option in embeddingApiStyleOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.embeddingDimensionsLabel')">
+                <el-input-number
+                  v-model="modelForm.embeddingDimensions"
+                  class="model-number-input"
+                  :min="1"
+                  :step="128"
+                  controls-position="right"
+                  :placeholder="t('llmManagement.modelDialog.embeddingDimensionsPlaceholder')"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="12">
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.embeddingBatchSizeLabel')">
+                <el-input-number
+                  v-model="modelForm.embeddingBatchSize"
+                  class="model-number-input"
+                  :min="1"
+                  :max="128"
+                  :step="1"
+                  controls-position="right"
+                  :placeholder="t('llmManagement.modelDialog.embeddingBatchSizePlaceholder')"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-form-item :label="t('llmManagement.modelDialog.embeddingMaxInputTokensLabel')">
+                <el-input-number
+                  v-model="modelForm.embeddingMaxInputTokens"
+                  class="model-number-input"
+                  :min="1"
+                  :step="512"
+                  controls-position="right"
+                  :placeholder="t('llmManagement.modelDialog.embeddingMaxInputTokensPlaceholder')"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <el-form-item v-else>
           <template #label>
             <span class="form-label-with-help">
               {{ t('llmManagement.modelDialog.contextLengthLabel') }}
@@ -548,7 +635,7 @@ import {
   invokeLLMProvider,
   RequestTimeoutError
 } from '../api/llmProvider'
-import type { KnownLLMProvider, LLMProvider } from '../types/llm'
+import type { EmbeddingApiStyle, KnownLLMProvider, LLMModelType, LLMProvider } from '../types/llm'
 import { useI18n } from 'vue-i18n'
 
 interface ProviderOption {
@@ -559,6 +646,11 @@ interface ProviderOption {
 interface ProviderCardModel {
   id: number
   name: string
+  modelType: LLMModelType
+  embeddingApiStyle: EmbeddingApiStyle | null
+  embeddingDimensions: number | null
+  embeddingBatchSize: number | null
+  embeddingMaxInputTokens: number | null
   capability: string | null
   quota: string | null
   concurrencyLimit: number
@@ -614,6 +706,19 @@ const providerOptions = computed<ProviderOption[]>(() => {
   options.push({ label: t('llmManagement.options.customProvider'), value: 'custom' })
   return options
 })
+
+const modelTypeOptions = computed(() => [
+  { label: t('llmManagement.modelDialog.modelTypes.chat'), value: 'chat' as LLMModelType },
+  { label: t('llmManagement.modelDialog.modelTypes.embedding'), value: 'embedding' as LLMModelType },
+  { label: t('llmManagement.modelDialog.modelTypes.rerank'), value: 'rerank' as LLMModelType }
+])
+
+const embeddingApiStyleOptions = computed(() => [
+  {
+    label: t('llmManagement.modelDialog.embeddingApiStyles.openaiCompatible'),
+    value: 'openai_compatible' as EmbeddingApiStyle
+  }
+])
 
 const emojiOptions = ['🚀', '🧠', '✨', '🔥', '🤖', '📦', '🛰️', '🏢', '🦾', '🧩']
 
@@ -751,6 +856,11 @@ function mapProviderToCard(
     models: provider.models.map((model) => ({
       id: model.id,
       name: model.name,
+      modelType: model.model_type ?? 'chat',
+      embeddingApiStyle: model.embedding_api_style ?? null,
+      embeddingDimensions: model.embedding_dimensions ?? null,
+      embeddingBatchSize: model.embedding_batch_size ?? null,
+      embeddingMaxInputTokens: model.embedding_max_input_tokens ?? null,
       capability: model.capability,
       quota: model.quota,
       concurrencyLimit: model.concurrency_limit,
@@ -860,6 +970,11 @@ const modelSubmitLoading = ref(false)
 const activeProviderId = ref<number | null>(null)
 const modelForm = reactive({
   name: '',
+  modelType: 'chat' as LLMModelType,
+  embeddingApiStyle: 'openai_compatible' as EmbeddingApiStyle,
+  embeddingDimensions: null as number | null,
+  embeddingBatchSize: 16 as number | null,
+  embeddingMaxInputTokens: null as number | null,
   capability: '',
   quota: '',
   concurrency: 5,
@@ -881,12 +996,21 @@ function handleAddModel(providerId: number) {
   isEditingModel.value = false
   editingModelId.value = null
   modelForm.name = ''
+  resetModelUsageForm()
   modelForm.capability = ''
   modelForm.quota = ''
   modelForm.concurrency = 5
   modelForm.contextLength = null
   resetModelCostForm()
   modelDialogVisible.value = true
+}
+
+function resetModelUsageForm() {
+  modelForm.modelType = 'chat'
+  modelForm.embeddingApiStyle = 'openai_compatible'
+  modelForm.embeddingDimensions = null
+  modelForm.embeddingBatchSize = 16
+  modelForm.embeddingMaxInputTokens = null
 }
 
 function resetModelCostForm() {
@@ -932,6 +1056,31 @@ function buildCostPayload() {
     cost_output_per_unit: modelForm.costOutputPerUnit,
     cost_tiers: tiers.length ? tiers : null
   }
+}
+
+function buildEmbeddingPayload() {
+  if (modelForm.modelType !== 'embedding') {
+    return {
+      embedding_api_style: null,
+      embedding_dimensions: null,
+      embedding_batch_size: null,
+      embedding_max_input_tokens: null
+    }
+  }
+  return {
+    embedding_api_style: modelForm.embeddingApiStyle,
+    embedding_dimensions: normalizeOptionalPositiveInteger(modelForm.embeddingDimensions),
+    embedding_batch_size: normalizeOptionalPositiveInteger(modelForm.embeddingBatchSize),
+    embedding_max_input_tokens: normalizeOptionalPositiveInteger(modelForm.embeddingMaxInputTokens)
+  }
+}
+
+function normalizeOptionalPositiveInteger(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null
+  }
+  const normalized = Math.trunc(Number(value))
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : null
 }
 
 function addCostTier() {
@@ -986,6 +1135,8 @@ async function submitModel() {
         throw new Error('missing model id')
       }
       await updateLLMModel(providerId, modelId, {
+        model_type: modelForm.modelType,
+        ...buildEmbeddingPayload(),
         capability: capabilityValue ? capabilityValue : null,
         quota: quotaValue ? quotaValue : null,
         concurrency_limit: concurrencyValue,
@@ -996,6 +1147,8 @@ async function submitModel() {
     } else {
       await createLLMModel(providerId, {
         name: modelForm.name.trim(),
+        model_type: modelForm.modelType,
+        ...buildEmbeddingPayload(),
         capability: capabilityValue || undefined,
         quota: quotaValue || undefined,
         concurrency_limit: concurrencyValue,
@@ -1024,6 +1177,11 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   isEditingModel.value = true
   editingModelId.value = model.id
   modelForm.name = model.name
+  modelForm.modelType = model.modelType
+  modelForm.embeddingApiStyle = model.embeddingApiStyle ?? 'openai_compatible'
+  modelForm.embeddingDimensions = model.embeddingDimensions
+  modelForm.embeddingBatchSize = model.embeddingBatchSize ?? 16
+  modelForm.embeddingMaxInputTokens = model.embeddingMaxInputTokens
   modelForm.capability = model.capability ?? ''
   modelForm.quota = model.quota ?? ''
   modelForm.concurrency = model.concurrencyLimit
@@ -1044,6 +1202,48 @@ function formatContextLength(value: number | null) {
     return t('llmManagement.card.table.unlimitedContext')
   }
   return value.toLocaleString()
+}
+
+function formatModelType(modelType: LLMModelType) {
+  return t(`llmManagement.modelDialog.modelTypes.${modelType}`)
+}
+
+function getModelTypeTagType(modelType: LLMModelType) {
+  if (modelType === 'embedding') {
+    return 'success'
+  }
+  if (modelType === 'rerank') {
+    return 'warning'
+  }
+  return 'info'
+}
+
+function formatEmbeddingApiStyle(style: EmbeddingApiStyle | null) {
+  if (!style) {
+    return t('common.notSet')
+  }
+  const styleKeyMap: Record<EmbeddingApiStyle, string> = {
+    openai_compatible: 'openaiCompatible'
+  }
+  return t(`llmManagement.modelDialog.embeddingApiStyles.${styleKeyMap[style]}`)
+}
+
+function formatEmbeddingSummary(model: ProviderCardModel) {
+  if (model.modelType !== 'embedding') {
+    return t('llmManagement.card.table.notApplicable')
+  }
+  const dimensions = model.embeddingDimensions
+    ? t('llmManagement.card.table.embeddingDimensions', { count: model.embeddingDimensions })
+    : t('llmManagement.card.table.embeddingDimensionsUnset')
+  const batchSize = model.embeddingBatchSize
+    ? t('llmManagement.card.table.embeddingBatchSize', { count: model.embeddingBatchSize })
+    : t('llmManagement.card.table.embeddingBatchSizeUnset')
+  const maxInputTokens = model.embeddingMaxInputTokens
+    ? t('llmManagement.card.table.embeddingMaxInputTokens', {
+        count: model.embeddingMaxInputTokens.toLocaleString()
+      })
+    : t('llmManagement.card.table.embeddingMaxInputTokensUnset')
+  return `${formatEmbeddingApiStyle(model.embeddingApiStyle)} · ${dimensions} · ${batchSize} · ${maxInputTokens}`
 }
 
 function formatModelCost(model: ProviderCardModel) {
@@ -1360,6 +1560,12 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   gap: 6px;
 }
 
+.embedding-summary {
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .dialog-form {
   display: flex;
   flex-direction: column;
@@ -1480,6 +1686,10 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 }
 
 .model-number-input :deep(.el-input) {
+  width: 100%;
+}
+
+.model-type-select {
   width: 100%;
 }
 
