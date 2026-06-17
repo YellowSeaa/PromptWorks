@@ -9,3 +9,6 @@
 - 已创建 `docs/embedding_stability_feasibility_report.md`，整理成“可行性判断 + 接入建议 + 风险边界”的 Markdown 报告
 - 已检查报告文件非空、关键章节存在、参考资料链接已列出、规划状态已完成
 - 本次只新增调研与规划文档，没有修改业务代码
+- 用户指出两个关键设计边界：不同变量组合不能直接比较；不同任务对相似度高低的偏好不同
+- 已新增 `docs/embedding_stability_overall_plan.md` 和 `docs/embedding_stability_implementation_todo.md` 初稿
+- 已检查整体方案关键章节、实施 TODO checkbox 和 MVP 验收清单，准备本地提交

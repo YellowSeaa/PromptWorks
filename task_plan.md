@@ -11,6 +11,7 @@
 3. `complete` 调研本地部署 embedding 的常见接入方式与接口形态
 4. `complete` 评估“输出稳定性评估”是否适合作为报告指标及优化数据源
 5. `complete` 形成 Markdown 可行性报告
+6. `complete` 基于变量分组和任务目标方向补充整体方案与实施 TODO
 
 ## 约束
 
@@ -23,3 +24,5 @@
 - `findings.md`：分阶段记录证据与判断
 - `progress.md`：记录每轮调研动作与结果
 - `docs/embedding_stability_feasibility_report.md`：可直接交付给用户的 Markdown 可行性报告
+- `docs/embedding_stability_overall_plan.md`：整体方案
+- `docs/embedding_stability_implementation_todo.md`：实施 TODO list
