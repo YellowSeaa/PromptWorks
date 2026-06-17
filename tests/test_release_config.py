@@ -98,12 +98,38 @@ def test_ci_runs_semantic_release_on_main_and_dev_and_tags_images_by_release_ver
     assert "refs/heads/main" not in release_step
     assert "RELEASE_VERSION=" in workflow
     assert "RELEASE_PUBLISHED=true" in workflow
-    assert 'if [[ "${RELEASE_PUBLISHED}" == "true" ]]' in workflow
+    assert (
+        "release_published: ${{ steps.release.outputs.release_published }}" in workflow
+    )
+    assert "release_version: ${{ steps.release.outputs.release_version }}" in workflow
+    assert "release_tag: ${{ steps.release.outputs.release_tag }}" in workflow
+    assert 'echo "release_tag=v${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"' in workflow
+
+
+def test_ci_docker_job_runs_only_after_semantic_release_publishes_release():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "docker:" in workflow
+    assert "needs.release.outputs.release_published == 'true'" in workflow
+    assert 'RELEASE_VERSION="${{ needs.release.outputs.release_version }}"' in workflow
+    assert (
+        'BACKEND_TAGS="${BACKEND_TAGS},${DOCKER_REPOSITORY}:backend-v${RELEASE_VERSION}"'
+        in workflow
+    )
+    assert (
+        'FRONTEND_TAGS="${FRONTEND_TAGS},${DOCKER_REPOSITORY}:frontend-v${RELEASE_VERSION}"'
+        in workflow
+    )
     assert 'IMAGE_VERSION="v${RELEASE_VERSION}"' in workflow
-    assert 'IMAGE_VERSION="${TARGET_BRANCH}-${GITHUB_SHA}"' in workflow
-    assert "image_version=${IMAGE_VERSION}" in workflow
-    assert "backend-v${RELEASE_VERSION}" in workflow
-    assert "frontend-v${RELEASE_VERSION}" in workflow
+    assert "ref: ${{ needs.release.outputs.release_tag }}" in workflow
+    assert "IMAGE_REVISION=$(git rev-parse HEAD)" in workflow
+    assert (
+        "org.opencontainers.image.revision=${{ steps.tags.outputs.image_revision }}"
+        in workflow
+    )
+    docker_job_header = workflow.split("  docker:", 1)[1].split("    steps:", 1)[0]
+    assert "github.event_name == 'push'" not in docker_job_header
+    assert "github.ref == 'refs/heads/main'" not in docker_job_header
 
 
 def test_docker_compose_allows_localhost_and_loopback_frontend_origins():
