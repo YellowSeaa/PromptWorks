@@ -32,6 +32,14 @@ def test_settings_parse_cors_from_iterable():
     assert settings.BACKEND_CORS_ORIGINS == ["https://foo", "bar"]
 
 
+def test_settings_default_cors_allows_vite_localhost_and_loopback():
+    settings = _make_settings()
+    assert settings.BACKEND_CORS_ORIGINS == [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+
 def test_settings_parse_cors_none_returns_empty():
     settings = _make_settings(BACKEND_CORS_ORIGINS=None)
     assert settings.BACKEND_CORS_ORIGINS == []
