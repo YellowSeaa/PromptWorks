@@ -34,9 +34,13 @@ def test_list_common_providers(client):
     assert response.status_code == 200
     data = response.json()
     keys = {item["key"] for item in data}
-    assert {"openai", "anthropic"}.issubset(keys)
+    assert {"openai", "anthropic", "ollama"}.issubset(keys)
     openai = next(item for item in data if item["key"] == "openai")
     assert openai["base_url"] == "https://api.openai.com/v1"
+    ollama = next(item for item in data if item["key"] == "ollama")
+    assert ollama["name"] == "Ollama"
+    assert ollama["base_url"] == "http://localhost:11434/v1"
+    assert ollama["logo_url"] and ollama["logo_url"].endswith("/ollama.svg")
 
 
 def test_create_known_provider_without_base_url(client):
