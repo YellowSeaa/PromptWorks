@@ -28,6 +28,8 @@ class EmbeddingClientError(RuntimeError):
 
 DEFAULT_EMBEDDING_BATCH_SIZE = 32
 MAX_EMBEDDING_BATCH_SIZE = 128
+DEFAULT_EMBEDDING_MAX_ATTEMPTS = 3
+RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
 
 
 class EmbeddingClient:
@@ -60,10 +62,9 @@ class EmbeddingClient:
             if isinstance(dimensions, int) and dimensions > 0:
                 payload["dimensions"] = dimensions
 
-            response = self._http_client.post(
-                f"{base_url}/embeddings",
-                content=_json_bytes(payload),
-                headers=self._build_headers(base_url),
+            response = self._post_embeddings(
+                base_url=base_url,
+                payload=payload,
             )
 
             if response.status_code < 200 or response.status_code >= 300:
@@ -136,6 +137,46 @@ class EmbeddingClient:
             return DEFAULT_EMBEDDING_BATCH_SIZE
         return min(batch_size, MAX_EMBEDDING_BATCH_SIZE)
 
+    def _post_embeddings(
+        self,
+        *,
+        base_url: str,
+        payload: dict[str, Any],
+    ) -> httpx.Response:
+        last_transport_error: httpx.TransportError | None = None
+        for attempt in range(1, DEFAULT_EMBEDDING_MAX_ATTEMPTS + 1):
+            try:
+                response = self._http_client.post(
+                    f"{base_url}/embeddings",
+                    content=_json_bytes(payload),
+                    headers=self._build_headers(base_url),
+                )
+            except httpx.TransportError as exc:
+                last_transport_error = exc
+                if attempt < DEFAULT_EMBEDDING_MAX_ATTEMPTS:
+                    continue
+                raise EmbeddingClientError(
+                    f"embedding 请求失败，网络异常: {exc}"
+                ) from exc
+
+            if response.status_code < 200 or response.status_code >= 300:
+                if (
+                    _is_retryable_status_code(response.status_code)
+                    and attempt < DEFAULT_EMBEDDING_MAX_ATTEMPTS
+                ):
+                    continue
+                raise EmbeddingClientError(
+                    f"embedding 请求失败，HTTP {response.status_code}: {response.text}"
+                )
+
+            return response
+
+        if last_transport_error is not None:
+            raise EmbeddingClientError(
+                f"embedding 请求失败，网络异常: {last_transport_error}"
+            ) from last_transport_error
+        raise EmbeddingClientError("embedding 请求失败，重试后仍未获得有效响应。")
+
 
 def _ensure_mapping(raw: Any) -> dict[str, Any]:
     if isinstance(raw, Mapping):
@@ -162,6 +203,12 @@ def _is_local_base_url(base_url: str) -> bool:
     parsed = urlparse(base_url)
     host = parsed.hostname or ""
     return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def _is_retryable_status_code(status_code: int) -> bool:
+    if status_code in RETRYABLE_STATUS_CODES:
+        return True
+    return 500 <= status_code <= 599
 
 
 def _json_bytes(payload: Mapping[str, Any]) -> bytes:

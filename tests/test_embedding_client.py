@@ -149,6 +149,74 @@ def test_embed_texts_splits_requests_by_model_batch_size():
     ]
 
 
+def test_embed_texts_retries_retryable_http_errors_before_success():
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            return httpx.Response(429, json={"error": {"message": "限流"}})
+        return httpx.Response(200, json={"data": [{"embedding": [0.7, 0.8]}]})
+
+    client = EmbeddingClient(
+        provider=_provider(),
+        model=_model(),
+        http_client=_client_with_handler(handler),
+    )
+
+    result = client.embed_texts(
+        EmbeddingRequest(provider_id=1, model_id=2, texts=["需要重试的文本"])
+    )
+
+    assert attempts == 3
+    assert result.embeddings == [[0.7, 0.8]]
+
+
+def test_embed_texts_retries_transport_errors_before_success():
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ConnectError("连接失败", request=request)
+        return httpx.Response(200, json={"data": [{"embedding": [0.5, 0.6]}]})
+
+    client = EmbeddingClient(
+        provider=_provider(),
+        model=_model(),
+        http_client=_client_with_handler(handler),
+    )
+
+    result = client.embed_texts(
+        EmbeddingRequest(provider_id=1, model_id=2, texts=["连接重试文本"])
+    )
+
+    assert attempts == 2
+    assert result.embeddings == [[0.5, 0.6]]
+
+
+def test_embed_texts_does_not_retry_non_retryable_http_errors():
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(401, json={"error": {"message": "鉴权失败"}})
+
+    client = EmbeddingClient(
+        provider=_provider(),
+        model=_model(),
+        http_client=_client_with_handler(handler),
+    )
+
+    with pytest.raises(EmbeddingClientError, match="401"):
+        client.embed_texts(EmbeddingRequest(provider_id=1, model_id=2, texts=["文本"]))
+
+    assert attempts == 1
+
+
 def test_embed_texts_requires_provider_base_url():
     client = EmbeddingClient(
         provider=_provider(base_url=None),
