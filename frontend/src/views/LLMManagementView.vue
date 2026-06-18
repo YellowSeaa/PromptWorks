@@ -309,6 +309,7 @@
     <el-dialog
       v-model="modelDialogVisible"
       :title="isEditingModel ? t('llmManagement.modelDialog.editTitle') : t('llmManagement.modelDialog.title')"
+      class="model-dialog"
       width="560px"
     >
       <el-form :model="modelForm" label-width="120px" class="dialog-form">
@@ -340,66 +341,7 @@
             :placeholder="t('llmManagement.modelDialog.concurrencyPlaceholder')"
           />
         </el-form-item>
-        <template v-if="modelForm.modelType === 'embedding'">
-          <el-divider content-position="left">{{ t('llmManagement.modelDialog.embeddingSection') }}</el-divider>
-          <div class="cost-default-note">
-            {{ t('llmManagement.modelDialog.embeddingDefaultNote') }}
-          </div>
-          <el-row :gutter="12">
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.embeddingApiStyleLabel')">
-                <el-select v-model="modelForm.embeddingApiStyle" class="model-type-select">
-                  <el-option
-                    v-for="option in embeddingApiStyleOptions"
-                    :key="option.value"
-                    :label="option.label"
-                    :value="option.value"
-                  />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.embeddingDimensionsLabel')">
-                <el-input-number
-                  v-model="modelForm.embeddingDimensions"
-                  class="model-number-input"
-                  :min="1"
-                  :step="128"
-                  controls-position="right"
-                  :placeholder="t('llmManagement.modelDialog.embeddingDimensionsPlaceholder')"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="12">
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.embeddingBatchSizeLabel')">
-                <el-input-number
-                  v-model="modelForm.embeddingBatchSize"
-                  class="model-number-input"
-                  :min="1"
-                  :max="128"
-                  :step="1"
-                  controls-position="right"
-                  :placeholder="t('llmManagement.modelDialog.embeddingBatchSizePlaceholder')"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.embeddingMaxInputTokensLabel')">
-                <el-input-number
-                  v-model="modelForm.embeddingMaxInputTokens"
-                  class="model-number-input"
-                  :min="1"
-                  :step="512"
-                  controls-position="right"
-                  :placeholder="t('llmManagement.modelDialog.embeddingMaxInputTokensPlaceholder')"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </template>
-        <el-form-item v-else>
+        <el-form-item v-if="modelForm.modelType === 'chat'">
           <template #label>
             <span class="form-label-with-help">
               {{ t('llmManagement.modelDialog.contextLengthLabel') }}
@@ -427,57 +369,124 @@
             :placeholder="t('llmManagement.modelDialog.contextLengthPlaceholder')"
           />
         </el-form-item>
-        <el-divider content-position="left">{{ t('llmManagement.modelDialog.costSection') }}</el-divider>
-        <div class="cost-default-note">
-          {{ t('llmManagement.modelDialog.costDefaultNote') }}
-        </div>
-        <div class="cost-pricing-section">
-          <div class="cost-section-header">
-            <div>
-              <h4>{{ t('llmManagement.modelDialog.costPricingSectionTitle') }}</h4>
-              <p>{{ t('llmManagement.modelDialog.costPricingSectionHint') }}</p>
+        <el-collapse class="model-more-settings-section">
+          <el-collapse-item :title="t('llmManagement.modelDialog.moreSettingsTitle')" name="more-settings">
+            <template v-if="modelForm.modelType === 'embedding'">
+              <div class="cost-section-header">
+                <div>
+                  <h4>{{ t('llmManagement.modelDialog.embeddingSection') }}</h4>
+                  <p>{{ t('llmManagement.modelDialog.embeddingDefaultNote') }}</p>
+                </div>
+              </div>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingApiStyleLabel')">
+                    <el-select v-model="modelForm.embeddingApiStyle" class="model-type-select">
+                      <el-option
+                        v-for="option in embeddingApiStyleOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingDimensionsLabel')">
+                    <el-input-number
+                      v-model="modelForm.embeddingDimensions"
+                      class="model-number-input"
+                      :min="1"
+                      :step="128"
+                      controls-position="right"
+                      :placeholder="t('llmManagement.modelDialog.embeddingDimensionsPlaceholder')"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingBatchSizeLabel')">
+                    <el-input-number
+                      v-model="modelForm.embeddingBatchSize"
+                      class="model-number-input"
+                      :min="1"
+                      :max="128"
+                      :step="1"
+                      controls-position="right"
+                      :placeholder="t('llmManagement.modelDialog.embeddingBatchSizePlaceholder')"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingMaxInputTokensLabel')">
+                    <el-input-number
+                      v-model="modelForm.embeddingMaxInputTokens"
+                      class="model-number-input"
+                      :min="1"
+                      :step="512"
+                      controls-position="right"
+                      :placeholder="t('llmManagement.modelDialog.embeddingMaxInputTokensPlaceholder')"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <div class="cost-advanced-divider" />
+            </template>
+            <div class="cost-section-header">
+              <div>
+                <h4>{{ t('llmManagement.modelDialog.costSection') }}</h4>
+                <p>{{ t('llmManagement.modelDialog.costDefaultNote') }}</p>
+              </div>
             </div>
-          </div>
-          <el-row :gutter="12">
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
-                <el-input-number
-                  v-model="modelForm.costPricingUnit"
-                  class="model-number-input"
-                  :min="1"
-                  :step="1000"
-                  controls-position="right"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
-                <el-input-number
-                  v-model="modelForm.costInputPerUnit"
-                  class="model-number-input"
-                  :min="0"
-                  :step="0.01"
-                  controls-position="right"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="12">
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
-                <el-input-number
-                  v-model="modelForm.costOutputPerUnit"
-                  class="model-number-input"
-                  :min="0"
-                  :step="0.01"
-                  controls-position="right"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-        <el-collapse class="cost-advanced-section">
-          <el-collapse-item :title="t('llmManagement.modelDialog.costAdvancedTitle')" name="advanced">
+            <div class="cost-pricing-section">
+              <div class="cost-section-header">
+                <div>
+                  <h4>{{ t('llmManagement.modelDialog.costPricingSectionTitle') }}</h4>
+                  <p>{{ t('llmManagement.modelDialog.costPricingSectionHint') }}</p>
+                </div>
+              </div>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
+                    <el-input-number
+                      v-model="modelForm.costPricingUnit"
+                      class="model-number-input"
+                      :min="1"
+                      :step="1000"
+                      controls-position="right"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
+                    <el-input-number
+                      v-model="modelForm.costInputPerUnit"
+                      class="model-number-input"
+                      :min="0"
+                      :step="0.01"
+                      :precision="1"
+                      controls-position="right"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
+                    <el-input-number
+                      v-model="modelForm.costOutputPerUnit"
+                      class="model-number-input"
+                      :min="0"
+                      :step="0.01"
+                      :precision="1"
+                      controls-position="right"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+            <div class="cost-advanced-divider" />
             <div class="cost-section-header">
               <div>
                 <h4>{{ t('llmManagement.modelDialog.costCurrencySectionTitle') }}</h4>
@@ -558,6 +567,7 @@
                   class="cost-tier-row__input"
                   :min="0"
                   :step="0.01"
+                  :precision="1"
                   controls-position="right"
                   :placeholder="t('llmManagement.modelDialog.costInputLabel')"
                 />
@@ -566,6 +576,7 @@
                   class="cost-tier-row__input"
                   :min="0"
                   :step="0.01"
+                  :precision="1"
                   controls-position="right"
                   :placeholder="t('llmManagement.modelDialog.costOutputLabel')"
                 />
@@ -947,8 +958,8 @@ const modelForm = reactive({
   costDisplayCurrency: 'CNY',
   costExchangeRate: 1,
   costPricingUnit: 1000000,
-  costInputPerUnit: null as number | null,
-  costOutputPerUnit: null as number | null,
+  costInputPerUnit: 0.0 as number | null,
+  costOutputPerUnit: 0.0 as number | null,
   costTiers: [] as CostTierForm[]
 })
 const isEditingModel = ref(false)
@@ -980,8 +991,8 @@ function resetModelCostForm() {
   modelForm.costDisplayCurrency = 'CNY'
   modelForm.costExchangeRate = 1
   modelForm.costPricingUnit = 1000000
-  modelForm.costInputPerUnit = null
-  modelForm.costOutputPerUnit = null
+  modelForm.costInputPerUnit = 0.0
+  modelForm.costOutputPerUnit = 0.0
   modelForm.costTiers = []
 }
 
@@ -1143,8 +1154,8 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.costDisplayCurrency = model.costDisplayCurrency
   modelForm.costExchangeRate = model.costExchangeRate
   modelForm.costPricingUnit = model.costPricingUnit
-  modelForm.costInputPerUnit = model.costInputPerUnit
-  modelForm.costOutputPerUnit = model.costOutputPerUnit
+  modelForm.costInputPerUnit = model.costInputPerUnit ?? 0.0
+  modelForm.costOutputPerUnit = model.costOutputPerUnit ?? 0.0
   modelForm.costTiers = model.costTiers.map((tier) => ({ ...tier }))
   modelDialogVisible.value = true
 }
@@ -1487,6 +1498,11 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   gap: 12px;
 }
 
+.model-dialog :deep(.el-dialog__body) {
+  padding-right: 32px;
+  padding-left: 32px;
+}
+
 .cost-default-note {
   margin-bottom: 12px;
   padding: 12px 14px;
@@ -1499,8 +1515,12 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 }
 
 .cost-pricing-section,
-.cost-advanced-section {
+.model-more-settings-section {
   margin-bottom: 12px;
+}
+
+.model-more-settings-section :deep(.el-collapse-item__content) {
+  padding-bottom: 6px;
 }
 
 .cost-section-header {
