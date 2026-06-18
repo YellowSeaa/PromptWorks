@@ -709,8 +709,7 @@ const providerOptions = computed<ProviderOption[]>(() => {
 
 const modelTypeOptions = computed(() => [
   { label: t('llmManagement.modelDialog.modelTypes.chat'), value: 'chat' as LLMModelType },
-  { label: t('llmManagement.modelDialog.modelTypes.embedding'), value: 'embedding' as LLMModelType },
-  { label: t('llmManagement.modelDialog.modelTypes.rerank'), value: 'rerank' as LLMModelType }
+  { label: t('llmManagement.modelDialog.modelTypes.embedding'), value: 'embedding' as LLMModelType }
 ])
 
 const embeddingApiStyleOptions = computed(() => [
@@ -1211,9 +1210,6 @@ function formatModelType(modelType: LLMModelType) {
 function getModelTypeTagType(modelType: LLMModelType) {
   if (modelType === 'embedding') {
     return 'success'
-  }
-  if (modelType === 'rerank') {
-    return 'warning'
   }
   return 'info'
 }

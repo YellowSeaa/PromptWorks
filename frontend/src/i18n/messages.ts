@@ -436,8 +436,7 @@ export const messages = {
         modelTypeLabel: '模型用途',
         modelTypes: {
           chat: '对话',
-          embedding: 'Embedding',
-          rerank: '重排序'
+          embedding: 'Embedding'
         },
         capabilityLabel: '能力标签',
         capabilityPlaceholder: '如 对话 / 推理（可选）',
@@ -449,7 +448,7 @@ export const messages = {
         contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
         contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。',
         embeddingSection: 'Embedding 配置',
-        embeddingDefaultNote: '仅在模型用途为 Embedding 时需要填写这组字段；对话和重排序模型会自动隐藏。',
+        embeddingDefaultNote: '仅在模型用途为 Embedding 时需要填写这组字段；对话模型会自动隐藏。',
         embeddingApiStyleLabel: 'API 风格',
         embeddingApiStyles: {
           openaiCompatible: 'OpenAI 兼容'
@@ -1843,8 +1842,7 @@ export const messages = {
         modelTypeLabel: 'Model Use',
         modelTypes: {
           chat: 'Chat',
-          embedding: 'Embedding',
-          rerank: 'Rerank'
+          embedding: 'Embedding'
         },
         capabilityLabel: 'Capability Tags',
         capabilityPlaceholder: 'e.g. Chat / Reasoning (optional)',
@@ -1856,7 +1854,7 @@ export const messages = {
         contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
         contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.',
         embeddingSection: 'Embedding Settings',
-        embeddingDefaultNote: 'Only fill these fields when the model use is Embedding. Chat and rerank models hide them automatically.',
+        embeddingDefaultNote: 'Only fill these fields when the model use is Embedding. Chat models hide them automatically.',
         embeddingApiStyleLabel: 'API Style',
         embeddingApiStyles: {
           openaiCompatible: 'OpenAI Compatible'

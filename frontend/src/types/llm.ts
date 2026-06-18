@@ -30,7 +30,7 @@ export interface LLMModel {
   updated_at: string
 }
 
-export type LLMModelType = 'chat' | 'embedding' | 'rerank'
+export type LLMModelType = 'chat' | 'embedding'
 
 export type EmbeddingApiStyle = 'openai_compatible'
 
