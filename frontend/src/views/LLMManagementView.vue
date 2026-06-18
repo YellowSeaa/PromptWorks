@@ -128,16 +128,6 @@
                       </template>
                     </el-table-column>
                     <el-table-column
-                      prop="capability"
-                      :label="t('llmManagement.card.table.columns.capability')"
-                      min-width="120"
-                    />
-                    <el-table-column
-                      prop="quota"
-                      :label="t('llmManagement.card.table.columns.quota')"
-                      min-width="140"
-                    />
-                    <el-table-column
                       prop="concurrencyLimit"
                       :label="t('llmManagement.card.table.columns.concurrency')"
                       width="140"
@@ -155,14 +145,6 @@
                         <el-tag size="small" type="info">
                           {{ formatContextLength(row.contextLength) }}
                         </el-tag>
-                      </template>
-                    </el-table-column>
-                    <el-table-column
-                      :label="t('llmManagement.card.table.columns.embeddingSummary')"
-                      min-width="180"
-                    >
-                      <template #default="{ row }">
-                        <span class="embedding-summary">{{ formatEmbeddingSummary(row) }}</span>
                       </template>
                     </el-table-column>
                     <el-table-column
@@ -346,18 +328,6 @@
               :value="option.value"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item :label="t('llmManagement.modelDialog.capabilityLabel')">
-          <el-input
-            v-model="modelForm.capability"
-            :placeholder="t('llmManagement.modelDialog.capabilityPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('llmManagement.modelDialog.quotaLabel')">
-          <el-input
-            v-model="modelForm.quota"
-            :placeholder="t('llmManagement.modelDialog.quotaPlaceholder')"
-          />
         </el-form-item>
         <el-form-item :label="t('llmManagement.modelDialog.concurrencyLabel')">
           <el-input-number
@@ -651,8 +621,6 @@ interface ProviderCardModel {
   embeddingDimensions: number | null
   embeddingBatchSize: number | null
   embeddingMaxInputTokens: number | null
-  capability: string | null
-  quota: string | null
   concurrencyLimit: number
   contextLength: number | null
   costCurrency: string
@@ -860,8 +828,6 @@ function mapProviderToCard(
       embeddingDimensions: model.embedding_dimensions ?? null,
       embeddingBatchSize: model.embedding_batch_size ?? null,
       embeddingMaxInputTokens: model.embedding_max_input_tokens ?? null,
-      capability: model.capability,
-      quota: model.quota,
       concurrencyLimit: model.concurrency_limit,
       contextLength: model.context_length,
       costCurrency: model.cost_currency,
@@ -974,8 +940,6 @@ const modelForm = reactive({
   embeddingDimensions: null as number | null,
   embeddingBatchSize: 16 as number | null,
   embeddingMaxInputTokens: null as number | null,
-  capability: '',
-  quota: '',
   concurrency: 5,
   contextLength: null as number | null,
   useCustomCurrency: false,
@@ -996,8 +960,6 @@ function handleAddModel(providerId: number) {
   editingModelId.value = null
   modelForm.name = ''
   resetModelUsageForm()
-  modelForm.capability = ''
-  modelForm.quota = ''
   modelForm.concurrency = 5
   modelForm.contextLength = null
   resetModelCostForm()
@@ -1123,9 +1085,6 @@ async function submitModel() {
     return
   }
 
-  const capabilityValue = modelForm.capability.trim()
-  const quotaValue = modelForm.quota.trim()
-
   modelSubmitLoading.value = true
   try {
     if (isEditingModel.value) {
@@ -1136,8 +1095,6 @@ async function submitModel() {
       await updateLLMModel(providerId, modelId, {
         model_type: modelForm.modelType,
         ...buildEmbeddingPayload(),
-        capability: capabilityValue ? capabilityValue : null,
-        quota: quotaValue ? quotaValue : null,
         concurrency_limit: concurrencyValue,
         context_length: contextLengthValue,
         ...buildCostPayload()
@@ -1148,8 +1105,6 @@ async function submitModel() {
         name: modelForm.name.trim(),
         model_type: modelForm.modelType,
         ...buildEmbeddingPayload(),
-        capability: capabilityValue || undefined,
-        quota: quotaValue || undefined,
         concurrency_limit: concurrencyValue,
         context_length: contextLengthValue,
         ...buildCostPayload()
@@ -1181,8 +1136,6 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.embeddingDimensions = model.embeddingDimensions
   modelForm.embeddingBatchSize = model.embeddingBatchSize ?? 16
   modelForm.embeddingMaxInputTokens = model.embeddingMaxInputTokens
-  modelForm.capability = model.capability ?? ''
-  modelForm.quota = model.quota ?? ''
   modelForm.concurrency = model.concurrencyLimit
   modelForm.contextLength = model.contextLength
   modelForm.useCustomCurrency = isCustomCurrency(model.costCurrency, model.costExchangeRate)
@@ -1212,34 +1165,6 @@ function getModelTypeTagType(modelType: LLMModelType) {
     return 'success'
   }
   return 'info'
-}
-
-function formatEmbeddingApiStyle(style: EmbeddingApiStyle | null) {
-  if (!style) {
-    return t('common.notSet')
-  }
-  const styleKeyMap: Record<EmbeddingApiStyle, string> = {
-    openai_compatible: 'openaiCompatible'
-  }
-  return t(`llmManagement.modelDialog.embeddingApiStyles.${styleKeyMap[style]}`)
-}
-
-function formatEmbeddingSummary(model: ProviderCardModel) {
-  if (model.modelType !== 'embedding') {
-    return t('llmManagement.card.table.notApplicable')
-  }
-  const dimensions = model.embeddingDimensions
-    ? t('llmManagement.card.table.embeddingDimensions', { count: model.embeddingDimensions })
-    : t('llmManagement.card.table.embeddingDimensionsUnset')
-  const batchSize = model.embeddingBatchSize
-    ? t('llmManagement.card.table.embeddingBatchSize', { count: model.embeddingBatchSize })
-    : t('llmManagement.card.table.embeddingBatchSizeUnset')
-  const maxInputTokens = model.embeddingMaxInputTokens
-    ? t('llmManagement.card.table.embeddingMaxInputTokens', {
-        count: model.embeddingMaxInputTokens.toLocaleString()
-      })
-    : t('llmManagement.card.table.embeddingMaxInputTokensUnset')
-  return `${formatEmbeddingApiStyle(model.embeddingApiStyle)} · ${dimensions} · ${batchSize} · ${maxInputTokens}`
 }
 
 function formatModelCost(model: ProviderCardModel) {
@@ -1554,12 +1479,6 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   display: flex;
   justify-content: center;
   gap: 6px;
-}
-
-.embedding-summary {
-  color: var(--el-text-color-regular);
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .dialog-form {
