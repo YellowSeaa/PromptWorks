@@ -155,7 +155,11 @@
                         {{ formatModelCost(row) }}
                       </template>
                     </el-table-column>
-                    <el-table-column :label="t('llmManagement.card.table.columns.actions')" width="220" align="center">
+                    <el-table-column
+                      :label="t('llmManagement.card.table.columns.actions')"
+                      width="300"
+                      align="center"
+                    >
                       <template #default="{ row }">
                         <div class="provider-card__model-actions">
                           <el-button
@@ -1490,6 +1494,12 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   display: flex;
   justify-content: center;
   gap: 6px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.provider-card__model-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .dialog-form {
