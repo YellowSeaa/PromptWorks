@@ -161,3 +161,55 @@ def test_semantic_consistency_diversity_interprets_same_similarity_by_objective(
     assert "稳定" in consistency.data_frame.loc[0, "interpretation"]
     assert diversity.data_frame.loc[0, "interpretation_level"] == "warning"
     assert "过度收敛" in diversity.data_frame.loc[0, "interpretation"]
+
+
+def test_semantic_consistency_diversity_passes_max_samples_per_group_to_metrics():
+    from app.services.analysis_modules.semantic_stability import (
+        execute_semantic_consistency_diversity_analysis,
+    )
+
+    rows = [
+        {
+            "task_id": 1,
+            "unit_id": 10,
+            "unit_name": "单元A",
+            "variable_case_hash": "hash-a",
+            "variables": {"topic": "天气"},
+            "output_text": f"回答 {index}",
+            "semantic_objective": "consistency",
+            "run_index": index,
+        }
+        for index in range(8)
+    ]
+
+    class ManyEmbeddingClient:
+        def embed_texts(self, request):
+            return SimpleNamespace(
+                provider_id=request.provider_id,
+                model_id=request.model_id,
+                model_name="mock",
+                embeddings=[
+                    [1.0, float(index % 2)] for index, _ in enumerate(request.texts)
+                ],
+            )
+
+    result = execute_semantic_consistency_diversity_analysis(
+        pd.DataFrame(rows),
+        {
+            "embedding_provider_id": 7,
+            "embedding_model_id": 8,
+            "embedding_client": ManyEmbeddingClient(),
+            "max_samples_per_group": 3,
+        },
+        AnalysisContext(task_id="1"),
+    )
+
+    first_row = result.data_frame.loc[0]
+    assert first_row["sample_count"] == 8
+    assert first_row["evaluated_sample_count"] == 3
+    assert bool(first_row["is_sampled"]) is True
+    assert first_row["pairwise_count"] == 3
+    assert (
+        result.extra["semantic_summary"]["group_summaries"][0]["evaluated_sample_count"]
+        == 3
+    )

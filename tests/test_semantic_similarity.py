@@ -95,6 +95,27 @@ def test_calculate_group_metrics_identifies_outlier_output() -> None:
     assert metrics.outlier_output_ids == ["out-3"]
 
 
+def test_calculate_group_metrics_samples_large_groups_for_pairwise_work() -> None:
+    outputs = [
+        SemanticOutput(
+            output_id=f"out-{index}",
+            text=f"回答{index}",
+            embedding=[1.0, float(index % 3)],
+        )
+        for index in range(10)
+    ]
+
+    metrics = calculate_group_metrics(outputs, max_pairwise_samples=4)
+
+    assert metrics.status == "ok"
+    assert metrics.sample_count == 10
+    assert metrics.evaluated_sample_count == 4
+    assert metrics.is_sampled is True
+    assert metrics.pairwise_count == 6
+    assert metrics.mean_pairwise_similarity is not None
+    assert metrics.centroid_similarity_mean is not None
+
+
 def test_interpret_metrics_flags_consistency_drift() -> None:
     metrics = calculate_group_metrics(
         [

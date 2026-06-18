@@ -26,6 +26,10 @@ class EmbeddingClientError(RuntimeError):
     """统一 embedding 调用失败时抛出的业务异常。"""
 
 
+DEFAULT_EMBEDDING_BATCH_SIZE = 32
+MAX_EMBEDDING_BATCH_SIZE = 128
+
+
 class EmbeddingClient:
     def __init__(
         self,
@@ -41,47 +45,56 @@ class EmbeddingClient:
     def embed_texts(self, request: EmbeddingRequest) -> EmbeddingResult:
         base_url = self._resolve_base_url()
         self._ensure_api_key_if_needed(base_url)
-
-        payload: dict[str, Any] = {
-            "model": self._resolve_model_name(),
-            "input": list(request.texts),
-        }
+        model_name = self._resolve_model_name()
         dimensions = getattr(self._model, "embedding_dimensions", None)
-        if isinstance(dimensions, int) and dimensions > 0:
-            payload["dimensions"] = dimensions
+        batch_size = self._resolve_batch_size()
 
-        response = self._http_client.post(
-            f"{base_url}/embeddings",
-            content=_json_bytes(payload),
-            headers=self._build_headers(base_url),
-        )
-
-        if response.status_code < 200 or response.status_code >= 300:
-            raise EmbeddingClientError(
-                f"embedding 请求失败，HTTP {response.status_code}: {response.text}"
-            )
-
-        data = _ensure_mapping(response.json()).get("data")
-        if not isinstance(data, list) or not data:
-            raise EmbeddingClientError("embedding 响应缺少 data。")
-
+        texts = list(request.texts)
         embeddings: list[list[float]] = []
         expected_dimensions: int | None = None
-        for item in data:
-            embedding = _extract_embedding(item)
-            if expected_dimensions is None:
-                expected_dimensions = len(embedding)
-            elif len(embedding) != expected_dimensions:
-                raise EmbeddingClientError("embedding 向量维度不一致。")
-            embeddings.append(embedding)
+        for batch_texts in _chunked(texts, batch_size):
+            payload: dict[str, Any] = {
+                "model": model_name,
+                "input": batch_texts,
+            }
+            if isinstance(dimensions, int) and dimensions > 0:
+                payload["dimensions"] = dimensions
 
-        if len(embeddings) != len(request.texts):
+            response = self._http_client.post(
+                f"{base_url}/embeddings",
+                content=_json_bytes(payload),
+                headers=self._build_headers(base_url),
+            )
+
+            if response.status_code < 200 or response.status_code >= 300:
+                raise EmbeddingClientError(
+                    f"embedding 请求失败，HTTP {response.status_code}: {response.text}"
+                )
+
+            data = _ensure_mapping(response.json()).get("data")
+            if not isinstance(data, list) or not data:
+                raise EmbeddingClientError("embedding 响应缺少 data。")
+
+            batch_embeddings: list[list[float]] = []
+            for item in data:
+                embedding = _extract_embedding(item)
+                if expected_dimensions is None:
+                    expected_dimensions = len(embedding)
+                elif len(embedding) != expected_dimensions:
+                    raise EmbeddingClientError("embedding 向量维度不一致。")
+                batch_embeddings.append(embedding)
+
+            if len(batch_embeddings) != len(batch_texts):
+                raise EmbeddingClientError("embedding 响应数量与输入数量不一致。")
+            embeddings.extend(batch_embeddings)
+
+        if len(embeddings) != len(texts):
             raise EmbeddingClientError("embedding 响应数量与输入数量不一致。")
 
         return EmbeddingResult(
             provider_id=request.provider_id,
             model_id=request.model_id,
-            model_name=self._resolve_model_name(),
+            model_name=model_name,
             embeddings=embeddings,
         )
 
@@ -114,6 +127,14 @@ class EmbeddingClient:
         if _is_local_base_url(base_url):
             return
         raise EmbeddingClientError("远程 embedding 提供方缺少 API Key。")
+
+    def _resolve_batch_size(self) -> int:
+        batch_size = getattr(self._model, "embedding_batch_size", None)
+        if not isinstance(batch_size, int) or isinstance(batch_size, bool):
+            return DEFAULT_EMBEDDING_BATCH_SIZE
+        if batch_size < 1:
+            return DEFAULT_EMBEDDING_BATCH_SIZE
+        return min(batch_size, MAX_EMBEDDING_BATCH_SIZE)
 
 
 def _ensure_mapping(raw: Any) -> dict[str, Any]:
@@ -149,6 +170,13 @@ def _json_bytes(payload: Mapping[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
         "utf-8"
     )
+
+
+def _chunked(values: list[str], batch_size: int) -> list[list[str]]:
+    return [
+        values[index : index + batch_size]
+        for index in range(0, len(values), batch_size)
+    ]
 
 
 __all__ = [

@@ -27,13 +27,18 @@ def _provider(
     )
 
 
-def _model(*, dimensions: int | None = None):
+def _model(
+    *,
+    dimensions: int | None = None,
+    batch_size: int | None = None,
+):
     return SimpleNamespace(
         id=2,
         provider_id=1,
         name="text-embedding-test",
         embedding_api_style="openai_compatible",
         embedding_dimensions=dimensions,
+        embedding_batch_size=batch_size,
     )
 
 
@@ -98,6 +103,50 @@ def test_embed_texts_omits_dimensions_when_not_configured():
     assert captured["payload"] == (
         b'{"model":"text-embedding-test","input":["\xe5\x8d\x95\xe6\x9d\xa1\xe6\x96\x87\xe6\x9c\xac"]}'
     )
+
+
+def test_embed_texts_splits_requests_by_model_batch_size():
+    captured_inputs: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = request.read().decode("utf-8")
+        import json
+
+        inputs = json.loads(payload)["input"]
+        captured_inputs.append(inputs)
+        start = len(captured_inputs) * 10
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"embedding": [float(start + index), 0.0]}
+                    for index, _ in enumerate(inputs)
+                ]
+            },
+        )
+
+    client = EmbeddingClient(
+        provider=_provider(),
+        model=_model(batch_size=2),
+        http_client=_client_with_handler(handler),
+    )
+
+    result = client.embed_texts(
+        EmbeddingRequest(
+            provider_id=1,
+            model_id=2,
+            texts=["第一段", "第二段", "第三段", "第四段", "第五段"],
+        )
+    )
+
+    assert captured_inputs == [["第一段", "第二段"], ["第三段", "第四段"], ["第五段"]]
+    assert result.embeddings == [
+        [10.0, 0.0],
+        [11.0, 0.0],
+        [20.0, 0.0],
+        [21.0, 0.0],
+        [30.0, 0.0],
+    ]
 
 
 def test_embed_texts_requires_provider_base_url():

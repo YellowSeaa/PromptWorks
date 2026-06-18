@@ -24,6 +24,7 @@ if TYPE_CHECKING:  # pragma: no cover - 仅用于类型提示
     from app.services.analysis_registry import AnalysisModuleRegistry
 
 MODULE_ID = "semantic_consistency_diversity"
+DEFAULT_MAX_SAMPLES_PER_GROUP = 100
 
 
 def register_semantic_consistency_diversity_module(
@@ -56,6 +57,14 @@ def register_semantic_consistency_diversity_module(
                 type=AnalysisParameterType.SELECT,
                 required=False,
                 options=["consistency", "diversity", "balanced"],
+            ),
+            AnalysisParameterSpec(
+                key="max_samples_per_group",
+                label="每组最大两两计算样本数",
+                type=AnalysisParameterType.NUMBER,
+                required=False,
+                default=DEFAULT_MAX_SAMPLES_PER_GROUP,
+                help_text="超过该数量时按组内样本均匀抽样计算两两相似度，避免大组计算量过高。",
             ),
         ],
         required_columns=[
@@ -147,6 +156,9 @@ def _build_group_summary(
     context: AnalysisContext,
 ) -> pd.DataFrame:
     objective_override = params.get("objective_override")
+    max_samples_per_group = _resolve_max_samples_per_group(
+        params.get("max_samples_per_group")
+    )
     records: list[dict[str, Any]] = []
     grouped = working_df.groupby(
         ["task_id", "unit_id", "variable_case_hash"],
@@ -162,7 +174,10 @@ def _build_group_summary(
             )
             for _, row in subset.iterrows()
         ]
-        metrics = calculate_group_metrics(outputs)
+        metrics = calculate_group_metrics(
+            outputs,
+            max_pairwise_samples=max_samples_per_group,
+        )
         objective = _resolve_objective(subset, objective_override)
         interpretation = interpret_metrics(metrics, objective)
         first_row = subset.iloc[0]
@@ -174,6 +189,9 @@ def _build_group_summary(
                 "variable_case_hash": first_row.get("variable_case_hash"),
                 "semantic_objective": objective,
                 "sample_count": metrics.sample_count,
+                "evaluated_sample_count": metrics.evaluated_sample_count,
+                "is_sampled": metrics.is_sampled,
+                "pairwise_count": metrics.pairwise_count,
                 "status": metrics.status,
                 "mean_pairwise_similarity": metrics.mean_pairwise_similarity,
                 "min_pairwise_similarity": metrics.min_pairwise_similarity,
@@ -215,6 +233,13 @@ def _build_columns_meta() -> list[AnalysisColumnMeta]:
         AnalysisColumnMeta(name="variable_case_hash", label="变量组合"),
         AnalysisColumnMeta(name="semantic_objective", label="语义目标"),
         AnalysisColumnMeta(name="sample_count", label="样本数", visualizable=["bar"]),
+        AnalysisColumnMeta(
+            name="evaluated_sample_count",
+            label="参与两两计算样本数",
+            visualizable=["bar"],
+        ),
+        AnalysisColumnMeta(name="is_sampled", label="是否采样计算"),
+        AnalysisColumnMeta(name="pairwise_count", label="两两比较次数"),
         AnalysisColumnMeta(
             name="mean_pairwise_similarity",
             label="平均语义相似度",
@@ -272,6 +297,9 @@ def _build_semantic_summary(summary_df: pd.DataFrame) -> dict[str, Any]:
                 "variable_case_hash": row.get("variable_case_hash"),
                 "semantic_objective": row.get("semantic_objective"),
                 "sample_count": row.get("sample_count"),
+                "evaluated_sample_count": row.get("evaluated_sample_count"),
+                "is_sampled": row.get("is_sampled"),
+                "pairwise_count": row.get("pairwise_count"),
                 "mean_pairwise_similarity": row.get("mean_pairwise_similarity"),
                 "semantic_dispersion": row.get("semantic_dispersion"),
                 "outlier_count": row.get("outlier_count"),
@@ -301,7 +329,15 @@ def _safe_int(value: Any) -> int | None:
     return None
 
 
+def _resolve_max_samples_per_group(value: Any) -> int:
+    parsed = _safe_int(value)
+    if parsed is None or parsed < 2:
+        return DEFAULT_MAX_SAMPLES_PER_GROUP
+    return parsed
+
+
 __all__ = [
+    "DEFAULT_MAX_SAMPLES_PER_GROUP",
     "MODULE_ID",
     "execute_semantic_consistency_diversity_analysis",
     "register_semantic_consistency_diversity_module",

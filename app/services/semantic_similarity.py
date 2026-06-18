@@ -10,6 +10,7 @@ from typing import Any, Mapping, Sequence
 
 INSUFFICIENT_SAMPLES = "insufficient_samples"
 OK = "ok"
+DEFAULT_MAX_PAIRWISE_SAMPLES = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,9 @@ class SemanticOutput:
 class SemanticGroupMetrics:
     sample_count: int
     status: str
+    evaluated_sample_count: int = 0
+    is_sampled: bool = False
+    pairwise_count: int = 0
     mean_pairwise_similarity: float | None = None
     min_pairwise_similarity: float | None = None
     centroid_similarity_mean: float | None = None
@@ -72,19 +76,29 @@ def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     )
 
 
-def calculate_group_metrics(outputs: list[SemanticOutput]) -> SemanticGroupMetrics:
+def calculate_group_metrics(
+    outputs: list[SemanticOutput],
+    *,
+    max_pairwise_samples: int | None = DEFAULT_MAX_PAIRWISE_SAMPLES,
+) -> SemanticGroupMetrics:
     sample_count = len(outputs)
     if sample_count < 2:
         return SemanticGroupMetrics(
             sample_count=sample_count,
             status=INSUFFICIENT_SAMPLES,
+            evaluated_sample_count=sample_count,
         )
 
     _ensure_same_dimensions(outputs)
     normalized_embeddings = [normalize_vector(output.embedding) for output in outputs]
+    pairwise_indices = _select_pairwise_indices(
+        sample_count,
+        _resolve_max_pairwise_samples(max_pairwise_samples),
+    )
+    pairwise_embeddings = [normalized_embeddings[index] for index in pairwise_indices]
     pairwise_similarities = [
         cosine_similarity(left, right)
-        for left, right in combinations(normalized_embeddings, 2)
+        for left, right in combinations(pairwise_embeddings, 2)
     ]
     centroid = _build_centroid(normalized_embeddings)
     centroid_similarities = [
@@ -96,6 +110,9 @@ def calculate_group_metrics(outputs: list[SemanticOutput]) -> SemanticGroupMetri
     return SemanticGroupMetrics(
         sample_count=sample_count,
         status=OK,
+        evaluated_sample_count=len(pairwise_indices),
+        is_sampled=len(pairwise_indices) < sample_count,
+        pairwise_count=len(pairwise_similarities),
         mean_pairwise_similarity=_mean(pairwise_similarities),
         min_pairwise_similarity=min(pairwise_similarities),
         centroid_similarity_mean=centroid_similarity_mean,
@@ -181,6 +198,29 @@ def _ensure_same_dimensions(outputs: list[SemanticOutput]) -> None:
     dimensions = {len(output.embedding) for output in outputs}
     if len(dimensions) != 1:
         raise ValueError("同一语义分组内的 embedding 向量维度必须一致。")
+
+
+def _resolve_max_pairwise_samples(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or value < 2:
+        return DEFAULT_MAX_PAIRWISE_SAMPLES
+    return value
+
+
+def _select_pairwise_indices(sample_count: int, max_samples: int | None) -> list[int]:
+    if max_samples is None or sample_count <= max_samples:
+        return list(range(sample_count))
+    if max_samples >= sample_count:
+        return list(range(sample_count))
+    if max_samples == 2:
+        return [0, sample_count - 1]
+
+    # 均匀抽样，保留首尾样本，避免每次运行出现不同报告结果。
+    last_index = sample_count - 1
+    return sorted(
+        {round(index * last_index / (max_samples - 1)) for index in range(max_samples)}
+    )
 
 
 def _build_centroid(normalized_embeddings: list[list[float]]) -> list[float]:
