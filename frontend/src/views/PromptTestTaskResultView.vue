@@ -539,30 +539,8 @@
                       })
                     }}
                   </el-tag>
-                  <el-tooltip
-                    :content="
-                      moduleStates[moduleId].collapsed
-                        ? t('promptTestResult.analysis.actions.expand')
-                        : t('promptTestResult.analysis.actions.collapse')
-                    "
-                    placement="top"
-                  >
-                    <el-button
-                      class="analysis-collapse-button"
-                      size="small"
-                      text
-                      :icon="moduleStates[moduleId].collapsed ? Expand : Fold"
-                      :aria-label="
-                        moduleStates[moduleId].collapsed
-                          ? t('promptTestResult.analysis.actions.expand')
-                          : t('promptTestResult.analysis.actions.collapse')
-                      "
-                      @click.stop="toggleAnalysisModuleCollapse(moduleId)"
-                    />
-                  </el-tooltip>
                   <el-button
                     size="small"
-                    text
                     :loading="moduleStates[moduleId].status === 'running'"
                     @click.stop="runAnalysisModule(moduleId)"
                   >
@@ -576,8 +554,7 @@
               </div>
             </template>
             <div
-              v-if="moduleStates[moduleId]"
-              v-show="!moduleStates[moduleId].collapsed"
+              v-if="moduleStates[moduleId] && !moduleStates[moduleId].collapsed"
               class="analysis-module-card__body"
             >
               <div
@@ -1025,7 +1002,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Expand, Fold } from '@element-plus/icons-vue'
 import {
   getLatestPromptTestOptimizationRecommendation,
   getPromptTestAIScores,
@@ -3810,6 +3786,10 @@ watch(
   min-height: 0;
 }
 
+.analysis-module-card--collapsed :deep(.el-card__body) {
+  display: none;
+}
+
 .analysis-module-card__header {
   display: flex;
   justify-content: space-between;
@@ -3848,17 +3828,6 @@ watch(
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
-}
-
-.analysis-collapse-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  font-size: 16px;
-}
-
-.analysis-collapse-button :deep(.el-icon) {
-  font-size: 16px;
 }
 
 .analysis-module-card__body {
