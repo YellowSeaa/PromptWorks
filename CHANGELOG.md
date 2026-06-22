@@ -1,3 +1,26 @@
+## [1.4.0-beta.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.1...v1.4.0-beta.1) (2026-06-22)
+
+### Features
+
+* 增加embedding语义分析保护机制 ([f8e6dfc](https://github.com/YellowSeaa/PromptWorks/commit/f8e6dfc86dc532d8a6a6790830033b30d7c2cf40))
+* 增加embedding语义评估能力 ([4e2b408](https://github.com/YellowSeaa/PromptWorks/commit/4e2b408e14748fc5f311c167877a882118581c55))
+* 增加embedding请求重试机制 ([bc4c451](https://github.com/YellowSeaa/PromptWorks/commit/bc4c451212777756c71be491453b282cd52c2627))
+* 新增 Ollama 本地模型提供方 ([7228ce8](https://github.com/YellowSeaa/PromptWorks/commit/7228ce81addf08d0c212ad4071846365eff17324))
+
+### Bug Fixes
+
+* 优化分析报告折叠卡片样式 ([a841fc2](https://github.com/YellowSeaa/PromptWorks/commit/a841fc28aabe59df8a2d6ba87db33d3f116eda2c))
+* 优化语义分析结果与模型选择 ([47369db](https://github.com/YellowSeaa/PromptWorks/commit/47369db630e0a9e974afbf9e752394566dfee52b))
+* 优化语义分析配置体验 ([ac4e61d](https://github.com/YellowSeaa/PromptWorks/commit/ac4e61d5086a24e80f7aa27dc809bbf2a743f400))
+* 修复英文模型操作列遮挡 ([2baf4b7](https://github.com/YellowSeaa/PromptWorks/commit/2baf4b7331822273f1070d47f58e4520622d3e5d))
+* 修复语义分析报告展示问题 ([9c3ee76](https://github.com/YellowSeaa/PromptWorks/commit/9c3ee76528be63bb6331486b38ca5c153d839524))
+* 允许本地回环地址访问前端开发服务 ([6aa5fa2](https://github.com/YellowSeaa/PromptWorks/commit/6aa5fa29f617a1848e389b8b4f8f641fcff56208))
+* 支持分析报告卡片折叠 ([d1d7fb1](https://github.com/YellowSeaa/PromptWorks/commit/d1d7fb148e7003b96af025509e209e7c316acd8c))
+* 支持向量化模型检测 ([601eb98](https://github.com/YellowSeaa/PromptWorks/commit/601eb983889ae4b61c7c3c1998ddc5ccc6526f97))
+* 收拢模型表单更多设置 ([5e05c31](https://github.com/YellowSeaa/PromptWorks/commit/5e05c31b202c2eb50595ffbbca0b78a9eac6bca3))
+* 精简模型管理列表字段 ([c5816d8](https://github.com/YellowSeaa/PromptWorks/commit/c5816d832b729ff366775a6ac4c9da2d403f4565))
+* 隐藏前端rerank模型入口 ([41e65ab](https://github.com/YellowSeaa/PromptWorks/commit/41e65abac93d191e06fea0a26f6c6c8869e71200))
+
 ## [1.3.1](https://github.com/YellowSeaa/PromptWorks/compare/v1.3.0...v1.3.1) (2026-06-16)
 
 ### Bug Fixes
