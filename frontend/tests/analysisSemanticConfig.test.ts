@@ -8,8 +8,10 @@ import {
   formatSemanticMetricValue,
   formatSemanticObjective,
   hasCallableChatModel,
+  normalizeAnalysisModuleCollapsed,
   normalizeSemanticAnalysisChart,
-  semanticModelKeyFromParameters
+  semanticModelKeyFromParameters,
+  toggleAnalysisModuleCollapsed
 } from '../src/utils/analysisSemanticConfig.ts'
 import type { LLMProvider } from '../src/types/llm.ts'
 
@@ -171,5 +173,16 @@ describe('analysisSemanticConfig', () => {
     assert.equal(normalized.type, 'bar')
     assert.equal(normalized.x, 'variable_case_label')
     assert.equal(normalized.y, 'semantic_dispersion')
+  })
+
+  it('分析报告模块默认展开，并支持切换折叠状态', () => {
+    assert.equal(normalizeAnalysisModuleCollapsed(undefined), false)
+    assert.equal(normalizeAnalysisModuleCollapsed(true), true)
+
+    const state: { collapsed?: boolean } = {}
+    assert.equal(toggleAnalysisModuleCollapsed(state), true)
+    assert.equal(state.collapsed, true)
+    assert.equal(toggleAnalysisModuleCollapsed(state), false)
+    assert.equal(state.collapsed, false)
   })
 })

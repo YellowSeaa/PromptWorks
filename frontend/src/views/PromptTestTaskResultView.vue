@@ -494,10 +494,23 @@
             v-for="moduleId in selectedAnalysisModules"
             :key="moduleId"
             class="analysis-module-card"
+            :class="{ 'analysis-module-card--collapsed': moduleStates[moduleId]?.collapsed }"
             shadow="hover"
           >
             <template #header>
-              <div class="analysis-module-card__header">
+              <div
+                class="analysis-module-card__header"
+                role="button"
+                tabindex="0"
+                :aria-label="
+                  moduleStates[moduleId]?.collapsed
+                    ? t('promptTestResult.analysis.actions.expand')
+                    : t('promptTestResult.analysis.actions.collapse')
+                "
+                @click="toggleAnalysisModuleCollapse(moduleId)"
+                @keydown.enter.prevent="toggleAnalysisModuleCollapse(moduleId)"
+                @keydown.space.prevent="toggleAnalysisModuleCollapse(moduleId)"
+              >
                 <div class="analysis-module-card__title">
                   <h4>{{ moduleStates[moduleId]?.definition.name || moduleId }}</h4>
                   <p
@@ -514,6 +527,39 @@
                   >
                     {{ t(`promptTestResult.analysis.status.${moduleStates[moduleId].status}`) }}
                   </el-tag>
+                  <el-tag
+                    v-if="moduleStates[moduleId].collapsed && moduleStates[moduleId].result"
+                    size="small"
+                    type="info"
+                    effect="plain"
+                  >
+                    {{
+                      t('promptTestResult.analysis.resultRows', {
+                        count: moduleStates[moduleId].result?.data.length ?? 0
+                      })
+                    }}
+                  </el-tag>
+                  <el-tooltip
+                    :content="
+                      moduleStates[moduleId].collapsed
+                        ? t('promptTestResult.analysis.actions.expand')
+                        : t('promptTestResult.analysis.actions.collapse')
+                    "
+                    placement="top"
+                  >
+                    <el-button
+                      class="analysis-collapse-button"
+                      size="small"
+                      text
+                      :icon="moduleStates[moduleId].collapsed ? Expand : Fold"
+                      :aria-label="
+                        moduleStates[moduleId].collapsed
+                          ? t('promptTestResult.analysis.actions.expand')
+                          : t('promptTestResult.analysis.actions.collapse')
+                      "
+                      @click.stop="toggleAnalysisModuleCollapse(moduleId)"
+                    />
+                  </el-tooltip>
                   <el-button
                     size="small"
                     text
@@ -529,7 +575,11 @@
                 </div>
               </div>
             </template>
-            <div v-if="moduleStates[moduleId]" class="analysis-module-card__body">
+            <div
+              v-if="moduleStates[moduleId]"
+              v-show="!moduleStates[moduleId].collapsed"
+              class="analysis-module-card__body"
+            >
               <div
                 v-if="
                   moduleStates[moduleId].definition.parameters.length &&
@@ -975,6 +1025,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { Expand, Fold } from '@element-plus/icons-vue'
 import {
   getLatestPromptTestOptimizationRecommendation,
   getPromptTestAIScores,
@@ -999,9 +1050,11 @@ import {
   buildSemanticAnalysisParameters,
   formatSemanticMetricValue,
   formatSemanticObjective,
+  normalizeAnalysisModuleCollapsed,
   normalizeSemanticAnalysisChart,
   semanticModelKeyFromParameters,
   SEMANTIC_ANALYSIS_MODULE_ID,
+  toggleAnalysisModuleCollapsed,
   type SemanticObjectiveValue
 } from '../utils/analysisSemanticConfig'
 import {
@@ -1066,6 +1119,7 @@ type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
 interface AnalysisModuleState {
   definition: AnalysisModuleDefinition
   form: Record<string, unknown>
+  collapsed: boolean
   status: AnalysisRunStatus
   result: AnalysisResultPayload | null
   errorMessage: string | null
@@ -1633,6 +1687,7 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     if (!Array.isArray(existing.insightDetails)) {
       existing.insightDetails = []
     }
+    existing.collapsed = normalizeAnalysisModuleCollapsed(existing.collapsed)
     return
   }
   moduleStates[definition.module_id] = {
@@ -1641,6 +1696,7 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
       ...buildDefaultAnalysisForm(definition),
       ...getConfiguredAnalysisParameters(definition.module_id)
     },
+    collapsed: false,
     status: 'idle',
     result: null,
     errorMessage: null,
@@ -1664,6 +1720,26 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
 
 function getModuleState(moduleId: string): AnalysisModuleState | null {
   return moduleStates[moduleId] ?? null
+}
+
+function refreshAnalysisModuleCharts(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state?.result) return
+  void nextTick(() => {
+    if (state.charts.length === 0) {
+      renderModuleChart(moduleId)
+    }
+    prebuiltChartInstances.get(moduleId)?.forEach((instance) => instance.resize())
+  })
+}
+
+function toggleAnalysisModuleCollapse(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state) return
+  const collapsed = toggleAnalysisModuleCollapsed(state)
+  if (!collapsed) {
+    refreshAnalysisModuleCharts(moduleId)
+  }
 }
 
 function extractConfiguredAnalysisModules(
@@ -3730,17 +3806,30 @@ watch(
   flex-direction: column;
 }
 
+.analysis-module-card--collapsed {
+  min-height: 0;
+}
+
 .analysis-module-card__header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+  cursor: pointer;
+  outline: none;
+}
+
+.analysis-module-card__header:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
 }
 
 .analysis-module-card__title {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .analysis-module-card__title h4 {
@@ -3758,6 +3847,18 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+}
+
+.analysis-collapse-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 16px;
+}
+
+.analysis-collapse-button :deep(.el-icon) {
+  font-size: 16px;
 }
 
 .analysis-module-card__body {

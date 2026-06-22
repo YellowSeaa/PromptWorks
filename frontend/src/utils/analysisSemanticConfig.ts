@@ -45,6 +45,15 @@ export function hasCallableChatModel(provider: LLMProvider): boolean {
   return provider.models.some((model) => model.model_type === 'chat')
 }
 
+export function normalizeAnalysisModuleCollapsed(value: unknown): boolean {
+  return value === true
+}
+
+export function toggleAnalysisModuleCollapsed(state: { collapsed?: boolean }): boolean {
+  state.collapsed = !normalizeAnalysisModuleCollapsed(state.collapsed)
+  return state.collapsed
+}
+
 export function buildSemanticAnalysisParameters(
   modelKey: string,
   objective: SemanticObjectiveValue | null,

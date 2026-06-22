@@ -1135,8 +1135,11 @@ export const messages = {
         actions: {
           runSelected: '执行选中模块',
           run: '执行分析',
-          rerun: '重新执行'
+          rerun: '重新执行',
+          expand: '展开详情',
+          collapse: '收起详情'
         },
+        resultRows: '{count} 行结果',
         status: {
           idle: '待运行',
           running: '执行中',
@@ -2556,8 +2559,11 @@ export const messages = {
         actions: {
           runSelected: 'Run Selected',
           run: 'Run Analysis',
-          rerun: 'Run Again'
+          rerun: 'Run Again',
+          expand: 'Expand Details',
+          collapse: 'Collapse Details'
         },
+        resultRows: '{count} rows',
         status: {
           idle: 'Idle',
           running: 'Running',
