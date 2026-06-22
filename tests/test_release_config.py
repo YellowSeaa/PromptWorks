@@ -98,12 +98,38 @@ def test_ci_runs_semantic_release_on_main_and_dev_and_tags_images_by_release_ver
     assert "refs/heads/main" not in release_step
     assert "RELEASE_VERSION=" in workflow
     assert "RELEASE_PUBLISHED=true" in workflow
-    assert 'if [[ "${RELEASE_PUBLISHED}" == "true" ]]' in workflow
+    assert (
+        "release_published: ${{ steps.release.outputs.release_published }}" in workflow
+    )
+    assert "release_version: ${{ steps.release.outputs.release_version }}" in workflow
+    assert "release_tag: ${{ steps.release.outputs.release_tag }}" in workflow
+    assert 'echo "release_tag=v${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"' in workflow
+
+
+def test_ci_docker_job_runs_only_after_semantic_release_publishes_release():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "docker:" in workflow
+    assert "needs.release.outputs.release_published == 'true'" in workflow
+    assert 'RELEASE_VERSION="${{ needs.release.outputs.release_version }}"' in workflow
+    assert (
+        'BACKEND_TAGS="${BACKEND_TAGS},${DOCKER_REPOSITORY}:backend-v${RELEASE_VERSION}"'
+        in workflow
+    )
+    assert (
+        'FRONTEND_TAGS="${FRONTEND_TAGS},${DOCKER_REPOSITORY}:frontend-v${RELEASE_VERSION}"'
+        in workflow
+    )
     assert 'IMAGE_VERSION="v${RELEASE_VERSION}"' in workflow
-    assert 'IMAGE_VERSION="${TARGET_BRANCH}-${GITHUB_SHA}"' in workflow
-    assert "image_version=${IMAGE_VERSION}" in workflow
-    assert "backend-v${RELEASE_VERSION}" in workflow
-    assert "frontend-v${RELEASE_VERSION}" in workflow
+    assert "ref: ${{ needs.release.outputs.release_tag }}" in workflow
+    assert "IMAGE_REVISION=$(git rev-parse HEAD)" in workflow
+    assert (
+        "org.opencontainers.image.revision=${{ steps.tags.outputs.image_revision }}"
+        in workflow
+    )
+    docker_job_header = workflow.split("  docker:", 1)[1].split("    steps:", 1)[0]
+    assert "github.event_name == 'push'" not in docker_job_header
+    assert "github.ref == 'refs/heads/main'" not in docker_job_header
 
 
 def test_docker_compose_allows_localhost_and_loopback_frontend_origins():
@@ -158,3 +184,53 @@ def test_alembic_has_single_migration_head():
     heads = script.get_heads()
 
     assert len(heads) == 1, f"Alembic 迁移存在多个 head: {heads}"
+
+
+def test_llm_model_embedding_migration_exists_with_short_revision_id():
+    migration_files = sorted((ROOT / "alembic" / "versions").glob("*embedding*.py"))
+
+    assert migration_files, "缺少 embedding 模型配置迁移文件"
+
+    migration_path = migration_files[0]
+    module = ast.parse(migration_path.read_text(encoding="utf-8"))
+
+    revision = None
+    down_revision = None
+    column_names: set[str] = set()
+
+    for node in module.body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == "revision":
+                revision = ast.literal_eval(node.value)
+            if node.target.id == "down_revision":
+                down_revision = ast.literal_eval(node.value)
+        if isinstance(node, ast.FunctionDef) and node.name == "upgrade":
+            for stmt in ast.walk(node):
+                if (
+                    isinstance(stmt, ast.Call)
+                    and isinstance(stmt.func, ast.Attribute)
+                    and stmt.func.attr == "add_column"
+                    and len(stmt.args) >= 2
+                    and isinstance(stmt.args[1], ast.Call)
+                ):
+                    column_call = stmt.args[1]
+                    if (
+                        isinstance(column_call.func, ast.Attribute)
+                        and column_call.func.attr == "Column"
+                        and column_call.args
+                        and isinstance(column_call.args[0], ast.Constant)
+                    ):
+                        column_names.add(column_call.args[0].value)
+
+    assert revision is not None, f"{migration_path.name} 缺少 revision 定义"
+    assert len(revision) <= 32, (
+        f"{migration_path.name} 的 revision 过长({len(revision)}): {revision}"
+    )
+    assert down_revision == "20260615_merge_cost_heads"
+    assert column_names == {
+        "model_type",
+        "embedding_api_style",
+        "embedding_dimensions",
+        "embedding_batch_size",
+        "embedding_max_input_tokens",
+    }

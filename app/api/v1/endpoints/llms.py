@@ -34,6 +34,11 @@ from app.schemas.llm_provider import (
 )
 from app.services.llm_usage import list_quick_test_usage_logs
 from app.services.llm_context import truncate_messages_for_context
+from app.services.embedding_client import (
+    EmbeddingClient,
+    EmbeddingClientError,
+    EmbeddingRequest,
+)
 from app.services.model_costs import apply_cost_to_usage_log
 from app.services.system_settings import (
     DEFAULT_QUICK_TEST_TIMEOUT,
@@ -611,6 +616,13 @@ def invoke_llm(
     model_name, target_model = _determine_model_for_invocation(db, provider, payload)
     base_url = _resolve_base_url_or_400(provider)
 
+    if target_model and target_model.model_type == "embedding":
+        return _invoke_embedding_model(
+            provider=provider,
+            model=target_model,
+            payload=payload,
+        )
+
     request_payload: dict[str, Any] = dict(payload.parameters)
     if payload.temperature is not None:
         request_payload.setdefault("temperature", payload.temperature)
@@ -777,6 +789,54 @@ def invoke_llm(
             )
 
     return response_payload
+
+
+def _invoke_embedding_model(
+    *,
+    provider: LLMProvider,
+    model: LLMModel,
+    payload: LLMInvocationRequest,
+) -> dict[str, Any]:
+    texts = [
+        str(message.content)
+        for message in payload.messages
+        if message.role == "user" and message.content is not None
+    ]
+    if not texts:
+        texts = ["hello"]
+
+    client = EmbeddingClient(provider=provider, model=model)
+    try:
+        result = client.embed_texts(
+            EmbeddingRequest(
+                provider_id=provider.id,
+                model_id=model.id,
+                texts=[texts[-1]],
+            )
+        )
+    except EmbeddingClientError as exc:
+        logger.error(
+            "Embedding 模型检测失败: provider_id=%s model=%s 错误=%s",
+            provider.id,
+            model.name,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
+
+    dimensions = len(result.embeddings[0]) if result.embeddings else 0
+    logger.info(
+        "Embedding 模型检测成功: provider_id=%s model=%s dimensions=%s",
+        provider.id,
+        model.name,
+        dimensions,
+    )
+    return {
+        "model": result.model_name,
+        "object": "embedding_check",
+        "embedding_dimensions": dimensions,
+    }
 
 
 @router.post(

@@ -7,6 +7,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.llm_provider import LLMModel, LLMProvider
 from app.models.result import Result
 from app.models.test_run import TestRun
 from app.models.prompt_test import PromptTestTask, PromptTestUnit
@@ -14,7 +15,6 @@ from app.schemas.analysis_module import (
     AnalysisContext,
     AnalysisResult,
     AnalysisResultPayload,
-    AnalysisTargetType,
     ModuleExecutionRequest,
 )
 from app.services.analysis_registry import (
@@ -26,6 +26,7 @@ from app.services.analysis_registry import (
     get_analysis_execution_service,
     get_analysis_registry,
 )
+from app.services.semantic_similarity import build_variable_case_hash
 
 
 class AnalysisTaskNotFoundError(Exception):
@@ -139,6 +140,41 @@ def _safe_int(value: Any) -> int | None:
     return None
 
 
+def _with_resolved_embedding_config(
+    db: Session,
+    request: ModuleExecutionRequest,
+) -> ModuleExecutionRequest:
+    if request.module_id != "semantic_consistency_diversity":
+        return request
+
+    params = dict(request.parameters or {})
+    if params.get("embedding_client") is not None:
+        return request
+    if (
+        params.get("embedding_provider") is not None
+        and params.get("embedding_model") is not None
+    ):
+        return request
+
+    provider_id = _safe_int(params.get("embedding_provider_id"))
+    model_id = _safe_int(params.get("embedding_model_id"))
+    if provider_id is None or model_id is None:
+        return request
+
+    provider = db.get(LLMProvider, provider_id)
+    model = db.get(LLMModel, model_id)
+    if provider is None or provider.is_archived:
+        raise AnalysisDataLoadError("Embedding 提供方不存在或已归档。")
+    if model is None or model.provider_id != provider.id:
+        raise AnalysisDataLoadError("Embedding 模型不存在或不属于指定提供方。")
+    if model.model_type != "embedding":
+        raise AnalysisDataLoadError("所选模型不是 embedding 模型。")
+
+    params["embedding_provider"] = provider
+    params["embedding_model"] = model
+    return request.model_copy(update={"parameters": params})
+
+
 def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
     columns = [
         "task_id",
@@ -153,6 +189,10 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
         "temperature",
         "temperature_mode",
         "parameter_set",
+        "output_text",
+        "variables",
+        "variable_case_hash",
+        "semantic_objective",
     ]
 
     rows: list[dict[str, Any]] = []
@@ -184,6 +224,10 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
                         "llm_default" if unit.temperature is None else "explicit"
                     )
                 extra = unit.extra if isinstance(unit.extra, dict) else {}
+                variables = output.get("variables")
+                if not isinstance(variables, dict):
+                    variables = None
+                semantic_objective = _resolve_semantic_objective(unit, task)
                 rows.append(
                     {
                         "task_id": task.id,
@@ -198,6 +242,10 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
                         "temperature": unit.temperature,
                         "temperature_mode": temperature_mode,
                         "parameter_set": extra.get("parameter_label"),
+                        "output_text": output.get("output_text"),
+                        "variables": variables,
+                        "variable_case_hash": build_variable_case_hash(variables),
+                        "semantic_objective": semantic_objective,
                     }
                 )
 
@@ -205,6 +253,19 @@ def _build_prompt_test_dataframe(task: PromptTestTask) -> pd.DataFrame:
         return pd.DataFrame(columns=columns)
 
     return pd.DataFrame(rows, columns=columns)
+
+
+def _resolve_semantic_objective(
+    unit: PromptTestUnit,
+    task: PromptTestTask,
+) -> str:
+    unit_extra = unit.extra if isinstance(unit.extra, dict) else {}
+    task_config = task.config if isinstance(task.config, dict) else {}
+    for source in (unit_extra, task_config):
+        value = source.get("semantic_objective")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "consistency"
 
 
 def serialize_analysis_result(
@@ -237,6 +298,7 @@ def execute_module_for_test_run(
     dependencies: AnalysisExecutionDependencies | None = None,
 ) -> AnalysisResult:
     deps = dependencies or get_execution_dependencies()
+    request = _with_resolved_embedding_config(db, request)
     task_id = _parse_task_id(request.task_id)
     test_run = _load_test_run(db, task_id)
     data_frame = _load_results_dataframe(db, task_id)
@@ -263,6 +325,7 @@ def execute_module_for_prompt_test_task(
     dependencies: AnalysisExecutionDependencies | None = None,
 ) -> AnalysisResult:
     deps = dependencies or get_execution_dependencies()
+    request = _with_resolved_embedding_config(db, request)
     task_id = _parse_task_id(request.task_id)
     task = _load_prompt_test_task(db, task_id)
     data_frame = _build_prompt_test_dataframe(task)

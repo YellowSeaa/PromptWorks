@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
-    BACKEND_CORS_ORIGINS: list[str] | str = ["http://localhost:5173"]
+    BACKEND_CORS_ORIGINS: list[str] | str = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
     BACKEND_CORS_ALLOW_CREDENTIALS: bool = True
 
     model_config = SettingsConfigDict(

@@ -28,9 +28,39 @@ export interface AnalysisChartMeta {
 export interface AnalysisChartConfig {
   id: string
   title: string
+  type?: string | null
+  x?: string | null
+  y?: string | null
   description?: string | null
   option: Record<string, unknown>
   meta?: AnalysisChartMeta
+}
+
+export type SemanticAnalysisObjective = 'consistency' | 'diversity' | 'balanced' | string
+
+export type SemanticAnalysisGroupStatus = 'ok' | 'insufficient_samples' | string
+
+export interface SemanticAnalysisGroupSummary {
+  unit_id?: number | string | null
+  unit_name?: string | null
+  variable_case_hash?: string | null
+  variable_case_label?: string | null
+  semantic_objective?: SemanticAnalysisObjective | null
+  sample_count?: number | null
+  mean_pairwise_similarity?: number | null
+  min_pairwise_similarity?: number | null
+  centroid_similarity_mean?: number | null
+  semantic_dispersion?: number | null
+  outlier_count?: number | null
+  outlier_output_ids?: string[] | null
+  status?: SemanticAnalysisGroupStatus | null
+  interpretation_level?: string | null
+  interpretation?: string | null
+}
+
+export interface SemanticAnalysisSummary {
+  group_count?: number | null
+  group_summaries?: SemanticAnalysisGroupSummary[] | null
 }
 
 export interface AnalysisUnitLink {
@@ -85,6 +115,7 @@ export interface AnalysisResultPayload {
     charts?: AnalysisChartConfig[] | null
     unit_links?: AnalysisUnitLink[] | null
     insight_details?: AnalysisInsightDetail[] | null
+    semantic_summary?: SemanticAnalysisSummary | null
   } & Record<string, unknown>
 }
 

@@ -5,6 +5,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+LLM_MODEL_TYPES = {"chat", "embedding", "rerank"}
+EMBEDDING_API_STYLES = {"openai_compatible"}
+
 
 class LLMCostTier(BaseModel):
     up_to_context_tokens: int = Field(
@@ -20,6 +23,10 @@ class LLMCostTier(BaseModel):
 
 class LLMModelBase(BaseModel):
     name: str = Field(..., description="模型唯一名称")
+    model_type: str = Field(
+        default="chat",
+        description="模型用途类型，可选 chat、embedding、rerank",
+    )
     capability: str | None = Field(
         default=None, description="可选的能力标签，例如对话、推理"
     )
@@ -55,6 +62,38 @@ class LLMModelBase(BaseModel):
     cost_tiers: list[LLMCostTier] | None = Field(
         default=None, description="按上下文长度匹配的阶梯价格"
     )
+    embedding_api_style: str | None = Field(
+        default=None, max_length=50, description="embedding 调用协议风格"
+    )
+    embedding_dimensions: int | None = Field(
+        default=None, ge=1, le=100_000, description="embedding 向量维度"
+    )
+    embedding_batch_size: int | None = Field(
+        default=None, ge=1, le=128, description="embedding 单次请求最大批量"
+    )
+    embedding_max_input_tokens: int | None = Field(
+        default=None, ge=1, le=2_000_000, description="embedding 单条输入最大 token 数"
+    )
+
+    @field_validator("model_type")
+    @classmethod
+    def normalize_model_type(cls, value: str) -> str:
+        text = value.strip().lower()
+        if text not in LLM_MODEL_TYPES:
+            raise ValueError("model_type 仅支持 chat、embedding、rerank")
+        return text
+
+    @field_validator("embedding_api_style")
+    @classmethod
+    def normalize_embedding_api_style(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().lower()
+        if not text:
+            return None
+        if text not in EMBEDDING_API_STYLES:
+            raise ValueError("embedding_api_style 当前仅支持 openai_compatible")
+        return text
 
     @field_validator("cost_currency", "cost_display_currency")
     @classmethod
@@ -77,6 +116,9 @@ class LLMModelCreate(LLMModelBase):
 
 
 class LLMModelUpdate(BaseModel):
+    model_type: str | None = Field(
+        default=None, description="模型用途类型，可选 chat、embedding、rerank"
+    )
     capability: str | None = Field(default=None, description="可选的能力标签")
     quota: str | None = Field(default=None, description="配额或调用策略说明")
     concurrency_limit: int | None = Field(
@@ -98,6 +140,32 @@ class LLMModelUpdate(BaseModel):
     cost_input_per_unit: float | None = Field(default=None, ge=0)
     cost_output_per_unit: float | None = Field(default=None, ge=0)
     cost_tiers: list[LLMCostTier] | None = None
+    embedding_api_style: str | None = Field(default=None, max_length=50)
+    embedding_dimensions: int | None = Field(default=None, ge=1, le=100_000)
+    embedding_batch_size: int | None = Field(default=None, ge=1, le=128)
+    embedding_max_input_tokens: int | None = Field(default=None, ge=1, le=2_000_000)
+
+    @field_validator("model_type")
+    @classmethod
+    def normalize_optional_model_type(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().lower()
+        if text not in LLM_MODEL_TYPES:
+            raise ValueError("model_type 仅支持 chat、embedding、rerank")
+        return text
+
+    @field_validator("embedding_api_style")
+    @classmethod
+    def normalize_optional_embedding_api_style(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip().lower()
+        if not text:
+            return None
+        if text not in EMBEDDING_API_STYLES:
+            raise ValueError("embedding_api_style 当前仅支持 openai_compatible")
+        return text
 
     @field_validator("cost_currency", "cost_display_currency")
     @classmethod

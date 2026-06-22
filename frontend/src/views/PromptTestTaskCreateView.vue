@@ -264,6 +264,63 @@
               {{ t('promptTestCreate.form.tips.analysisModules') }}
             </p>
           </el-form-item>
+          <div
+            v-if="taskForm.analysisModules.includes(SEMANTIC_ANALYSIS_MODULE_ID)"
+            class="semantic-analysis-config"
+          >
+            <el-form-item :label="t('promptTestCreate.form.fields.semanticEmbeddingModel')">
+              <el-select
+                v-model="taskForm.semanticEmbeddingModelKey"
+                filterable
+                clearable
+                :loading="providerLoading"
+                :placeholder="t('promptTestCreate.form.placeholders.semanticEmbeddingModel')"
+              >
+                <el-option
+                  v-for="option in embeddingModelOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                >
+                  <div class="analysis-option">
+                    <span class="analysis-option__title">{{ option.modelName }}</span>
+                    <span class="analysis-option__desc">{{ option.providerName }}</span>
+                  </div>
+                </el-option>
+              </el-select>
+              <p class="form-tip">
+                {{
+                  embeddingModelOptions.length
+                    ? t('promptTestCreate.form.tips.semanticEmbeddingModel')
+                    : t('promptTestResult.analysis.parameters.noEmbeddingModels')
+                }}
+              </p>
+            </el-form-item>
+            <div class="semantic-analysis-config__grid">
+              <el-form-item :label="t('promptTestCreate.form.fields.semanticObjective')">
+                <el-select v-model="taskForm.semanticObjective">
+                  <el-option
+                    v-for="option in semanticObjectiveOptions"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+                <p class="form-tip">{{ t('promptTestCreate.form.tips.semanticObjective') }}</p>
+              </el-form-item>
+              <el-form-item :label="t('promptTestCreate.form.fields.semanticMaxSamples')">
+                <el-input-number
+                  v-model="taskForm.semanticMaxSamplesPerGroup"
+                  :min="2"
+                  :max="1000"
+                  :step="10"
+                  controls-position="right"
+                  class="semantic-analysis-config__number"
+                />
+                <p class="form-tip">{{ t('promptTestCreate.form.tips.semanticMaxSamples') }}</p>
+              </el-form-item>
+            </div>
+          </div>
           <el-form-item :label="t('promptTestCreate.form.fields.aiScoring')">
             <div class="ai-scoring-config">
               <el-switch
@@ -418,6 +475,14 @@ import type { AnalysisModuleDefinition } from '../types/analysis'
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
 import {
+  buildEmbeddingModelOptions,
+  buildSemanticAnalysisParameters,
+  hasCallableChatModel,
+  semanticModelKeyFromParameters,
+  SEMANTIC_ANALYSIS_MODULE_ID,
+  type SemanticObjectiveValue
+} from '../utils/analysisSemanticConfig'
+import {
   analyzePromptVariableWarnings,
   buildPromptVariableWarningSections,
   type PromptVariableVersion
@@ -500,6 +565,9 @@ const taskForm = reactive({
   promptVersionIds: [] as number[],
   autoExecute: true,
   analysisModules: [] as string[],
+  semanticEmbeddingModelKey: '',
+  semanticObjective: 'consistency' as SemanticObjectiveValue,
+  semanticMaxSamplesPerGroup: 100,
   aiScoringEnabled: false,
   aiScoringModelKey: ''
 })
@@ -578,17 +646,20 @@ const modelOptionGroups = computed<ModelOptionGroup[]>(() => {
   if (!providers.value.length) return []
   return providers.value
     .filter((provider) => !provider.is_archived)
+    .filter((provider) => hasCallableChatModel(provider))
     .map((provider) => ({
       providerId: provider.id,
       label: provider.provider_name,
-      options: provider.models.map((model) => ({
-        value: `${provider.id}:${model.id}`,
-        label: model.name,
-        providerId: provider.id,
-        providerName: provider.provider_name,
-        modelId: model.id,
-        modelName: model.name
-      }))
+      options: provider.models
+        .filter((model) => model.model_type === 'chat')
+        .map((model) => ({
+          value: `${provider.id}:${model.id}`,
+          label: model.name,
+          providerId: provider.id,
+          providerName: provider.provider_name,
+          modelId: model.id,
+          modelName: model.name
+        }))
     }))
     .filter((group) => group.options.length > 0)
 })
@@ -617,6 +688,21 @@ const selectedScoringModel = computed<ModelInfo | null>(() => {
   if (!taskForm.aiScoringEnabled || !taskForm.aiScoringModelKey) return null
   return modelOptionMap.value.get(taskForm.aiScoringModelKey) ?? null
 })
+const embeddingModelOptions = computed(() => buildEmbeddingModelOptions(providers.value))
+const semanticObjectiveOptions = computed(() => [
+  {
+    value: 'consistency' as SemanticObjectiveValue,
+    label: t('promptTestCreate.form.semanticObjectives.consistency')
+  },
+  {
+    value: 'diversity' as SemanticObjectiveValue,
+    label: t('promptTestCreate.form.semanticObjectives.diversity')
+  },
+  {
+    value: 'balanced' as SemanticObjectiveValue,
+    label: t('promptTestCreate.form.semanticObjectives.balanced')
+  }
+])
 const baseNameCustomized = ref(false)
 let syncingBaseName = false
 
@@ -733,6 +819,23 @@ watch(
     }
   },
   { deep: true }
+)
+
+watch(
+  [embeddingModelOptions, () => taskForm.analysisModules],
+  ([options]) => {
+    if (!taskForm.analysisModules.includes(SEMANTIC_ANALYSIS_MODULE_ID)) {
+      return
+    }
+    if (
+      taskForm.semanticEmbeddingModelKey &&
+      options.some((option) => option.value === taskForm.semanticEmbeddingModelKey)
+    ) {
+      return
+    }
+    taskForm.semanticEmbeddingModelKey = options[0]?.value ?? ''
+  },
+  { deep: true, immediate: true }
 )
 
 watch(
@@ -981,6 +1084,20 @@ async function hydrateFormFromTask(taskData: PromptTestTask, unitList: PromptTes
     typeof autoExecuteConfig === 'boolean' ? autoExecuteConfig : true
   const analysisModules = extractStringArray(configRecord['analysis_modules'])
   taskForm.analysisModules = [...analysisModules]
+  const analysisParameters = toRecord(configRecord['analysis_module_parameters'])
+  const semanticParameters = toRecord(
+    analysisParameters?.[SEMANTIC_ANALYSIS_MODULE_ID]
+  )
+  taskForm.semanticEmbeddingModelKey = semanticModelKeyFromParameters(semanticParameters)
+  const semanticObjective = semanticParameters?.['objective_override']
+  taskForm.semanticObjective =
+    semanticObjective === 'diversity' || semanticObjective === 'balanced'
+      ? semanticObjective
+      : 'consistency'
+  const semanticMaxSamples = toPositiveInteger(
+    semanticParameters?.['max_samples_per_group']
+  )
+  taskForm.semanticMaxSamplesPerGroup = semanticMaxSamples ?? 100
   const aiScoring = toRecord(configRecord['ai_scoring'])
   taskForm.aiScoringEnabled = Boolean(aiScoring?.enabled)
   const evaluatorProviderId = toPositiveInteger(aiScoring?.evaluator_provider_id)
@@ -1530,6 +1647,13 @@ async function handleSubmit() {
     ElMessage.warning(t('promptTestCreate.messages.aiScoringModelRequired'))
     return
   }
+  if (
+    taskForm.analysisModules.includes(SEMANTIC_ANALYSIS_MODULE_ID) &&
+    !taskForm.semanticEmbeddingModelKey
+  ) {
+    ElMessage.warning(t('promptTestCreate.messages.semanticEmbeddingModelRequired'))
+    return
+  }
   if (!parameterSets.value.length) {
     ElMessage.warning(t('promptTestCreate.messages.parameterSetRequired'))
     return
@@ -1676,6 +1800,16 @@ async function handleSubmit() {
     : {
         enabled: false
       }
+  const analysisModuleParameters =
+    taskForm.analysisModules.includes(SEMANTIC_ANALYSIS_MODULE_ID)
+      ? {
+          [SEMANTIC_ANALYSIS_MODULE_ID]: buildSemanticAnalysisParameters(
+            taskForm.semanticEmbeddingModelKey,
+            taskForm.semanticObjective,
+            taskForm.semanticMaxSamplesPerGroup
+          )
+        }
+      : {}
 
   try {
     const payload = {
@@ -1698,6 +1832,7 @@ async function handleSubmit() {
         variable_headers: unitForm.variableHeaders,
         variable_source: unitForm.variableInputMode,
         analysis_modules: taskForm.analysisModules,
+        analysis_module_parameters: analysisModuleParameters,
         ai_scoring: aiScoringConfig
       },
       auto_execute: taskForm.autoExecute,
@@ -1872,6 +2007,49 @@ onMounted(() => {
   color: var(--text-weak-color);
 }
 
+.semantic-analysis-config {
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.semantic-analysis-config__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.semantic-analysis-config__grid :deep(.el-form-item) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin-bottom: 0;
+}
+
+.semantic-analysis-config__grid :deep(.el-form-item__label) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 32px;
+  margin-bottom: 8px;
+  line-height: 32px;
+  text-align: left;
+}
+
+.semantic-analysis-config__grid :deep(.el-form-item__content) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  line-height: normal;
+}
+
+.semantic-analysis-config__number {
+  width: 100%;
+}
+
 .inline-control {
   display: flex;
   align-items: center;
@@ -1881,6 +2059,12 @@ onMounted(() => {
 
 .inline-control .el-slider {
   flex: 1;
+}
+
+@media (max-width: 768px) {
+  .semantic-analysis-config__grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .prompt-version-option {

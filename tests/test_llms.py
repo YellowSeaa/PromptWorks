@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from types import TracebackType
 from typing import Any, Literal
@@ -34,9 +35,13 @@ def test_list_common_providers(client):
     assert response.status_code == 200
     data = response.json()
     keys = {item["key"] for item in data}
-    assert {"openai", "anthropic"}.issubset(keys)
+    assert {"openai", "anthropic", "ollama"}.issubset(keys)
     openai = next(item for item in data if item["key"] == "openai")
     assert openai["base_url"] == "https://api.openai.com/v1"
+    ollama = next(item for item in data if item["key"] == "ollama")
+    assert ollama["name"] == "Ollama"
+    assert ollama["base_url"] == "http://localhost:11434/v1"
+    assert ollama["logo_url"] and ollama["logo_url"].endswith("/ollama.svg")
 
 
 def test_create_known_provider_without_base_url(client):
@@ -206,6 +211,63 @@ def test_invoke_llm_uses_request_parameters_only(client, monkeypatch):
     assert "temperature" not in captured["json"]
     assert captured["json"]["max_tokens"] == 128
     assert captured["timeout"] == DEFAULT_QUICK_TEST_TIMEOUT
+
+
+def test_invoke_embedding_model_uses_embeddings_endpoint(client, monkeypatch):
+    provider = create_provider(
+        client,
+        {
+            "provider_name": "Local Embedding",
+            "api_key": "local-key",
+            "is_custom": True,
+            "base_url": "http://localhost:11434/v1",
+        },
+    )
+    model = create_model(
+        client,
+        provider["id"],
+        {
+            "name": "nomic-embed-text",
+            "model_type": "embedding",
+            "embedding_api_style": "openai_compatible",
+            "embedding_dimensions": 2,
+        },
+    )
+
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["headers"] = dict(request.headers)
+        captured["json"] = json.loads(request.read().decode("utf-8"))
+        return httpx.Response(200, json={"data": [{"embedding": [0.1, 0.2]}]})
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(
+        "app.services.embedding_client.httpx.Client",
+        lambda: http_client,
+    )
+
+    response = client.post(
+        f"{API_PREFIX}/{provider['id']}/invoke",
+        json={
+            "model_id": model["id"],
+            "messages": [{"role": "user", "content": "hello"}],
+            "parameters": {},
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["url"] == "http://localhost:11434/v1/embeddings"
+    assert captured["headers"]["content-type"] == "application/json"
+    assert captured["headers"]["authorization"] == "Bearer local-key"
+    assert captured["json"] == {
+        "model": "nomic-embed-text",
+        "input": ["hello"],
+        "dimensions": 2,
+    }
+    assert response.json()["model"] == "nomic-embed-text"
+    assert response.json()["embedding_dimensions"] == 2
 
 
 def test_invoke_llm_respects_custom_timeout(client, db_session, monkeypatch):

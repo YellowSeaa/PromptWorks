@@ -173,6 +173,38 @@ def test_execute_prompt_test_experiment_generates_metrics(db_session, monkeypatc
     assert latest_log.prompt_tokens is not None or latest_log.total_tokens is not None
 
 
+def test_execute_prompt_test_experiment_rejects_embedding_model(db_session):
+    prompt_version = _create_prompt_version(db_session)
+    provider = LLMProvider(
+        provider_name="EmbeddingOnly",
+        provider_key=None,
+        api_key="fake-key",
+        is_custom=True,
+        base_url="https://embedding.fake/api",
+    )
+    model = LLMModel(
+        provider=provider,
+        name="nomic-embed-text",
+        model_type="embedding",
+    )
+    task = PromptTestTask(name="误选向量模型", prompt_version_id=prompt_version.id)
+    unit = PromptTestUnit(
+        task=task,
+        prompt_version_id=prompt_version.id,
+        name="不应执行",
+        model_name=model.name,
+        llm_provider_id=provider.id,
+        rounds=1,
+        extra={"llm_model_id": model.id},
+    )
+    experiment = PromptTestExperiment(unit=unit, sequence=1)
+    db_session.add_all([provider, model, task, unit, experiment])
+    db_session.commit()
+
+    with pytest.raises(prompt_test_engine.PromptTestExecutionError, match="chat"):
+        execute_prompt_test_experiment(db_session, experiment)
+
+
 def test_execute_prompt_test_experiment_omits_default_temperature(
     db_session, monkeypatch
 ):

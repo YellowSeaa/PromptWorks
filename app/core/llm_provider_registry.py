@@ -104,6 +104,17 @@ _COMMON_PROVIDERS: Dict[str, ProviderDefaults] = {
             "packages/static-svg/icons/volcengine.svg"
         ),
     ),
+    "ollama": ProviderDefaults(
+        key="ollama",
+        name="Ollama",
+        base_url="http://localhost:11434/v1",
+        logo_emoji=None,
+        description="本地运行开源模型的 OpenAI 兼容接口，默认连接本机 11434 端口。",
+        logo_url=(
+            "https://raw.githubusercontent.com/lobehub/lobe-icons/master/"
+            "packages/static-svg/icons/ollama.svg"
+        ),
+    ),
     "zhipu": ProviderDefaults(
         key="zhipu",
         name="智谱开放平台",

@@ -10,6 +10,11 @@ export interface KnownLLMProvider {
 export interface LLMModel {
   id: number
   name: string
+  model_type: LLMModelType
+  embedding_api_style: EmbeddingApiStyle | null
+  embedding_dimensions: number | null
+  embedding_batch_size: number | null
+  embedding_max_input_tokens: number | null
   capability: string | null
   quota: string | null
   concurrency_limit: number
@@ -24,6 +29,10 @@ export interface LLMModel {
   created_at: string
   updated_at: string
 }
+
+export type LLMModelType = 'chat' | 'embedding'
+
+export type EmbeddingApiStyle = 'openai_compatible'
 
 export interface LLMCostTier {
   up_to_context_tokens: number
@@ -69,6 +78,11 @@ export interface LLMProviderUpdatePayload {
 
 export interface LLMModelCreatePayload {
   name: string
+  model_type?: LLMModelType
+  embedding_api_style?: EmbeddingApiStyle | null
+  embedding_dimensions?: number | null
+  embedding_batch_size?: number | null
+  embedding_max_input_tokens?: number | null
   capability?: string | null
   quota?: string | null
   concurrency_limit?: number
@@ -83,6 +97,11 @@ export interface LLMModelCreatePayload {
 }
 
 export interface LLMModelUpdatePayload {
+  model_type?: LLMModelType
+  embedding_api_style?: EmbeddingApiStyle | null
+  embedding_dimensions?: number | null
+  embedding_batch_size?: number | null
+  embedding_max_input_tokens?: number | null
   capability?: string | null
   quota?: string | null
   concurrency_limit?: number

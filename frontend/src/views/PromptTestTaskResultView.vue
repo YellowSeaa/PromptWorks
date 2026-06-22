@@ -494,10 +494,23 @@
             v-for="moduleId in selectedAnalysisModules"
             :key="moduleId"
             class="analysis-module-card"
+            :class="{ 'analysis-module-card--collapsed': moduleStates[moduleId]?.collapsed }"
             shadow="hover"
           >
             <template #header>
-              <div class="analysis-module-card__header">
+              <div
+                class="analysis-module-card__header"
+                role="button"
+                tabindex="0"
+                :aria-label="
+                  moduleStates[moduleId]?.collapsed
+                    ? t('promptTestResult.analysis.actions.expand')
+                    : t('promptTestResult.analysis.actions.collapse')
+                "
+                @click="toggleAnalysisModuleCollapse(moduleId)"
+                @keydown.enter.prevent="toggleAnalysisModuleCollapse(moduleId)"
+                @keydown.space.prevent="toggleAnalysisModuleCollapse(moduleId)"
+              >
                 <div class="analysis-module-card__title">
                   <h4>{{ moduleStates[moduleId]?.definition.name || moduleId }}</h4>
                   <p
@@ -514,9 +527,20 @@
                   >
                     {{ t(`promptTestResult.analysis.status.${moduleStates[moduleId].status}`) }}
                   </el-tag>
+                  <el-tag
+                    v-if="moduleStates[moduleId].collapsed && moduleStates[moduleId].result"
+                    size="small"
+                    type="info"
+                    effect="plain"
+                  >
+                    {{
+                      t('promptTestResult.analysis.resultRows', {
+                        count: moduleStates[moduleId].result?.data.length ?? 0
+                      })
+                    }}
+                  </el-tag>
                   <el-button
                     size="small"
-                    text
                     :loading="moduleStates[moduleId].status === 'running'"
                     @click.stop="runAnalysisModule(moduleId)"
                   >
@@ -529,9 +553,15 @@
                 </div>
               </div>
             </template>
-            <div v-if="moduleStates[moduleId]" class="analysis-module-card__body">
+            <div
+              v-if="moduleStates[moduleId] && !moduleStates[moduleId].collapsed"
+              class="analysis-module-card__body"
+            >
               <div
-                v-if="moduleStates[moduleId].definition.parameters.length"
+                v-if="
+                  moduleStates[moduleId].definition.parameters.length &&
+                  moduleId !== SEMANTIC_ANALYSIS_MODULE_ID
+                "
                 class="analysis-params"
               >
                 <el-form label-position="top" size="small" class="analysis-params__form">
@@ -574,6 +604,77 @@
                       />
                     </template>
                     <p v-if="param.help_text" class="analysis-param-tip">{{ param.help_text }}</p>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <div v-else-if="moduleId === SEMANTIC_ANALYSIS_MODULE_ID" class="analysis-params">
+                <el-form label-position="top" size="small" class="analysis-params__form">
+                  <el-form-item
+                    :label="t('promptTestResult.analysis.parameters.embeddingModel')"
+                    required
+                    class="analysis-param-item analysis-param-item--wide"
+                  >
+                    <el-select
+                      v-model="moduleStates[moduleId].form.semantic_embedding_model_key"
+                      filterable
+                      clearable
+                      class="analysis-param-input"
+                      :placeholder="t('promptTestResult.analysis.parameters.embeddingModelPlaceholder')"
+                    >
+                      <el-option
+                        v-for="option in embeddingModelOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      >
+                        <div class="analysis-option">
+                          <span class="analysis-option__title">{{ option.modelName }}</span>
+                          <span class="analysis-option__desc">{{ option.providerName }}</span>
+                        </div>
+                      </el-option>
+                    </el-select>
+                    <p class="analysis-param-tip">
+                      {{
+                        embeddingModelOptions.length
+                          ? t('promptTestResult.analysis.parameters.embeddingModelHelp')
+                          : t('promptTestResult.analysis.parameters.noEmbeddingModels')
+                      }}
+                    </p>
+                  </el-form-item>
+                  <el-form-item
+                    :label="t('promptTestResult.analysis.parameters.objective')"
+                    class="analysis-param-item"
+                  >
+                    <el-select
+                      v-model="moduleStates[moduleId].form.objective_override"
+                      class="analysis-param-input"
+                    >
+                      <el-option
+                        v-for="option in semanticObjectiveOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                    <p class="analysis-param-tip">
+                      {{ t('promptTestResult.analysis.parameters.objectiveHelp') }}
+                    </p>
+                  </el-form-item>
+                  <el-form-item
+                    :label="t('promptTestResult.analysis.parameters.maxSamples')"
+                    class="analysis-param-item"
+                  >
+                    <el-input-number
+                      v-model="moduleStates[moduleId].form.max_samples_per_group"
+                      :min="2"
+                      :max="1000"
+                      :step="10"
+                      controls-position="right"
+                      class="analysis-param-input"
+                    />
+                    <p class="analysis-param-tip">
+                      {{ t('promptTestResult.analysis.parameters.maxSamplesHelp') }}
+                    </p>
                   </el-form-item>
                 </el-form>
               </div>
@@ -665,6 +766,100 @@
                     </template>
                   </ul>
                 </el-alert>
+                <div
+                  v-if="semanticAnalysisReportByModule[moduleId]"
+                  class="analysis-semantic-summary"
+                >
+                  <div class="analysis-semantic-summary__header">
+                    <div>
+                      <h5>{{ t('promptTestResult.analysis.semantic.title') }}</h5>
+                      <p>{{ t('promptTestResult.analysis.semantic.scope') }}</p>
+                    </div>
+                    <el-tag size="small" type="info">
+                      {{
+                        t('promptTestResult.analysis.semantic.groupCount', {
+                          count: semanticAnalysisReportByModule[moduleId]?.groupCount ?? 0
+                        })
+                      }}
+                    </el-tag>
+                  </div>
+                  <el-alert
+                    :title="getSemanticObjectiveDescription(semanticAnalysisReportByModule[moduleId])"
+                    type="success"
+                    show-icon
+                    :closable="false"
+                    class="analysis-semantic-summary__objective"
+                  />
+                  <el-descriptions
+                    :column="3"
+                    size="small"
+                    border
+                    class="analysis-semantic-summary__metrics"
+                  >
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.comparableGroups')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.comparableGroupCount ?? 0 }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.insufficientGroups')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.insufficientGroupCount ?? 0 }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.outlierGroups')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.outlierGroupCount ?? 0 }}
+                    </el-descriptions-item>
+                    <el-descriptions-item
+                      :label="t('promptTestResult.analysis.semantic.metrics.outlierSamples')"
+                    >
+                      {{ semanticAnalysisReportByModule[moduleId]?.outlierSampleCount ?? 0 }}
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <div
+                    v-if="semanticAnalysisReportByModule[moduleId]?.insufficientGroups.length"
+                    class="analysis-semantic-summary__section"
+                  >
+                    <span class="analysis-semantic-summary__section-title">
+                      {{ t('promptTestResult.analysis.semantic.insufficientTitle') }}
+                    </span>
+                    <div class="analysis-semantic-summary__tags">
+                      <el-tag
+                        v-for="group in semanticAnalysisReportByModule[moduleId]?.insufficientGroups"
+                        :key="`insufficient-${group.key}`"
+                        size="small"
+                        type="warning"
+                        effect="plain"
+                      >
+                        {{ group.label }}
+                      </el-tag>
+                    </div>
+                  </div>
+                  <div
+                    v-if="semanticAnalysisReportByModule[moduleId]?.outlierGroups.length"
+                    class="analysis-semantic-summary__section"
+                  >
+                    <span class="analysis-semantic-summary__section-title">
+                      {{ t('promptTestResult.analysis.semantic.outlierTitle') }}
+                    </span>
+                    <ul class="analysis-semantic-summary__outliers">
+                      <li
+                        v-for="group in semanticAnalysisReportByModule[moduleId]?.outlierGroups"
+                        :key="`outlier-${group.key}`"
+                      >
+                        <span>{{ group.label }}</span>
+                        <span class="analysis-semantic-summary__muted">
+                          {{
+                            t('promptTestResult.analysis.semantic.outlierSamples', {
+                              samples: group.outlierOutputIds.join(', ') || '-'
+                            })
+                          }}
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
                 <el-table
                   :data="moduleStates[moduleId].result.data"
                   size="small"
@@ -679,7 +874,7 @@
                     :label="meta.label"
                   >
                     <template #default="{ row }">
-                      {{ formatAnalysisCell(row[meta.name]) }}
+                      {{ formatAnalysisCell(row[meta.name], meta.name) }}
                     </template>
                   </el-table-column>
                 </el-table>
@@ -826,6 +1021,19 @@ import type {
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import {
+  buildAnalysisChartOption,
+  buildEmbeddingModelOptions,
+  buildSemanticAnalysisParameters,
+  formatSemanticMetricValue,
+  formatSemanticObjective,
+  normalizeAnalysisModuleCollapsed,
+  normalizeSemanticAnalysisChart,
+  semanticModelKeyFromParameters,
+  SEMANTIC_ANALYSIS_MODULE_ID,
+  toggleAnalysisModuleCollapsed,
+  type SemanticObjectiveValue
+} from '../utils/analysisSemanticConfig'
+import {
   attachScoresToResultUnits,
   buildPromptTestResultUnit,
   detectMissingOutput,
@@ -843,7 +1051,9 @@ import type {
   AnalysisChartConfig,
   AnalysisUnitLink,
   AnalysisInsightDetail,
-  AnalysisInsightUnitRef
+  AnalysisInsightUnitRef,
+  SemanticAnalysisGroupSummary,
+  SemanticAnalysisObjective
 } from '../types/analysis'
 
 type UnitOutput = PromptTestResultUnit['outputs'][number]
@@ -885,6 +1095,7 @@ type AnalysisRunStatus = 'idle' | 'running' | 'success' | 'error'
 interface AnalysisModuleState {
   definition: AnalysisModuleDefinition
   form: Record<string, unknown>
+  collapsed: boolean
   status: AnalysisRunStatus
   result: AnalysisResultPayload | null
   errorMessage: string | null
@@ -922,6 +1133,30 @@ interface CachedAnalysisSelection {
   moduleIds: string[]
 }
 
+interface SemanticAnalysisGroupView {
+  key: string
+  label: string
+  objective: SemanticAnalysisObjective | null
+  status: string | null
+  sampleCount: number | null
+  meanSimilarity: number | null
+  dispersion: number | null
+  outlierCount: number
+  outlierOutputIds: string[]
+}
+
+interface SemanticAnalysisReportView {
+  groupCount: number
+  comparableGroupCount: number
+  insufficientGroupCount: number
+  outlierGroupCount: number
+  outlierSampleCount: number
+  objectives: SemanticAnalysisObjective[]
+  groups: SemanticAnalysisGroupView[]
+  insufficientGroups: SemanticAnalysisGroupView[]
+  outlierGroups: SemanticAnalysisGroupView[]
+}
+
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useI18n()
@@ -947,6 +1182,16 @@ const rawResponseDialog = reactive({
 const optimizationVersionDialog = reactive({
   visible: false,
   selectedId: null as number | null
+})
+
+const semanticAnalysisReportByModule = computed<Record<string, SemanticAnalysisReportView | null>>(() => {
+  const reportMap: Record<string, SemanticAnalysisReportView | null> = {}
+  for (const [moduleId, state] of Object.entries(moduleStates)) {
+    reportMap[moduleId] = state.result?.module_id === 'semantic_consistency_diversity'
+      ? getSemanticAnalysisReport(moduleId)
+      : null
+  }
+  return reportMap
 })
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -1017,6 +1262,21 @@ const selectedScoringModel = computed<ModelInfo | null>(() => {
   if (!scoringModelKey.value) return null
   return scoringModelMap.value.get(scoringModelKey.value) ?? null
 })
+const embeddingModelOptions = computed(() => buildEmbeddingModelOptions(providers.value))
+const semanticObjectiveOptions = computed(() => [
+  {
+    value: 'consistency' as SemanticObjectiveValue,
+    label: t('promptTestResult.analysis.parameters.objectives.consistency')
+  },
+  {
+    value: 'diversity' as SemanticObjectiveValue,
+    label: t('promptTestResult.analysis.parameters.objectives.diversity')
+  },
+  {
+    value: 'balanced' as SemanticObjectiveValue,
+    label: t('promptTestResult.analysis.parameters.objectives.balanced')
+  }
+])
 
 const taskAIScoringConfig = computed(() => {
   const config = toRecord(task.value?.config ?? null)
@@ -1113,7 +1373,7 @@ const prebuiltChartInstances = new Map<string, Map<string, ECharts>>()
 const chartRenderRetryCount = new Map<string, number>()
 const restoredModuleIds = new Set<string>()
 const MAX_CHART_RENDER_RETRY = 5
-const ANALYSIS_CACHE_VERSION = 1
+const ANALYSIS_CACHE_VERSION = 2
 const ANALYSIS_CACHE_PREFIX = 'prompt-test-analysis'
 const ANALYSIS_SELECTION_PREFIX = 'prompt-test-analysis-selection'
 let analysisSelectionInitialized = false
@@ -1254,7 +1514,9 @@ function restoreModuleStateFromCache(moduleId: string) {
   state.result = cached.result
   state.status = cached.status ?? 'success'
   state.errorMessage = null
-  state.charts = Array.isArray(cached.charts) ? cached.charts : []
+  state.charts = Array.isArray(cached.charts)
+    ? cached.charts.map((chart, index) => normalizeAnalysisChart(moduleId, chart, index))
+    : []
   state.chartColumn = cached.chartColumn ?? null
   state.chartType = cached.chartType ?? null
   const formCache = cached.form ?? {}
@@ -1263,6 +1525,19 @@ function restoreModuleStateFromCache(moduleId: string) {
       state.form[param.key] = formCache[param.key]
     }
   })
+  if (moduleId === SEMANTIC_ANALYSIS_MODULE_ID) {
+    if (Object.prototype.hasOwnProperty.call(formCache, 'semantic_embedding_model_key')) {
+      state.form.semantic_embedding_model_key = formCache.semantic_embedding_model_key
+    } else {
+      state.form.semantic_embedding_model_key = semanticModelKeyFromParameters(formCache)
+    }
+    if (Object.prototype.hasOwnProperty.call(formCache, 'objective_override')) {
+      state.form.objective_override = formCache.objective_override
+    }
+    if (Object.prototype.hasOwnProperty.call(formCache, 'max_samples_per_group')) {
+      state.form.max_samples_per_group = formCache.max_samples_per_group
+    }
+  }
   state.unitLinks = Array.isArray(cached.unitLinks) ? cached.unitLinks : []
   state.unitLinkMapById.clear()
   state.unitLinkMapByLabel.clear()
@@ -1333,7 +1608,18 @@ function buildDefaultAnalysisForm(definition: AnalysisModuleDefinition): Record<
       form[param.key] = ''
     }
   })
+  if (definition.module_id === SEMANTIC_ANALYSIS_MODULE_ID) {
+    form.semantic_embedding_model_key = semanticModelKeyFromParameters(form)
+    form.objective_override = form.objective_override || 'consistency'
+    form.max_samples_per_group = form.max_samples_per_group || 100
+  }
   return form
+}
+
+function getConfiguredAnalysisParameters(moduleId: string): Record<string, unknown> {
+  const config = toRecord(task.value?.config ?? null)
+  const allParams = toRecord(config?.analysis_module_parameters)
+  return toRecord(allParams?.[moduleId]) ?? {}
 }
 
 function ensureModuleState(definition: AnalysisModuleDefinition) {
@@ -1352,6 +1638,12 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
         existing.form[param.key] = defaults[param.key]
       }
     })
+    Object.assign(existing.form, getConfiguredAnalysisParameters(definition.module_id))
+    if (definition.module_id === SEMANTIC_ANALYSIS_MODULE_ID) {
+      existing.form.semantic_embedding_model_key = semanticModelKeyFromParameters(existing.form)
+      existing.form.objective_override = existing.form.objective_override || 'consistency'
+      existing.form.max_samples_per_group = existing.form.max_samples_per_group || 100
+    }
     if (!Array.isArray(existing.charts)) {
       existing.charts = []
     }
@@ -1371,11 +1663,16 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     if (!Array.isArray(existing.insightDetails)) {
       existing.insightDetails = []
     }
+    existing.collapsed = normalizeAnalysisModuleCollapsed(existing.collapsed)
     return
   }
   moduleStates[definition.module_id] = {
     definition,
-    form: buildDefaultAnalysisForm(definition),
+    form: {
+      ...buildDefaultAnalysisForm(definition),
+      ...getConfiguredAnalysisParameters(definition.module_id)
+    },
+    collapsed: false,
     status: 'idle',
     result: null,
     errorMessage: null,
@@ -1389,10 +1686,36 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     insightDetails: [],
     autoTriggered: false
   }
+  if (definition.module_id === SEMANTIC_ANALYSIS_MODULE_ID) {
+    const form = moduleStates[definition.module_id].form
+    form.semantic_embedding_model_key = semanticModelKeyFromParameters(form)
+    form.objective_override = form.objective_override || 'consistency'
+    form.max_samples_per_group = form.max_samples_per_group || 100
+  }
 }
 
 function getModuleState(moduleId: string): AnalysisModuleState | null {
   return moduleStates[moduleId] ?? null
+}
+
+function refreshAnalysisModuleCharts(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state?.result) return
+  void nextTick(() => {
+    if (state.charts.length === 0) {
+      renderModuleChart(moduleId)
+    }
+    prebuiltChartInstances.get(moduleId)?.forEach((instance) => instance.resize())
+  })
+}
+
+function toggleAnalysisModuleCollapse(moduleId: string) {
+  const state = getModuleState(moduleId)
+  if (!state) return
+  const collapsed = toggleAnalysisModuleCollapsed(state)
+  if (!collapsed) {
+    refreshAnalysisModuleCharts(moduleId)
+  }
 }
 
 function extractConfiguredAnalysisModules(
@@ -1927,6 +2250,26 @@ function getPrebuiltCharts(moduleId: string): AnalysisChartConfig[] {
   return state.charts
 }
 
+function normalizeAnalysisChart(
+  moduleId: string,
+  chart: AnalysisChartConfig,
+  index: number
+): AnalysisChartConfig {
+  if (moduleId === SEMANTIC_ANALYSIS_MODULE_ID) {
+    return normalizeSemanticAnalysisChart(chart, index) as AnalysisChartConfig
+  }
+  return {
+    id: chart.id || `chart-${index}`,
+    title: chart.title ?? '',
+    type: typeof chart.type === 'string' ? chart.type : null,
+    x: typeof chart.x === 'string' ? chart.x : null,
+    y: typeof chart.y === 'string' ? chart.y : null,
+    description: chart.description ?? '',
+    option: JSON.parse(JSON.stringify(chart.option ?? {})),
+    meta: chart.meta ? JSON.parse(JSON.stringify(chart.meta)) : undefined
+  }
+}
+
 function getModuleRetryKey(moduleId: string): string {
   return `module:${moduleId}`
 }
@@ -2124,6 +2467,133 @@ function formatMetricValue(value: unknown): string {
   })
 }
 
+function getSemanticObjectiveLabels() {
+  return {
+    consistency: t('promptTestResult.analysis.semantic.objectives.consistency'),
+    diversity: t('promptTestResult.analysis.semantic.objectives.diversity'),
+    balanced: t('promptTestResult.analysis.semantic.objectives.balanced')
+  }
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
+function buildSemanticGroupView(
+  row: SemanticAnalysisGroupSummary,
+  index: number
+): SemanticAnalysisGroupView {
+  const unitName = typeof row.unit_name === 'string' && row.unit_name.trim()
+    ? row.unit_name.trim()
+    : null
+  const variableLabel =
+    typeof row.variable_case_label === 'string' && row.variable_case_label.trim()
+      ? row.variable_case_label.trim()
+      : null
+  const variableHash =
+    typeof row.variable_case_hash === 'string' && row.variable_case_hash.trim()
+      ? row.variable_case_hash.trim()
+      : null
+  const unitId = row.unit_id === null || row.unit_id === undefined ? null : String(row.unit_id)
+  const labelParts = [
+    unitName || (unitId ? `#${unitId}` : null) || t('promptTestResult.analysis.semantic.unknownUnit'),
+    variableLabel ||
+      (variableHash ? variableHash.slice(0, 8) : t('promptTestResult.analysis.semantic.unknownGroup'))
+  ].filter((part): part is string => Boolean(part))
+  return {
+    key: `${unitId ?? 'unknown'}-${variableHash ?? index}`,
+    label: labelParts.join(' · '),
+    objective: (row.semantic_objective as SemanticAnalysisObjective | null) ?? null,
+    status: typeof row.status === 'string' ? row.status : null,
+    sampleCount: toFiniteNumber(row.sample_count),
+    meanSimilarity:
+      toFiniteNumber(row.mean_pairwise_similarity) ??
+      toFiniteNumber(row.centroid_similarity_mean) ??
+      null,
+    dispersion: toFiniteNumber(row.semantic_dispersion),
+    outlierCount: toFiniteNumber(row.outlier_count) ?? 0,
+    outlierOutputIds: Array.isArray(row.outlier_output_ids)
+      ? row.outlier_output_ids.map((item) => String(item))
+      : []
+  }
+}
+
+function getSemanticAnalysisGroups(moduleId: string): SemanticAnalysisGroupView[] {
+  const state = getModuleState(moduleId)
+  const result = state?.result
+  if (!result || result.module_id !== 'semantic_consistency_diversity') {
+    return []
+  }
+  const summary = result.extra?.semantic_summary
+  const rows = Array.isArray(summary?.group_summaries) ? summary?.group_summaries : result.data
+  return rows
+    .map((row, index) =>
+      buildSemanticGroupView(row as SemanticAnalysisGroupSummary, index)
+    )
+    .filter((row) => row.sampleCount !== null || row.meanSimilarity !== null || row.dispersion !== null)
+}
+
+function getSemanticAnalysisReport(moduleId: string): SemanticAnalysisReportView | null {
+  const groups = getSemanticAnalysisGroups(moduleId)
+  if (!groups.length) {
+    return null
+  }
+  const comparableGroups = groups.filter((group) => (group.sampleCount ?? 0) >= 2)
+  const insufficientGroups = groups.filter((group) => (group.sampleCount ?? 0) < 2)
+  const outlierGroups = groups.filter((group) => group.outlierCount > 0)
+  const outlierSampleCount = outlierGroups.reduce(
+    (total, group) => total + group.outlierCount,
+    0
+  )
+  const objectiveSet = new Set<SemanticAnalysisObjective>()
+  groups.forEach((group) => {
+    if (group.objective) {
+      objectiveSet.add(group.objective)
+    }
+  })
+  return {
+    groupCount: groups.length,
+    comparableGroupCount: comparableGroups.length,
+    insufficientGroupCount: insufficientGroups.length,
+    outlierGroupCount: outlierGroups.length,
+    outlierSampleCount,
+    objectives: Array.from(objectiveSet),
+    groups,
+    insufficientGroups,
+    outlierGroups
+  }
+}
+
+function getSemanticObjectiveDescription(
+  report: SemanticAnalysisReportView | null
+): string {
+  if (!report) {
+    return t('promptTestResult.analysis.semantic.noData')
+  }
+  const objectives = report.objectives
+  if (!objectives.length) {
+    return t('promptTestResult.analysis.semantic.scope')
+  }
+  const labels = objectives.map((objective) => {
+    if (objective === 'consistency') return t('promptTestResult.analysis.semantic.objectives.consistency')
+    if (objective === 'diversity') return t('promptTestResult.analysis.semantic.objectives.diversity')
+    if (objective === 'balanced') return t('promptTestResult.analysis.semantic.objectives.balanced')
+    return String(objective)
+  })
+  return t('promptTestResult.analysis.semantic.objectiveSummary', {
+    objectives: labels.join('、')
+  })
+}
+
 function handlePrebuiltChartRef(
   moduleId: string,
   chart: AnalysisChartConfig,
@@ -2168,8 +2638,12 @@ function handlePrebuiltChartRef(
     chartMap.set(chartId, instance)
   }
 
-  const finalOption = JSON.parse(JSON.stringify(chart.option ?? {}))
   const state = getModuleState(moduleId)
+  const finalOption = buildAnalysisChartOption(
+    chart as AnalysisChartConfig & { type?: unknown; x?: unknown; y?: unknown },
+    state?.result?.data ?? [],
+    (value) => formatSemanticMetricValue(value, locale.value)
+  )
   if (state) {
     finalOption.tooltip = finalOption.tooltip || {}
     const originalFormatter = finalOption.tooltip.formatter
@@ -2261,6 +2735,26 @@ function mapParameterValue(spec: AnalysisParameterSpec, value: unknown): unknown
 function prepareModuleParameters(moduleId: string): Record<string, unknown> | null {
   const state = getModuleState(moduleId)
   if (!state) return null
+  if (moduleId === SEMANTIC_ANALYSIS_MODULE_ID) {
+    const params = buildSemanticAnalysisParameters(
+      String(state.form.semantic_embedding_model_key ?? ''),
+      state.form.objective_override === 'diversity' ||
+        state.form.objective_override === 'balanced' ||
+        state.form.objective_override === 'consistency'
+        ? state.form.objective_override
+        : 'consistency',
+      typeof state.form.max_samples_per_group === 'number'
+        ? state.form.max_samples_per_group
+        : Number(state.form.max_samples_per_group)
+    )
+    if (!params.embedding_provider_id || !params.embedding_model_id) {
+      ElMessage.warning(t('promptTestResult.analysis.messages.paramRequired', {
+        field: t('promptTestResult.analysis.parameters.embeddingModel')
+      }))
+      return null
+    }
+    return params
+  }
   const params: Record<string, unknown> = {}
   for (const spec of state.definition.parameters) {
     const rawValue = state.form[spec.key]
@@ -2310,13 +2804,9 @@ async function runAnalysisModule(moduleId: string) {
     const chartsRaw = Array.isArray(result.extra?.charts)
       ? (result.extra?.charts as AnalysisChartConfig[])
       : []
-    state.charts = chartsRaw.map((chart, index) => ({
-      id: chart.id || `chart-${index}`,
-      title: chart.title ?? '',
-      description: chart.description ?? '',
-      option: JSON.parse(JSON.stringify(chart.option ?? {})),
-      meta: chart.meta ? JSON.parse(JSON.stringify(chart.meta)) : undefined
-    })) as AnalysisChartConfig[]
+    state.charts = chartsRaw.map((chart, index) =>
+      normalizeAnalysisChart(moduleId, chart, index)
+    )
 
     const unitLinksRaw = Array.isArray(result.extra?.unit_links)
       ? (result.extra?.unit_links as AnalysisUnitLink[])
@@ -2376,10 +2866,21 @@ async function runSelectedModules() {
   }
 }
 
-function formatAnalysisCell(value: unknown): string {
+function formatAnalysisCell(value: unknown, columnName?: string): string {
+  if (columnName === 'semantic_objective') {
+    return formatSemanticObjective(value, getSemanticObjectiveLabels())
+  }
+  if (
+    columnName === 'mean_pairwise_similarity' ||
+    columnName === 'min_pairwise_similarity' ||
+    columnName === 'centroid_similarity_mean' ||
+    columnName === 'semantic_dispersion'
+  ) {
+    return formatSemanticMetricValue(value, locale.value)
+  }
   if (value === null || value === undefined) return '-'
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value.toString() : '-'
+    return Number.isFinite(value) ? formatMetricValue(value) : '-'
   }
   if (typeof value === 'object') {
     try {
@@ -3272,7 +3773,7 @@ watch(
 
 .analysis-modules-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 
@@ -3281,17 +3782,34 @@ watch(
   flex-direction: column;
 }
 
+.analysis-module-card--collapsed {
+  min-height: 0;
+}
+
+.analysis-module-card--collapsed :deep(.el-card__body) {
+  display: none;
+}
+
 .analysis-module-card__header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+  cursor: pointer;
+  outline: none;
+}
+
+.analysis-module-card__header:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
 }
 
 .analysis-module-card__title {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .analysis-module-card__title h4 {
@@ -3309,6 +3827,7 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .analysis-module-card__body {
@@ -3367,6 +3886,10 @@ watch(
   margin-bottom: 0;
 }
 
+.analysis-param-item--wide {
+  grid-column: 1 / -1;
+}
+
 .analysis-param-input {
   width: 100%;
 }
@@ -3388,6 +3911,80 @@ watch(
 
 .analysis-insight-list li {
   margin-bottom: 4px;
+}
+
+.analysis-semantic-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color-page);
+}
+
+.analysis-semantic-summary__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.analysis-semantic-summary__header h5 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.analysis-semantic-summary__header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-weak-color);
+}
+
+.analysis-semantic-summary__objective {
+  margin-bottom: 0;
+}
+
+.analysis-semantic-summary__metrics {
+  width: 100%;
+}
+
+.analysis-semantic-summary__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-semantic-summary__section-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.analysis-semantic-summary__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analysis-semantic-summary__outliers {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysis-semantic-summary__outliers li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.analysis-semantic-summary__muted {
+  color: var(--text-weak-color);
+  font-size: 12px;
 }
 
 .analysis-unit-chip {

@@ -36,6 +36,7 @@ MAX_RECOMMENDATION_SCORE_ITEMS = 50
 MAX_RECOMMENDATION_OUTPUT_CHARS = 800
 MAX_RECOMMENDATION_JSON_CHARS = 800
 MAX_RECOMMENDATION_REASON_CHARS = 300
+MAX_RECOMMENDATION_SEMANTIC_GROUPS = 6
 
 
 class PromptTestAIScoringError(Exception):
@@ -864,9 +865,19 @@ def _build_recommendation_prompt(
         "score_summary": _compact_recommendation_score_summary(summary),
         "units": units_payload,
     }
+    semantic_summary = _build_recommendation_semantic_summary(summary)
+    if semantic_summary:
+        payload["semantic_summary"] = semantic_summary
+    semantic_instruction = (
+        "semantic_summary 是 embedding 语义分析的额外信号，不能替代现有 AI 评分；"
+        "请结合其中的目标、关键指标和风险提示调整优化方向。"
+        if semantic_summary
+        else ""
+    )
     return (
         "请基于评分结果生成 Prompt 测试优化建议。只返回 JSON，字段包括 "
         "overall_advice、parameter_advice、model_advice、prompt_revision、validation_plan。"
+        f"{semantic_instruction}"
         "parameter_advice 应覆盖本次测试实际使用的参数，例如 temperature、top_p、max_tokens、response_format 或其他模型参数。"
         "prompt_revision 必须是完整可直接落库的新 Prompt 文本，不能只返回修改片段、摘要或解释。"
         f"所有文本使用 {language} 对应语言。\n"
@@ -1072,6 +1083,107 @@ def _compact_recommendation_score_summary(summary: Mapping[str, Any]) -> dict[st
         "unit_summaries": summary.get("unit_summaries"),
         "scores": scores_payload,
     }
+
+
+def _build_recommendation_semantic_summary(
+    summary: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    raw_semantic = _resolve_semantic_summary(summary)
+    if not isinstance(raw_semantic, Mapping):
+        return None
+    raw_groups = raw_semantic.get("group_summaries")
+    groups = raw_groups if isinstance(raw_groups, Sequence) else []
+    compact_groups = [
+        _compact_semantic_group(group)
+        for group in groups[:MAX_RECOMMENDATION_SEMANTIC_GROUPS]
+        if isinstance(group, Mapping)
+    ]
+    if not compact_groups:
+        return None
+    return {
+        "title": "语义分析摘要",
+        "scope_note": (
+            "语义指标按测试单元和变量组合分组计算，不能把不同变量组合直接比较。"
+        ),
+        "usage_note": "embedding 语义分析是优化参考信号，不替代 AI 评分。",
+        "group_count": raw_semantic.get("group_count") or len(compact_groups),
+        "groups": compact_groups,
+    }
+
+
+def _resolve_semantic_summary(summary: Mapping[str, Any]) -> Any:
+    direct = summary.get("semantic_summary")
+    if isinstance(direct, Mapping):
+        return direct
+    extra = summary.get("extra")
+    if isinstance(extra, Mapping):
+        semantic_summary = extra.get("semantic_summary")
+        if isinstance(semantic_summary, Mapping):
+            return semantic_summary
+    return None
+
+
+def _compact_semantic_group(group: Mapping[str, Any]) -> dict[str, Any]:
+    objective = _safe_str(group.get("semantic_objective")) or "consistency"
+    sample_count = _safe_int(group.get("sample_count"))
+    risk_notes = _build_semantic_risk_notes(group, objective, sample_count)
+    return {
+        "unit_id": group.get("unit_id"),
+        "unit_name": group.get("unit_name"),
+        "variable_case_hash": group.get("variable_case_hash"),
+        "objective": objective,
+        "objective_note": _semantic_objective_note(objective),
+        "sample_count": sample_count,
+        "mean_pairwise_similarity": _safe_metric(group.get("mean_pairwise_similarity")),
+        "semantic_dispersion": _safe_metric(group.get("semantic_dispersion")),
+        "outlier_count": _safe_int(group.get("outlier_count")),
+        "interpretation": _truncate_text(
+            group.get("interpretation"), max_chars=MAX_RECOMMENDATION_REASON_CHARS
+        ),
+        "risk_notes": risk_notes,
+    }
+
+
+def _semantic_objective_note(objective: str) -> str:
+    if objective == "diversity":
+        return "目标：多样性，关注回答是否覆盖不同角度；相似度过高可能表示过度收敛，应鼓励差异。"
+    if objective == "balanced":
+        return "目标：平衡，既避免语义漂移，也避免输出过度收敛到单一表达。"
+    return "目标：一致性，关注同一变量组合下回答是否稳定贴合任务。"
+
+
+def _build_semantic_risk_notes(
+    group: Mapping[str, Any], objective: str, sample_count: int | None
+) -> list[str]:
+    notes = []
+    if sample_count is None or sample_count < 2:
+        notes.append("样本不足，语义指标只能作为弱参考。")
+    outlier_count = _safe_int(group.get("outlier_count")) or 0
+    if outlier_count > 0:
+        notes.append("存在异常样本方向，优化时要检查离群输出是否偏离任务。")
+    interpretation = _safe_str(group.get("interpretation"))
+    if interpretation:
+        notes.append(interpretation)
+    if objective == "diversity":
+        notes.append(
+            "多样性目标下高相似度可能代表过度收敛，应优先检查是否需要扩展回答角度。"
+        )
+    elif objective == "balanced":
+        notes.append("平衡目标下同时关注相似度与离散度，不追求单一方向极值。")
+    return notes
+
+
+def _safe_metric(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return _round(float(value))
+    if isinstance(value, str) and value.strip():
+        try:
+            return _round(float(value))
+        except ValueError:
+            return None
+    return None
 
 
 def _compact_recommendation_output(output: Mapping[str, Any]) -> dict[str, Any]:

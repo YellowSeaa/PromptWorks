@@ -384,8 +384,7 @@ export const messages = {
           empty: '暂未配置模型',
           columns: {
             name: '模型名称',
-            capability: '能力标签',
-            quota: '配额策略',
+            modelType: '模型类型',
             concurrency: '并发数',
             contextLength: '上下文长度',
             cost: '成本',
@@ -424,20 +423,33 @@ export const messages = {
         editTitle: '编辑模型',
         nameLabel: '模型名称',
         namePlaceholder: '请输入模型名称',
-        capabilityLabel: '能力标签',
-        capabilityPlaceholder: '如 对话 / 推理（可选）',
-        quotaLabel: '配额策略',
-        quotaPlaceholder: '如 团队共享 100k tokens/日（可选）',
+        modelTypeLabel: '模型类型',
+        modelTypes: {
+          chat: '对话',
+          embedding: '向量化'
+        },
         concurrencyLabel: '测试并发数',
         concurrencyPlaceholder: '并发请求上限，默认 5',
         contextLengthLabel: '上下文长度',
         contextLengthPlaceholder: '按 token 近似值填写，留空为无限',
         contextLengthHelp: '上下文长度按 token 近似值计算；不填写表示无限；测试时若超过上下文长度会自动截断。',
+        embeddingSection: '向量化配置',
+        embeddingDefaultNote: '仅模型类型为向量化时显示。向量维度可留空，后端会按模型默认维度调用并从返回向量识别实际维度；只有需要覆盖服务商默认输出维度时才填写。',
+        embeddingApiStyleLabel: 'API 风格',
+        embeddingApiStyles: {
+          openaiCompatible: 'OpenAI 兼容'
+        },
+        embeddingDimensionsLabel: '向量维度',
+        embeddingDimensionsPlaceholder: '可选；留空自动使用模型默认维度',
+        embeddingBatchSizeLabel: '批量大小',
+        embeddingBatchSizePlaceholder: '每批输入条数，默认 16',
+        embeddingMaxInputTokensLabel: '最大输入 tokens',
+        embeddingMaxInputTokensPlaceholder: '单次输入上限，留空表示不限制',
+        moreSettingsTitle: '更多设置',
         costSection: '成本配置',
-        costDefaultNote: '默认按人民币计价；如果需要外币或阶梯价格，再到高级设置里修改币种、汇率和阶梯规则。',
+        costDefaultNote: '默认按人民币计价；如果需要外币或阶梯价格，可在这里修改币种、汇率和阶梯规则。',
         costPricingSectionTitle: '计费规则',
         costPricingSectionHint: '先填计价单位和单价，普通模型到这里就够了。',
-        costAdvancedTitle: '高级设置',
         costCurrencySectionTitle: '币种设置',
         costCurrencySectionHint: '先确认是否启用外币计价，再填写币种和汇率。',
         costCurrencyEnabled: '已启用外币',
@@ -973,6 +985,9 @@ export const messages = {
           extraParameters: '附加参数（JSON）',
           inputSamples: '输入样本',
           analysisModules: '分析模块',
+          semanticEmbeddingModel: 'Embedding 模型',
+          semanticObjective: '语义目标',
+          semanticMaxSamples: '每组采样上限',
           aiScoring: 'AI 评分'
         },
         temperatureModes: {
@@ -991,6 +1006,7 @@ export const messages = {
           inputSamples:
             '首行填写变量名，用逗号、分号或 Tab 分隔；后续每行是一组变量值。\n例如：\ntext,tone\n你好,正式\n请介绍 PromptWorks,简洁',
           analysisModules: '请选择需要自动执行的分析模块',
+          semanticEmbeddingModel: '请选择向量化模型',
           aiScoringModel: '请选择评分模型'
         },
         tips: {
@@ -1008,7 +1024,15 @@ export const messages = {
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
           combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
           analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。',
+          semanticEmbeddingModel: '使用模型管理中类型为“向量化”的模型生成输出文本向量。',
+          semanticObjective: '一致性适合希望答案稳定复现的任务；多样性适合希望答案有差异的创意任务；平衡适合既不能太散也不能太像的任务。',
+          semanticMaxSamples: '同一测试单元、同一变量组合内样本很多时，只抽取最多这么多条参与两两相似度计算。默认 100 通常够用，样本少于该数量时会全部参与。',
           aiScoring: '开启后，每条测试结果生成时会立即使用所选模型评分，评分理由语言跟随当前界面语言。'
+        },
+        semanticObjectives: {
+          consistency: '一致性（稳定复现）',
+          diversity: '多样性（避免过度收敛）',
+          balanced: '平衡（相似度适中）'
         },
         aiScoring: {
           enabled: '开启评分',
@@ -1037,6 +1061,7 @@ export const messages = {
         promptRequired: '请选择 Prompt 及版本',
         modelRequired: '请选择要调用的模型',
         aiScoringModelRequired: '请选择 AI 评分模型',
+        semanticEmbeddingModelRequired: '已选择语义一致性与多样性分析，请先选择 Embedding 模型。',
         roundsInvalid: '轮次必须是大于 0 的整数',
         parameterSetRequired: '请至少配置一套参数组合',
         parameterSetRemoveLimit: '至少保留一套参数组合',
@@ -1110,8 +1135,11 @@ export const messages = {
         actions: {
           runSelected: '执行选中模块',
           run: '执行分析',
-          rerun: '重新执行'
+          rerun: '重新执行',
+          expand: '展开详情',
+          collapse: '收起详情'
         },
+        resultRows: '{count} 行结果',
         status: {
           idle: '待运行',
           running: '执行中',
@@ -1135,12 +1163,51 @@ export const messages = {
           numberInvalid: '「{field}」需为数值',
           numberInvalidSimple: '数值参数无效',
           selectInvalid: '「{field}」的取值不在可选范围内',
-          selectInvalidSimple: '所选值无效'
+          selectInvalidSimple: '所选值无效',
+          loadProvidersFailed: '加载模型列表失败，请稍后重试'
+        },
+        parameters: {
+          embeddingModel: 'Embedding 模型',
+          embeddingModelPlaceholder: '请选择向量化模型',
+          embeddingModelHelp: '来自模型管理中“向量化”类型的模型，用于把测试输出转换成向量后再比较语义相似度。',
+          noEmbeddingModels: '暂无可用向量化模型，请先在模型管理中添加 embedding 模型。',
+          objective: '语义目标',
+          objectives: {
+            consistency: '一致性（稳定复现）',
+            diversity: '多样性（避免过度收敛）',
+            balanced: '平衡（相似度适中）'
+          },
+          objectiveHelp: '一致性适合确定性回答；多样性适合创意发散；平衡适合希望结果相似但不完全重复。',
+          maxSamples: '每组采样上限',
+          maxSamplesHelp: '每个“测试单元 + 变量组合”内最多抽取多少条输出参与两两相似度计算。样本较少时会全部计算，默认 100 可避免大批量任务计算过慢。'
         },
         chartTypes: {
           bar: '柱状图',
           line: '折线图',
           pie: '饼图'
+        },
+        semantic: {
+          title: '语义一致性/多样性摘要',
+          scope: '仅比较同一任务、同一测试单元、同一变量组合下的输出；变量不同的样本不会横向比较。',
+          groupCount: '分组 {count} 个',
+          objectiveSummary: '当前语义目标：{objectives}。一致性关注稳定复现，多样性关注避免过度收敛，平衡目标关注相似度处于合理区间。',
+          noData: '暂无可展示的语义分析摘要。',
+          unknownUnit: '未知单元',
+          unknownGroup: '未知变量组合',
+          objectives: {
+            consistency: '一致性',
+            diversity: '多样性',
+            balanced: '平衡'
+          },
+          metrics: {
+            comparableGroups: '可比较组',
+            insufficientGroups: '样本不足组',
+            outlierGroups: '含异常组',
+            outlierSamples: '异常样本数'
+          },
+          insufficientTitle: '样本不足组',
+          outlierTitle: '异常样本',
+          outlierSamples: '输出：{samples}'
         },
         emptyData: '暂无分析数据',
         emptyCard: '尚未执行分析，点击右上角按钮开始。',
@@ -1739,8 +1806,7 @@ export const messages = {
           empty: 'No models configured',
           columns: {
             name: 'Model Name',
-            capability: 'Capability Tags',
-            quota: 'Quota Policy',
+            modelType: 'Model Type',
             concurrency: 'Concurrency',
             contextLength: 'Context Length',
             cost: 'Cost',
@@ -1779,20 +1845,33 @@ export const messages = {
         editTitle: 'Edit Model',
         nameLabel: 'Model Name',
         namePlaceholder: 'Enter model name',
-        capabilityLabel: 'Capability Tags',
-        capabilityPlaceholder: 'e.g. Chat / Reasoning (optional)',
-        quotaLabel: 'Quota Policy',
-        quotaPlaceholder: 'e.g. Team shared 100k tokens/day (optional)',
+        modelTypeLabel: 'Model Type',
+        modelTypes: {
+          chat: 'chat',
+          embedding: 'embedding'
+        },
         concurrencyLabel: 'Test Concurrency',
         concurrencyPlaceholder: 'Max concurrent requests (default 5)',
         contextLengthLabel: 'Context Length',
         contextLengthPlaceholder: 'Approximate tokens; blank means unlimited',
         contextLengthHelp: 'Context length is an approximate token value. Leave it blank for unlimited context. Test inputs that exceed it will be truncated.',
+        embeddingSection: 'Embedding Settings',
+        embeddingDefaultNote: 'Shown only for embedding models. Vector dimensions can stay blank: the backend calls the model with its default dimensions and infers the actual size from the returned vector. Fill this only when you need to override the provider default.',
+        embeddingApiStyleLabel: 'API Style',
+        embeddingApiStyles: {
+          openaiCompatible: 'OpenAI Compatible'
+        },
+        embeddingDimensionsLabel: 'Vector Dimensions',
+        embeddingDimensionsPlaceholder: 'Optional; blank uses the model default',
+        embeddingBatchSizeLabel: 'Batch Size',
+        embeddingBatchSizePlaceholder: 'Inputs per batch, default 16',
+        embeddingMaxInputTokensLabel: 'Max Input Tokens',
+        embeddingMaxInputTokensPlaceholder: 'Leave blank for no limit',
+        moreSettingsTitle: 'More Settings',
         costSection: 'Cost Settings',
-        costDefaultNote: 'Default pricing uses CNY. Use advanced settings for foreign currency, exchange rate, or tiered pricing.',
+        costDefaultNote: 'Default pricing uses CNY. Configure currency, exchange rate, or tiered pricing here only when needed.',
         costPricingSectionTitle: 'Pricing Rules',
         costPricingSectionHint: 'Fill the pricing unit and unit prices first. That is enough for most models.',
-        costAdvancedTitle: 'Advanced Settings',
         costCurrencySectionTitle: 'Currency Settings',
         costCurrencySectionHint: 'Confirm whether foreign-currency pricing is enabled before editing currency and exchange rate.',
         costCurrencyEnabled: 'Foreign currency enabled',
@@ -2330,6 +2409,9 @@ export const messages = {
           extraParameters: 'Extra Parameters (JSON)',
           inputSamples: 'Input Samples',
           analysisModules: 'Analysis Modules',
+          semanticEmbeddingModel: 'Embedding Model',
+          semanticObjective: 'Semantic Objective',
+          semanticMaxSamples: 'Samples per Group',
           aiScoring: 'AI Scoring'
         },
         temperatureModes: {
@@ -2348,6 +2430,7 @@ export const messages = {
           inputSamples:
             'First row: variable names separated by commas, semicolons, or tabs; each following row is one variable sample.\nExample:\ntext,tone\nHello,formal\nExplain PromptWorks,concise',
           analysisModules: 'Select analysis modules to auto-run after completion',
+          semanticEmbeddingModel: 'Select an embedding model',
           aiScoringModel: 'Select a scoring model'
         },
         tips: {
@@ -2365,7 +2448,15 @@ export const messages = {
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
           combinationCount: '{count} minimal test units will be generated.',
           analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.',
+          semanticEmbeddingModel: 'Uses a model whose type is set to embedding in Model Management.',
+          semanticObjective: 'Consistency fits stable reproduction, diversity fits creative variation, and balanced fits outputs that should stay similar without becoming identical.',
+          semanticMaxSamples: 'When one unit and variable case has many outputs, only up to this many samples are used for pairwise similarity. The default 100 is enough for most tests; smaller groups are fully evaluated.',
           aiScoring: 'When enabled, each output is scored immediately by the selected model. Reason language follows the current UI language.'
+        },
+        semanticObjectives: {
+          consistency: 'Consistency (stable)',
+          diversity: 'Diversity (varied)',
+          balanced: 'Balanced (moderate)'
         },
         aiScoring: {
           enabled: 'Enable scoring',
@@ -2394,6 +2485,7 @@ export const messages = {
         promptRequired: 'Please select a prompt and version.',
         modelRequired: 'Please select a model.',
         aiScoringModelRequired: 'Please select an AI scoring model.',
+        semanticEmbeddingModelRequired: 'Semantic analysis is selected. Please choose an embedding model first.',
         roundsInvalid: 'Rounds must be a positive integer.',
         parameterSetRequired: 'Configure at least one parameter set.',
         parameterSetRemoveLimit: 'Keep at least one parameter set.',
@@ -2467,8 +2559,11 @@ export const messages = {
         actions: {
           runSelected: 'Run Selected',
           run: 'Run Analysis',
-          rerun: 'Run Again'
+          rerun: 'Run Again',
+          expand: 'Expand Details',
+          collapse: 'Collapse Details'
         },
+        resultRows: '{count} rows',
         status: {
           idle: 'Idle',
           running: 'Running',
@@ -2492,12 +2587,53 @@ export const messages = {
           numberInvalid: '{field} must be a valid number.',
           numberInvalidSimple: 'Numeric value is invalid.',
           selectInvalid: '{field} is not within the available options.',
-          selectInvalidSimple: 'Selected value is invalid.'
+          selectInvalidSimple: 'Selected value is invalid.',
+          loadProvidersFailed: 'Failed to load model list. Please try again later.'
+        },
+        parameters: {
+          embeddingModel: 'Embedding Model',
+          embeddingModelPlaceholder: 'Select an embedding model',
+          embeddingModelHelp: 'Uses a Model Management entry with type embedding to vectorize test outputs before comparing semantic similarity.',
+          noEmbeddingModels: 'No embedding models are available. Add an embedding model in Model Management first.',
+          objective: 'Semantic Objective',
+          objectives: {
+            consistency: 'Consistency (stable)',
+            diversity: 'Diversity (varied)',
+            balanced: 'Balanced (moderate)'
+          },
+          objectiveHelp: 'Consistency is for deterministic answers, diversity is for creative variation, and balanced keeps outputs similar without being identical.',
+          maxSamples: 'Sample Cap per Group',
+          maxSamplesHelp: 'Maximum outputs sampled within each unit and variable case for pairwise similarity. Smaller groups are fully evaluated; the default 100 keeps large tests responsive.'
         },
         chartTypes: {
           bar: 'Bar',
           line: 'Line',
           pie: 'Pie'
+        },
+        semantic: {
+          title: 'Semantic Consistency / Diversity Summary',
+          scope:
+            'Only outputs within the same task, unit, and variable-case hash are compared. Samples with different variables are not compared across groups.',
+          groupCount: '{count} groups',
+          objectiveSummary:
+            'Current semantic targets: {objectives}. Consistency emphasizes stable reproduction, diversity avoids over-convergence, and balanced keeps similarity in a reasonable range.',
+          noData: 'No semantic analysis summary is available.',
+          unknownUnit: 'Unknown unit',
+          unknownGroup: 'Unknown variable case',
+          objectives: {
+            consistency: 'consistency',
+            diversity: 'diversity',
+            balanced: 'balanced'
+          },
+          metrics: {
+            comparableGroups: 'Comparable groups',
+            insufficientGroups: 'Insufficient groups',
+            outlierGroups: 'Groups with outliers',
+            outlierSamples: 'Outlier samples'
+          },
+          insufficientTitle: 'Insufficient-sample groups',
+          outlierTitle: 'Outlier samples',
+          outlierSamples: 'Outputs: {samples}'
         },
         emptyData: 'No analysis data available.',
         emptyCard: 'The analysis has not been executed yet. Use the action button above to start.',

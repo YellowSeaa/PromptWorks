@@ -118,15 +118,15 @@
                       min-width="140"
                     />
                     <el-table-column
-                      prop="capability"
-                      :label="t('llmManagement.card.table.columns.capability')"
+                      :label="t('llmManagement.card.table.columns.modelType')"
                       min-width="120"
-                    />
-                    <el-table-column
-                      prop="quota"
-                      :label="t('llmManagement.card.table.columns.quota')"
-                      min-width="140"
-                    />
+                    >
+                      <template #default="{ row }">
+                        <el-tag size="small" :type="getModelTypeTagType(row.modelType)">
+                          {{ formatModelType(row.modelType) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
                     <el-table-column
                       prop="concurrencyLimit"
                       :label="t('llmManagement.card.table.columns.concurrency')"
@@ -155,7 +155,11 @@
                         {{ formatModelCost(row) }}
                       </template>
                     </el-table-column>
-                    <el-table-column :label="t('llmManagement.card.table.columns.actions')" width="220" align="center">
+                    <el-table-column
+                      :label="t('llmManagement.card.table.columns.actions')"
+                      width="300"
+                      align="center"
+                    >
                       <template #default="{ row }">
                         <div class="provider-card__model-actions">
                           <el-button
@@ -309,6 +313,7 @@
     <el-dialog
       v-model="modelDialogVisible"
       :title="isEditingModel ? t('llmManagement.modelDialog.editTitle') : t('llmManagement.modelDialog.title')"
+      class="model-dialog"
       width="560px"
     >
       <el-form :model="modelForm" label-width="120px" class="dialog-form">
@@ -319,17 +324,15 @@
             :disabled="isEditingModel"
           />
         </el-form-item>
-        <el-form-item :label="t('llmManagement.modelDialog.capabilityLabel')">
-          <el-input
-            v-model="modelForm.capability"
-            :placeholder="t('llmManagement.modelDialog.capabilityPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('llmManagement.modelDialog.quotaLabel')">
-          <el-input
-            v-model="modelForm.quota"
-            :placeholder="t('llmManagement.modelDialog.quotaPlaceholder')"
-          />
+        <el-form-item :label="t('llmManagement.modelDialog.modelTypeLabel')">
+          <el-select v-model="modelForm.modelType" class="model-type-select">
+            <el-option
+              v-for="option in modelTypeOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item :label="t('llmManagement.modelDialog.concurrencyLabel')">
           <el-input-number
@@ -342,7 +345,7 @@
             :placeholder="t('llmManagement.modelDialog.concurrencyPlaceholder')"
           />
         </el-form-item>
-        <el-form-item>
+        <el-form-item v-if="modelForm.modelType === 'chat'">
           <template #label>
             <span class="form-label-with-help">
               {{ t('llmManagement.modelDialog.contextLengthLabel') }}
@@ -370,57 +373,124 @@
             :placeholder="t('llmManagement.modelDialog.contextLengthPlaceholder')"
           />
         </el-form-item>
-        <el-divider content-position="left">{{ t('llmManagement.modelDialog.costSection') }}</el-divider>
-        <div class="cost-default-note">
-          {{ t('llmManagement.modelDialog.costDefaultNote') }}
-        </div>
-        <div class="cost-pricing-section">
-          <div class="cost-section-header">
-            <div>
-              <h4>{{ t('llmManagement.modelDialog.costPricingSectionTitle') }}</h4>
-              <p>{{ t('llmManagement.modelDialog.costPricingSectionHint') }}</p>
+        <el-collapse class="model-more-settings-section">
+          <el-collapse-item :title="t('llmManagement.modelDialog.moreSettingsTitle')" name="more-settings">
+            <template v-if="modelForm.modelType === 'embedding'">
+              <div class="cost-section-header">
+                <div>
+                  <h4>{{ t('llmManagement.modelDialog.embeddingSection') }}</h4>
+                  <p>{{ t('llmManagement.modelDialog.embeddingDefaultNote') }}</p>
+                </div>
+              </div>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingApiStyleLabel')">
+                    <el-select v-model="modelForm.embeddingApiStyle" class="model-type-select">
+                      <el-option
+                        v-for="option in embeddingApiStyleOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingDimensionsLabel')">
+                    <el-input-number
+                      v-model="modelForm.embeddingDimensions"
+                      class="model-number-input"
+                      :min="1"
+                      :step="128"
+                      controls-position="right"
+                      :placeholder="t('llmManagement.modelDialog.embeddingDimensionsPlaceholder')"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingBatchSizeLabel')">
+                    <el-input-number
+                      v-model="modelForm.embeddingBatchSize"
+                      class="model-number-input"
+                      :min="1"
+                      :max="128"
+                      :step="1"
+                      controls-position="right"
+                      :placeholder="t('llmManagement.modelDialog.embeddingBatchSizePlaceholder')"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.embeddingMaxInputTokensLabel')">
+                    <el-input-number
+                      v-model="modelForm.embeddingMaxInputTokens"
+                      class="model-number-input"
+                      :min="1"
+                      :step="512"
+                      controls-position="right"
+                      :placeholder="t('llmManagement.modelDialog.embeddingMaxInputTokensPlaceholder')"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <div class="cost-advanced-divider" />
+            </template>
+            <div class="cost-section-header">
+              <div>
+                <h4>{{ t('llmManagement.modelDialog.costSection') }}</h4>
+                <p>{{ t('llmManagement.modelDialog.costDefaultNote') }}</p>
+              </div>
             </div>
-          </div>
-          <el-row :gutter="12">
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
-                <el-input-number
-                  v-model="modelForm.costPricingUnit"
-                  class="model-number-input"
-                  :min="1"
-                  :step="1000"
-                  controls-position="right"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
-                <el-input-number
-                  v-model="modelForm.costInputPerUnit"
-                  class="model-number-input"
-                  :min="0"
-                  :step="0.01"
-                  controls-position="right"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="12">
-            <el-col :xs="24" :sm="12">
-              <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
-                <el-input-number
-                  v-model="modelForm.costOutputPerUnit"
-                  class="model-number-input"
-                  :min="0"
-                  :step="0.01"
-                  controls-position="right"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-        <el-collapse class="cost-advanced-section">
-          <el-collapse-item :title="t('llmManagement.modelDialog.costAdvancedTitle')" name="advanced">
+            <div class="cost-pricing-section">
+              <div class="cost-section-header">
+                <div>
+                  <h4>{{ t('llmManagement.modelDialog.costPricingSectionTitle') }}</h4>
+                  <p>{{ t('llmManagement.modelDialog.costPricingSectionHint') }}</p>
+                </div>
+              </div>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.costPricingUnitLabel')">
+                    <el-input-number
+                      v-model="modelForm.costPricingUnit"
+                      class="model-number-input"
+                      :min="1"
+                      :step="1000"
+                      controls-position="right"
+                    />
+                  </el-form-item>
+                </el-col>
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.costInputLabel')">
+                    <el-input-number
+                      v-model="modelForm.costInputPerUnit"
+                      class="model-number-input"
+                      :min="0"
+                      :step="0.01"
+                      :precision="1"
+                      controls-position="right"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="12">
+                <el-col :xs="24" :sm="12">
+                  <el-form-item :label="t('llmManagement.modelDialog.costOutputLabel')">
+                    <el-input-number
+                      v-model="modelForm.costOutputPerUnit"
+                      class="model-number-input"
+                      :min="0"
+                      :step="0.01"
+                      :precision="1"
+                      controls-position="right"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+            <div class="cost-advanced-divider" />
             <div class="cost-section-header">
               <div>
                 <h4>{{ t('llmManagement.modelDialog.costCurrencySectionTitle') }}</h4>
@@ -501,6 +571,7 @@
                   class="cost-tier-row__input"
                   :min="0"
                   :step="0.01"
+                  :precision="1"
                   controls-position="right"
                   :placeholder="t('llmManagement.modelDialog.costInputLabel')"
                 />
@@ -509,6 +580,7 @@
                   class="cost-tier-row__input"
                   :min="0"
                   :step="0.01"
+                  :precision="1"
                   controls-position="right"
                   :placeholder="t('llmManagement.modelDialog.costOutputLabel')"
                 />
@@ -548,7 +620,7 @@ import {
   invokeLLMProvider,
   RequestTimeoutError
 } from '../api/llmProvider'
-import type { KnownLLMProvider, LLMProvider } from '../types/llm'
+import type { EmbeddingApiStyle, KnownLLMProvider, LLMModelType, LLMProvider } from '../types/llm'
 import { useI18n } from 'vue-i18n'
 
 interface ProviderOption {
@@ -559,8 +631,11 @@ interface ProviderOption {
 interface ProviderCardModel {
   id: number
   name: string
-  capability: string | null
-  quota: string | null
+  modelType: LLMModelType
+  embeddingApiStyle: EmbeddingApiStyle | null
+  embeddingDimensions: number | null
+  embeddingBatchSize: number | null
+  embeddingMaxInputTokens: number | null
   concurrencyLimit: number
   contextLength: number | null
   costCurrency: string
@@ -614,6 +689,18 @@ const providerOptions = computed<ProviderOption[]>(() => {
   options.push({ label: t('llmManagement.options.customProvider'), value: 'custom' })
   return options
 })
+
+const modelTypeOptions = computed(() => [
+  { label: t('llmManagement.modelDialog.modelTypes.chat'), value: 'chat' as LLMModelType },
+  { label: t('llmManagement.modelDialog.modelTypes.embedding'), value: 'embedding' as LLMModelType }
+])
+
+const embeddingApiStyleOptions = computed(() => [
+  {
+    label: t('llmManagement.modelDialog.embeddingApiStyles.openaiCompatible'),
+    value: 'openai_compatible' as EmbeddingApiStyle
+  }
+])
 
 const emojiOptions = ['🚀', '🧠', '✨', '🔥', '🤖', '📦', '🛰️', '🏢', '🦾', '🧩']
 
@@ -751,8 +838,11 @@ function mapProviderToCard(
     models: provider.models.map((model) => ({
       id: model.id,
       name: model.name,
-      capability: model.capability,
-      quota: model.quota,
+      modelType: model.model_type ?? 'chat',
+      embeddingApiStyle: model.embedding_api_style ?? null,
+      embeddingDimensions: model.embedding_dimensions ?? null,
+      embeddingBatchSize: model.embedding_batch_size ?? null,
+      embeddingMaxInputTokens: model.embedding_max_input_tokens ?? null,
       concurrencyLimit: model.concurrency_limit,
       contextLength: model.context_length,
       costCurrency: model.cost_currency,
@@ -860,8 +950,11 @@ const modelSubmitLoading = ref(false)
 const activeProviderId = ref<number | null>(null)
 const modelForm = reactive({
   name: '',
-  capability: '',
-  quota: '',
+  modelType: 'chat' as LLMModelType,
+  embeddingApiStyle: 'openai_compatible' as EmbeddingApiStyle,
+  embeddingDimensions: null as number | null,
+  embeddingBatchSize: 16 as number | null,
+  embeddingMaxInputTokens: null as number | null,
   concurrency: 5,
   contextLength: null as number | null,
   useCustomCurrency: false,
@@ -869,8 +962,8 @@ const modelForm = reactive({
   costDisplayCurrency: 'CNY',
   costExchangeRate: 1,
   costPricingUnit: 1000000,
-  costInputPerUnit: null as number | null,
-  costOutputPerUnit: null as number | null,
+  costInputPerUnit: 0.0 as number | null,
+  costOutputPerUnit: 0.0 as number | null,
   costTiers: [] as CostTierForm[]
 })
 const isEditingModel = ref(false)
@@ -881,12 +974,19 @@ function handleAddModel(providerId: number) {
   isEditingModel.value = false
   editingModelId.value = null
   modelForm.name = ''
-  modelForm.capability = ''
-  modelForm.quota = ''
+  resetModelUsageForm()
   modelForm.concurrency = 5
   modelForm.contextLength = null
   resetModelCostForm()
   modelDialogVisible.value = true
+}
+
+function resetModelUsageForm() {
+  modelForm.modelType = 'chat'
+  modelForm.embeddingApiStyle = 'openai_compatible'
+  modelForm.embeddingDimensions = null
+  modelForm.embeddingBatchSize = 16
+  modelForm.embeddingMaxInputTokens = null
 }
 
 function resetModelCostForm() {
@@ -895,8 +995,8 @@ function resetModelCostForm() {
   modelForm.costDisplayCurrency = 'CNY'
   modelForm.costExchangeRate = 1
   modelForm.costPricingUnit = 1000000
-  modelForm.costInputPerUnit = null
-  modelForm.costOutputPerUnit = null
+  modelForm.costInputPerUnit = 0.0
+  modelForm.costOutputPerUnit = 0.0
   modelForm.costTiers = []
 }
 
@@ -932,6 +1032,31 @@ function buildCostPayload() {
     cost_output_per_unit: modelForm.costOutputPerUnit,
     cost_tiers: tiers.length ? tiers : null
   }
+}
+
+function buildEmbeddingPayload() {
+  if (modelForm.modelType !== 'embedding') {
+    return {
+      embedding_api_style: null,
+      embedding_dimensions: null,
+      embedding_batch_size: null,
+      embedding_max_input_tokens: null
+    }
+  }
+  return {
+    embedding_api_style: modelForm.embeddingApiStyle,
+    embedding_dimensions: normalizeOptionalPositiveInteger(modelForm.embeddingDimensions),
+    embedding_batch_size: normalizeOptionalPositiveInteger(modelForm.embeddingBatchSize),
+    embedding_max_input_tokens: normalizeOptionalPositiveInteger(modelForm.embeddingMaxInputTokens)
+  }
+}
+
+function normalizeOptionalPositiveInteger(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null
+  }
+  const normalized = Math.trunc(Number(value))
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : null
 }
 
 function addCostTier() {
@@ -975,9 +1100,6 @@ async function submitModel() {
     return
   }
 
-  const capabilityValue = modelForm.capability.trim()
-  const quotaValue = modelForm.quota.trim()
-
   modelSubmitLoading.value = true
   try {
     if (isEditingModel.value) {
@@ -986,8 +1108,8 @@ async function submitModel() {
         throw new Error('missing model id')
       }
       await updateLLMModel(providerId, modelId, {
-        capability: capabilityValue ? capabilityValue : null,
-        quota: quotaValue ? quotaValue : null,
+        model_type: modelForm.modelType,
+        ...buildEmbeddingPayload(),
         concurrency_limit: concurrencyValue,
         context_length: contextLengthValue,
         ...buildCostPayload()
@@ -996,8 +1118,8 @@ async function submitModel() {
     } else {
       await createLLMModel(providerId, {
         name: modelForm.name.trim(),
-        capability: capabilityValue || undefined,
-        quota: quotaValue || undefined,
+        model_type: modelForm.modelType,
+        ...buildEmbeddingPayload(),
         concurrency_limit: concurrencyValue,
         context_length: contextLengthValue,
         ...buildCostPayload()
@@ -1024,8 +1146,11 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   isEditingModel.value = true
   editingModelId.value = model.id
   modelForm.name = model.name
-  modelForm.capability = model.capability ?? ''
-  modelForm.quota = model.quota ?? ''
+  modelForm.modelType = model.modelType
+  modelForm.embeddingApiStyle = model.embeddingApiStyle ?? 'openai_compatible'
+  modelForm.embeddingDimensions = model.embeddingDimensions
+  modelForm.embeddingBatchSize = model.embeddingBatchSize ?? 16
+  modelForm.embeddingMaxInputTokens = model.embeddingMaxInputTokens
   modelForm.concurrency = model.concurrencyLimit
   modelForm.contextLength = model.contextLength
   modelForm.useCustomCurrency = isCustomCurrency(model.costCurrency, model.costExchangeRate)
@@ -1033,8 +1158,8 @@ function handleEditModel(providerId: number, model: ProviderCardModel) {
   modelForm.costDisplayCurrency = model.costDisplayCurrency
   modelForm.costExchangeRate = model.costExchangeRate
   modelForm.costPricingUnit = model.costPricingUnit
-  modelForm.costInputPerUnit = model.costInputPerUnit
-  modelForm.costOutputPerUnit = model.costOutputPerUnit
+  modelForm.costInputPerUnit = model.costInputPerUnit ?? 0.0
+  modelForm.costOutputPerUnit = model.costOutputPerUnit ?? 0.0
   modelForm.costTiers = model.costTiers.map((tier) => ({ ...tier }))
   modelDialogVisible.value = true
 }
@@ -1044,6 +1169,17 @@ function formatContextLength(value: number | null) {
     return t('llmManagement.card.table.unlimitedContext')
   }
   return value.toLocaleString()
+}
+
+function formatModelType(modelType: LLMModelType) {
+  return t(`llmManagement.modelDialog.modelTypes.${modelType}`)
+}
+
+function getModelTypeTagType(modelType: LLMModelType) {
+  if (modelType === 'embedding') {
+    return 'success'
+  }
+  return 'info'
 }
 
 function formatModelCost(model: ProviderCardModel) {
@@ -1358,12 +1494,23 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
   display: flex;
   justify-content: center;
   gap: 6px;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.provider-card__model-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .dialog-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.model-dialog :deep(.el-dialog__body) {
+  padding-right: 32px;
+  padding-left: 32px;
 }
 
 .cost-default-note {
@@ -1378,8 +1525,12 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 }
 
 .cost-pricing-section,
-.cost-advanced-section {
+.model-more-settings-section {
   margin-bottom: 12px;
+}
+
+.model-more-settings-section :deep(.el-collapse-item__content) {
+  padding-bottom: 6px;
 }
 
 .cost-section-header {
@@ -1480,6 +1631,10 @@ async function checkModel(providerId: number, model: ProviderCardModel) {
 }
 
 .model-number-input :deep(.el-input) {
+  width: 100%;
+}
+
+.model-type-select {
   width: 100%;
 }
 
