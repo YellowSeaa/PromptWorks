@@ -187,6 +187,9 @@ def _build_group_summary(
                 "unit_id": first_row.get("unit_id"),
                 "unit_name": first_row.get("unit_name"),
                 "variable_case_hash": first_row.get("variable_case_hash"),
+                "variable_case_label": _format_variable_case_label(
+                    first_row.get("variables")
+                ),
                 "semantic_objective": objective,
                 "sample_count": metrics.sample_count,
                 "evaluated_sample_count": metrics.evaluated_sample_count,
@@ -227,11 +230,26 @@ def _output_id(row: pd.Series) -> str:
     return f"{unit_id}:{variable_hash}:{run_index}"
 
 
+def _format_variable_case_label(value: Any) -> str:
+    if not isinstance(value, Mapping) or not value:
+        return "默认样本"
+    parts = []
+    for key in sorted(value):
+        raw_value = value.get(key)
+        if raw_value is None:
+            display_value = "空"
+        elif isinstance(raw_value, (dict, list, tuple)):
+            display_value = str(raw_value)
+        else:
+            display_value = str(raw_value)
+        parts.append(f"{key}={display_value}")
+    return ", ".join(parts) if parts else "默认样本"
+
+
 def _build_columns_meta() -> list[AnalysisColumnMeta]:
     return [
         AnalysisColumnMeta(name="unit_name", label="测试单元"),
-        AnalysisColumnMeta(name="variable_case_hash", label="变量组合"),
-        AnalysisColumnMeta(name="semantic_objective", label="语义目标"),
+        AnalysisColumnMeta(name="variable_case_label", label="变量组合"),
         AnalysisColumnMeta(name="sample_count", label="样本数", visualizable=["bar"]),
         AnalysisColumnMeta(
             name="evaluated_sample_count",
@@ -253,7 +271,6 @@ def _build_columns_meta() -> list[AnalysisColumnMeta]:
         AnalysisColumnMeta(
             name="outlier_count", label="离群数量", visualizable=["bar"]
         ),
-        AnalysisColumnMeta(name="interpretation", label="目标解释"),
     ]
 
 
@@ -272,7 +289,7 @@ def _build_chart_configs(summary_df: pd.DataFrame) -> list[dict[str, Any]]:
             "id": "mean_pairwise_similarity",
             "type": "bar",
             "title": "平均语义相似度",
-            "x": "variable_case_hash",
+            "x": "variable_case_label",
             "y": "mean_pairwise_similarity",
             "meta": {"row_count": int(len(summary_df))},
         },
@@ -280,7 +297,7 @@ def _build_chart_configs(summary_df: pd.DataFrame) -> list[dict[str, Any]]:
             "id": "semantic_dispersion",
             "type": "bar",
             "title": "语义离散度",
-            "x": "variable_case_hash",
+            "x": "variable_case_label",
             "y": "semantic_dispersion",
             "meta": {"row_count": int(len(summary_df))},
         },
@@ -295,6 +312,7 @@ def _build_semantic_summary(summary_df: pd.DataFrame) -> dict[str, Any]:
                 "unit_id": row.get("unit_id"),
                 "unit_name": row.get("unit_name"),
                 "variable_case_hash": row.get("variable_case_hash"),
+                "variable_case_label": row.get("variable_case_label"),
                 "semantic_objective": row.get("semantic_objective"),
                 "sample_count": row.get("sample_count"),
                 "evaluated_sample_count": row.get("evaluated_sample_count"),

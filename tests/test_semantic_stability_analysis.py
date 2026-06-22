@@ -105,6 +105,65 @@ def test_semantic_consistency_diversity_separates_variable_cases():
     assert set(result.data_frame["variable_case_hash"]) == {"hash-a", "hash-b"}
 
 
+def test_semantic_consistency_diversity_exposes_readable_variable_case_label():
+    from app.services.analysis_modules.semantic_stability import (
+        execute_semantic_consistency_diversity_analysis,
+    )
+
+    data_frame = pd.DataFrame(
+        [
+            {
+                "task_id": 1,
+                "unit_id": 10,
+                "unit_name": "单元A",
+                "variable_case_hash": "hash-a",
+                "variables": {"topic": "天气", "tone": "正式"},
+                "output_text": "今天天气晴朗",
+                "semantic_objective": "consistency",
+                "run_index": 1,
+            },
+            {
+                "task_id": 1,
+                "unit_id": 10,
+                "unit_name": "单元A",
+                "variable_case_hash": "hash-a",
+                "variables": {"topic": "天气", "tone": "正式"},
+                "output_text": "杭州今天阳光很好",
+                "semantic_objective": "consistency",
+                "run_index": 2,
+            },
+        ]
+    )
+
+    class DummyEmbeddingClient:
+        def embed_texts(self, request):
+            return SimpleNamespace(
+                provider_id=request.provider_id,
+                model_id=request.model_id,
+                model_name="mock",
+                embeddings=[[1.0, 0.0] for _ in request.texts],
+            )
+
+    result = execute_semantic_consistency_diversity_analysis(
+        data_frame,
+        {
+            "embedding_provider_id": 7,
+            "embedding_model_id": 8,
+            "embedding_client": DummyEmbeddingClient(),
+        },
+        AnalysisContext(task_id="1"),
+    )
+
+    column_names = {meta.name for meta in result.columns_meta}
+    assert "semantic_objective" not in column_names
+    assert "interpretation" not in column_names
+    assert result.data_frame.loc[0, "variable_case_label"] == "tone=正式, topic=天气"
+    assert (
+        result.extra["semantic_summary"]["group_summaries"][0]["variable_case_label"]
+        == "tone=正式, topic=天气"
+    )
+
+
 def test_semantic_consistency_diversity_interprets_same_similarity_by_objective():
     from app.services.analysis_modules.semantic_stability import (
         execute_semantic_consistency_diversity_analysis,

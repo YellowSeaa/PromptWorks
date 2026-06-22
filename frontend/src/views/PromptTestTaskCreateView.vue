@@ -477,6 +477,7 @@ import type { PromptTestTask, PromptTestUnit } from '../types/promptTest'
 import {
   buildEmbeddingModelOptions,
   buildSemanticAnalysisParameters,
+  hasCallableChatModel,
   semanticModelKeyFromParameters,
   SEMANTIC_ANALYSIS_MODULE_ID,
   type SemanticObjectiveValue
@@ -645,17 +646,20 @@ const modelOptionGroups = computed<ModelOptionGroup[]>(() => {
   if (!providers.value.length) return []
   return providers.value
     .filter((provider) => !provider.is_archived)
+    .filter((provider) => hasCallableChatModel(provider))
     .map((provider) => ({
       providerId: provider.id,
       label: provider.provider_name,
-      options: provider.models.map((model) => ({
-        value: `${provider.id}:${model.id}`,
-        label: model.name,
-        providerId: provider.id,
-        providerName: provider.provider_name,
-        modelId: model.id,
-        modelName: model.name
-      }))
+      options: provider.models
+        .filter((model) => model.model_type === 'chat')
+        .map((model) => ({
+          value: `${provider.id}:${model.id}`,
+          label: model.name,
+          providerId: provider.id,
+          providerName: provider.provider_name,
+          modelId: model.id,
+          modelName: model.name
+        }))
     }))
     .filter((group) => group.options.length > 0)
 })

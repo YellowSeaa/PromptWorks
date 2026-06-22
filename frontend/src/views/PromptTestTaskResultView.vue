@@ -785,16 +785,6 @@
                       {{ semanticAnalysisReportByModule[moduleId]?.outlierGroupCount ?? 0 }}
                     </el-descriptions-item>
                     <el-descriptions-item
-                      :label="t('promptTestResult.analysis.semantic.metrics.meanSimilarity')"
-                    >
-                      {{ formatSemanticMetric(semanticAnalysisReportByModule[moduleId]?.averageSimilarity) }}
-                    </el-descriptions-item>
-                    <el-descriptions-item
-                      :label="t('promptTestResult.analysis.semantic.metrics.meanDispersion')"
-                    >
-                      {{ formatSemanticMetric(semanticAnalysisReportByModule[moduleId]?.averageDispersion) }}
-                    </el-descriptions-item>
-                    <el-descriptions-item
                       :label="t('promptTestResult.analysis.semantic.metrics.outlierSamples')"
                     >
                       {{ semanticAnalysisReportByModule[moduleId]?.outlierSampleCount ?? 0 }}
@@ -1131,8 +1121,6 @@ interface SemanticAnalysisReportView {
   insufficientGroupCount: number
   outlierGroupCount: number
   outlierSampleCount: number
-  averageSimilarity: number | null
-  averageDispersion: number | null
   objectives: SemanticAnalysisObjective[]
   groups: SemanticAnalysisGroupView[]
   insufficientGroups: SemanticAnalysisGroupView[]
@@ -1355,7 +1343,7 @@ const prebuiltChartInstances = new Map<string, Map<string, ECharts>>()
 const chartRenderRetryCount = new Map<string, number>()
 const restoredModuleIds = new Set<string>()
 const MAX_CHART_RENDER_RETRY = 5
-const ANALYSIS_CACHE_VERSION = 1
+const ANALYSIS_CACHE_VERSION = 2
 const ANALYSIS_CACHE_PREFIX = 'prompt-test-analysis'
 const ANALYSIS_SELECTION_PREFIX = 'prompt-test-analysis-selection'
 let analysisSelectionInitialized = false
@@ -2427,13 +2415,6 @@ function formatMetricValue(value: unknown): string {
   })
 }
 
-function formatSemanticMetric(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '-'
-  }
-  return formatSemanticMetricValue(value, locale.value)
-}
-
 function getSemanticObjectiveLabels() {
   return {
     consistency: t('promptTestResult.analysis.semantic.objectives.consistency'),
@@ -2462,6 +2443,10 @@ function buildSemanticGroupView(
   const unitName = typeof row.unit_name === 'string' && row.unit_name.trim()
     ? row.unit_name.trim()
     : null
+  const variableLabel =
+    typeof row.variable_case_label === 'string' && row.variable_case_label.trim()
+      ? row.variable_case_label.trim()
+      : null
   const variableHash =
     typeof row.variable_case_hash === 'string' && row.variable_case_hash.trim()
       ? row.variable_case_hash.trim()
@@ -2469,7 +2454,8 @@ function buildSemanticGroupView(
   const unitId = row.unit_id === null || row.unit_id === undefined ? null : String(row.unit_id)
   const labelParts = [
     unitName || (unitId ? `#${unitId}` : null) || t('promptTestResult.analysis.semantic.unknownUnit'),
-    variableHash ? variableHash.slice(0, 8) : t('promptTestResult.analysis.semantic.unknownGroup')
+    variableLabel ||
+      (variableHash ? variableHash.slice(0, 8) : t('promptTestResult.analysis.semantic.unknownGroup'))
   ].filter((part): part is string => Boolean(part))
   return {
     key: `${unitId ?? 'unknown'}-${variableHash ?? index}`,
@@ -2516,12 +2502,6 @@ function getSemanticAnalysisReport(moduleId: string): SemanticAnalysisReportView
     (total, group) => total + group.outlierCount,
     0
   )
-  const validSimilarityGroups = comparableGroups.filter(
-    (group) => typeof group.meanSimilarity === 'number'
-  )
-  const validDispersionGroups = comparableGroups.filter(
-    (group) => typeof group.dispersion === 'number'
-  )
   const objectiveSet = new Set<SemanticAnalysisObjective>()
   groups.forEach((group) => {
     if (group.objective) {
@@ -2534,14 +2514,6 @@ function getSemanticAnalysisReport(moduleId: string): SemanticAnalysisReportView
     insufficientGroupCount: insufficientGroups.length,
     outlierGroupCount: outlierGroups.length,
     outlierSampleCount,
-    averageSimilarity: validSimilarityGroups.length
-      ? validSimilarityGroups.reduce((sum, group) => sum + (group.meanSimilarity ?? 0), 0) /
-        validSimilarityGroups.length
-      : null,
-    averageDispersion: validDispersionGroups.length
-      ? validDispersionGroups.reduce((sum, group) => sum + (group.dispersion ?? 0), 0) /
-        validDispersionGroups.length
-      : null,
     objectives: Array.from(objectiveSet),
     groups,
     insufficientGroups,

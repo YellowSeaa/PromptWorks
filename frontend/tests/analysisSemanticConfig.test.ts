@@ -7,6 +7,7 @@ import {
   buildSemanticAnalysisParameters,
   formatSemanticMetricValue,
   formatSemanticObjective,
+  hasCallableChatModel,
   normalizeSemanticAnalysisChart,
   semanticModelKeyFromParameters
 } from '../src/utils/analysisSemanticConfig.ts'
@@ -89,6 +90,17 @@ describe('analysisSemanticConfig', () => {
     ])
   })
 
+  it('调用模型只允许选择 chat 模型，不能把纯向量化提供方显示出来', () => {
+    assert.equal(hasCallableChatModel(providers[0]), true)
+    assert.equal(
+      hasCallableChatModel({
+        ...providers[0],
+        models: providers[0].models.filter((model) => model.model_type === 'embedding')
+      }),
+      false
+    )
+  })
+
   it('把语义分析表单值转换为后端执行参数', () => {
     assert.deepEqual(buildSemanticAnalysisParameters('3:4', 'consistency', 80), {
       embedding_provider_id: 3,
@@ -126,19 +138,20 @@ describe('analysisSemanticConfig', () => {
         id: 'mean_pairwise_similarity',
         title: '平均语义相似度',
         type: 'bar',
-        x: 'variable_case_hash',
+        x: 'variable_case_label',
         y: 'mean_pairwise_similarity'
       },
       [
         {
           variable_case_hash: 'abc123',
+          variable_case_label: 'topic=天气',
           mean_pairwise_similarity: 0.911234
         }
       ],
       (value) => formatSemanticMetricValue(value, 'zh-CN')
     )
 
-    assert.deepEqual((option.xAxis as Record<string, unknown>).data, ['abc123'])
+    assert.deepEqual((option.xAxis as Record<string, unknown>).data, ['topic=天气'])
     assert.deepEqual(
       ((option.series as Array<Record<string, unknown>>)[0].data),
       [0.911234]
@@ -156,7 +169,7 @@ describe('analysisSemanticConfig', () => {
     )
 
     assert.equal(normalized.type, 'bar')
-    assert.equal(normalized.x, 'variable_case_hash')
+    assert.equal(normalized.x, 'variable_case_label')
     assert.equal(normalized.y, 'semantic_dispersion')
   })
 })

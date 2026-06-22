@@ -44,6 +44,7 @@ export interface SemanticAnalysisGroupSummary {
   unit_id?: number | string | null
   unit_name?: string | null
   variable_case_hash?: string | null
+  variable_case_label?: string | null
   semantic_objective?: SemanticAnalysisObjective | null
   sample_count?: number | null
   mean_pairwise_similarity?: number | null

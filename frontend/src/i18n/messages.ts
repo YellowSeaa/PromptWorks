@@ -1200,8 +1200,6 @@ export const messages = {
             comparableGroups: '可比较组',
             insufficientGroups: '样本不足组',
             outlierGroups: '含异常组',
-            meanSimilarity: '平均相似度',
-            meanDispersion: '平均离散度',
             outlierSamples: '异常样本数'
           },
           insufficientTitle: '样本不足组',
@@ -2625,8 +2623,6 @@ export const messages = {
             comparableGroups: 'Comparable groups',
             insufficientGroups: 'Insufficient groups',
             outlierGroups: 'Groups with outliers',
-            meanSimilarity: 'Average similarity',
-            meanDispersion: 'Average dispersion',
             outlierSamples: 'Outlier samples'
           },
           insufficientTitle: 'Insufficient-sample groups',

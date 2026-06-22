@@ -41,6 +41,10 @@ export function buildEmbeddingModelOptions(providers: LLMProvider[]): EmbeddingM
   )
 }
 
+export function hasCallableChatModel(provider: LLMProvider): boolean {
+  return provider.models.some((model) => model.model_type === 'chat')
+}
+
 export function buildSemanticAnalysisParameters(
   modelKey: string,
   objective: SemanticObjectiveValue | null,
@@ -215,7 +219,7 @@ export function normalizeSemanticAnalysisChart(
     id,
     title: chart.title ?? '',
     type: typeof chart.type === 'string' ? chart.type : inferredY ? 'bar' : null,
-    x: typeof chart.x === 'string' ? chart.x : inferredY ? 'variable_case_hash' : null,
+    x: typeof chart.x === 'string' ? chart.x : inferredY ? 'variable_case_label' : null,
     y: typeof chart.y === 'string' ? chart.y : inferredY,
     description: chart.description ?? '',
     option: JSON.parse(JSON.stringify(chart.option ?? {})),

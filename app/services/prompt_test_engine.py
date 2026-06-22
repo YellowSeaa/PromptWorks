@@ -511,6 +511,9 @@ def _resolve_provider_and_model(
             )
         )
 
+    if model is not None and model.model_type != "chat":
+        raise PromptTestExecutionError("测试任务调用模型必须是 chat 类型模型。")
+
     return provider, model
 
 
