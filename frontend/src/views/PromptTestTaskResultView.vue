@@ -857,7 +857,7 @@
                     :label="meta.label"
                   >
                     <template #default="{ row }">
-                      {{ formatAnalysisCell(row[meta.name]) }}
+                      {{ formatAnalysisCell(row[meta.name], meta.name) }}
                     </template>
                   </el-table-column>
                 </el-table>
@@ -1004,8 +1004,12 @@ import type {
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import {
+  buildAnalysisChartOption,
   buildEmbeddingModelOptions,
   buildSemanticAnalysisParameters,
+  formatSemanticMetricValue,
+  formatSemanticObjective,
+  normalizeSemanticAnalysisChart,
   semanticModelKeyFromParameters,
   SEMANTIC_ANALYSIS_MODULE_ID,
   type SemanticObjectiveValue
@@ -1492,7 +1496,9 @@ function restoreModuleStateFromCache(moduleId: string) {
   state.result = cached.result
   state.status = cached.status ?? 'success'
   state.errorMessage = null
-  state.charts = Array.isArray(cached.charts) ? cached.charts : []
+  state.charts = Array.isArray(cached.charts)
+    ? cached.charts.map((chart, index) => normalizeAnalysisChart(moduleId, chart, index))
+    : []
   state.chartColumn = cached.chartColumn ?? null
   state.chartType = cached.chartType ?? null
   const formCache = cached.form ?? {}
@@ -1501,6 +1507,19 @@ function restoreModuleStateFromCache(moduleId: string) {
       state.form[param.key] = formCache[param.key]
     }
   })
+  if (moduleId === SEMANTIC_ANALYSIS_MODULE_ID) {
+    if (Object.prototype.hasOwnProperty.call(formCache, 'semantic_embedding_model_key')) {
+      state.form.semantic_embedding_model_key = formCache.semantic_embedding_model_key
+    } else {
+      state.form.semantic_embedding_model_key = semanticModelKeyFromParameters(formCache)
+    }
+    if (Object.prototype.hasOwnProperty.call(formCache, 'objective_override')) {
+      state.form.objective_override = formCache.objective_override
+    }
+    if (Object.prototype.hasOwnProperty.call(formCache, 'max_samples_per_group')) {
+      state.form.max_samples_per_group = formCache.max_samples_per_group
+    }
+  }
   state.unitLinks = Array.isArray(cached.unitLinks) ? cached.unitLinks : []
   state.unitLinkMapById.clear()
   state.unitLinkMapByLabel.clear()
@@ -2191,6 +2210,26 @@ function getPrebuiltCharts(moduleId: string): AnalysisChartConfig[] {
   return state.charts
 }
 
+function normalizeAnalysisChart(
+  moduleId: string,
+  chart: AnalysisChartConfig,
+  index: number
+): AnalysisChartConfig {
+  if (moduleId === SEMANTIC_ANALYSIS_MODULE_ID) {
+    return normalizeSemanticAnalysisChart(chart, index) as AnalysisChartConfig
+  }
+  return {
+    id: chart.id || `chart-${index}`,
+    title: chart.title ?? '',
+    type: typeof chart.type === 'string' ? chart.type : null,
+    x: typeof chart.x === 'string' ? chart.x : null,
+    y: typeof chart.y === 'string' ? chart.y : null,
+    description: chart.description ?? '',
+    option: JSON.parse(JSON.stringify(chart.option ?? {})),
+    meta: chart.meta ? JSON.parse(JSON.stringify(chart.meta)) : undefined
+  }
+}
+
 function getModuleRetryKey(moduleId: string): string {
   return `module:${moduleId}`
 }
@@ -2392,7 +2431,15 @@ function formatSemanticMetric(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return '-'
   }
-  return Number(value).toFixed(3)
+  return formatSemanticMetricValue(value, locale.value)
+}
+
+function getSemanticObjectiveLabels() {
+  return {
+    consistency: t('promptTestResult.analysis.semantic.objectives.consistency'),
+    diversity: t('promptTestResult.analysis.semantic.objectives.diversity'),
+    balanced: t('promptTestResult.analysis.semantic.objectives.balanced')
+  }
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -2567,8 +2614,12 @@ function handlePrebuiltChartRef(
     chartMap.set(chartId, instance)
   }
 
-  const finalOption = JSON.parse(JSON.stringify(chart.option ?? {}))
   const state = getModuleState(moduleId)
+  const finalOption = buildAnalysisChartOption(
+    chart as AnalysisChartConfig & { type?: unknown; x?: unknown; y?: unknown },
+    state?.result?.data ?? [],
+    (value) => formatSemanticMetricValue(value, locale.value)
+  )
   if (state) {
     finalOption.tooltip = finalOption.tooltip || {}
     const originalFormatter = finalOption.tooltip.formatter
@@ -2729,13 +2780,9 @@ async function runAnalysisModule(moduleId: string) {
     const chartsRaw = Array.isArray(result.extra?.charts)
       ? (result.extra?.charts as AnalysisChartConfig[])
       : []
-    state.charts = chartsRaw.map((chart, index) => ({
-      id: chart.id || `chart-${index}`,
-      title: chart.title ?? '',
-      description: chart.description ?? '',
-      option: JSON.parse(JSON.stringify(chart.option ?? {})),
-      meta: chart.meta ? JSON.parse(JSON.stringify(chart.meta)) : undefined
-    })) as AnalysisChartConfig[]
+    state.charts = chartsRaw.map((chart, index) =>
+      normalizeAnalysisChart(moduleId, chart, index)
+    )
 
     const unitLinksRaw = Array.isArray(result.extra?.unit_links)
       ? (result.extra?.unit_links as AnalysisUnitLink[])
@@ -2795,10 +2842,21 @@ async function runSelectedModules() {
   }
 }
 
-function formatAnalysisCell(value: unknown): string {
+function formatAnalysisCell(value: unknown, columnName?: string): string {
+  if (columnName === 'semantic_objective') {
+    return formatSemanticObjective(value, getSemanticObjectiveLabels())
+  }
+  if (
+    columnName === 'mean_pairwise_similarity' ||
+    columnName === 'min_pairwise_similarity' ||
+    columnName === 'centroid_similarity_mean' ||
+    columnName === 'semantic_dispersion'
+  ) {
+    return formatSemanticMetricValue(value, locale.value)
+  }
   if (value === null || value === undefined) return '-'
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value.toString() : '-'
+    return Number.isFinite(value) ? formatMetricValue(value) : '-'
   }
   if (typeof value === 'object') {
     try {
@@ -3691,7 +3749,7 @@ watch(
 
 .analysis-modules-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 
@@ -3940,12 +3998,6 @@ watch(
 
 .analysis-empty-card :deep(.el-empty__description) {
   font-size: 13px;
-}
-
-@media (max-width: 1100px) {
-  .analysis-modules-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .units-panel {

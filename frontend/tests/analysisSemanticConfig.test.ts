@@ -2,8 +2,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
+  buildAnalysisChartOption,
   buildEmbeddingModelOptions,
   buildSemanticAnalysisParameters,
+  formatSemanticMetricValue,
+  formatSemanticObjective,
+  normalizeSemanticAnalysisChart,
   semanticModelKeyFromParameters
 } from '../src/utils/analysisSemanticConfig.ts'
 import type { LLMProvider } from '../src/types/llm.ts'
@@ -102,5 +106,57 @@ describe('analysisSemanticConfig', () => {
       }),
       '3:4'
     )
+  })
+
+  it('本地化语义目标并限制语义指标小数位', () => {
+    const labels = {
+      consistency: '一致性',
+      diversity: '多样性',
+      balanced: '平衡'
+    }
+
+    assert.equal(formatSemanticObjective('consistency', labels), '一致性')
+    assert.equal(formatSemanticMetricValue(0.911234, 'zh-CN'), '0.911')
+    assert.equal(formatSemanticMetricValue(0.02, 'zh-CN'), '0.02')
+  })
+
+  it('能把后端 x/y 图表配置转换为 ECharts option', () => {
+    const option = buildAnalysisChartOption(
+      {
+        id: 'mean_pairwise_similarity',
+        title: '平均语义相似度',
+        type: 'bar',
+        x: 'variable_case_hash',
+        y: 'mean_pairwise_similarity'
+      },
+      [
+        {
+          variable_case_hash: 'abc123',
+          mean_pairwise_similarity: 0.911234
+        }
+      ],
+      (value) => formatSemanticMetricValue(value, 'zh-CN')
+    )
+
+    assert.deepEqual((option.xAxis as Record<string, unknown>).data, ['abc123'])
+    assert.deepEqual(
+      ((option.series as Array<Record<string, unknown>>)[0].data),
+      [0.911234]
+    )
+  })
+
+  it('能兼容旧缓存中缺少 x/y/type 的语义图表配置', () => {
+    const normalized = normalizeSemanticAnalysisChart(
+      {
+        id: 'semantic_dispersion',
+        title: '语义离散度',
+        option: {}
+      },
+      0
+    )
+
+    assert.equal(normalized.type, 'bar')
+    assert.equal(normalized.x, 'variable_case_hash')
+    assert.equal(normalized.y, 'semantic_dispersion')
   })
 })

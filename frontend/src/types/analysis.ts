@@ -28,6 +28,9 @@ export interface AnalysisChartMeta {
 export interface AnalysisChartConfig {
   id: string
   title: string
+  type?: string | null
+  x?: string | null
+  y?: string | null
   description?: string | null
   option: Record<string, unknown>
   meta?: AnalysisChartMeta

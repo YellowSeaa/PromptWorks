@@ -2014,7 +2014,32 @@ onMounted(() => {
 .semantic-analysis-config__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
+  align-items: start;
+}
+
+.semantic-analysis-config__grid :deep(.el-form-item) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin-bottom: 0;
+}
+
+.semantic-analysis-config__grid :deep(.el-form-item__label) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 32px;
+  margin-bottom: 8px;
+  line-height: 32px;
+  text-align: left;
+}
+
+.semantic-analysis-config__grid :deep(.el-form-item__content) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  line-height: normal;
 }
 
 .semantic-analysis-config__number {
