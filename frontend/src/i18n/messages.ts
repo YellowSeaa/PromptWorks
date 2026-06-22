@@ -985,6 +985,9 @@ export const messages = {
           extraParameters: '附加参数（JSON）',
           inputSamples: '输入样本',
           analysisModules: '分析模块',
+          semanticEmbeddingModel: 'Embedding 模型',
+          semanticObjective: '语义目标',
+          semanticMaxSamples: '每组采样上限',
           aiScoring: 'AI 评分'
         },
         temperatureModes: {
@@ -1003,6 +1006,7 @@ export const messages = {
           inputSamples:
             '首行填写变量名，用逗号、分号或 Tab 分隔；后续每行是一组变量值。\n例如：\ntext,tone\n你好,正式\n请介绍 PromptWorks,简洁',
           analysisModules: '请选择需要自动执行的分析模块',
+          semanticEmbeddingModel: '请选择向量化模型',
           aiScoringModel: '请选择评分模型'
         },
         tips: {
@@ -1020,7 +1024,15 @@ export const messages = {
             '若导入变量，总测试次数 = 变量行数 × 执行轮次。当前变量 {rows} 行，执行轮次 {rounds} 次，预计每个模型执行 {total} 次；未导入变量时按轮次重复统一提示。',
           combinationCount: '将生成 {count} 个最小测试单元，提交后可在列表中查看。',
           analysisModules: '若选择分析模块，任务完成后将自动触发对应分析（也可在结果页手动运行）。',
+          semanticEmbeddingModel: '使用模型管理中类型为“向量化”的模型生成输出文本向量。',
+          semanticObjective: '一致性适合希望答案稳定复现的任务；多样性适合希望答案有差异的创意任务；平衡适合既不能太散也不能太像的任务。',
+          semanticMaxSamples: '同一测试单元、同一变量组合内样本很多时，只抽取最多这么多条参与两两相似度计算。默认 100 通常够用，样本少于该数量时会全部参与。',
           aiScoring: '开启后，每条测试结果生成时会立即使用所选模型评分，评分理由语言跟随当前界面语言。'
+        },
+        semanticObjectives: {
+          consistency: '一致性（稳定复现）',
+          diversity: '多样性（避免过度收敛）',
+          balanced: '平衡（相似度适中）'
         },
         aiScoring: {
           enabled: '开启评分',
@@ -1049,6 +1061,7 @@ export const messages = {
         promptRequired: '请选择 Prompt 及版本',
         modelRequired: '请选择要调用的模型',
         aiScoringModelRequired: '请选择 AI 评分模型',
+        semanticEmbeddingModelRequired: '已选择语义一致性与多样性分析，请先选择 Embedding 模型。',
         roundsInvalid: '轮次必须是大于 0 的整数',
         parameterSetRequired: '请至少配置一套参数组合',
         parameterSetRemoveLimit: '至少保留一套参数组合',
@@ -1147,7 +1160,23 @@ export const messages = {
           numberInvalid: '「{field}」需为数值',
           numberInvalidSimple: '数值参数无效',
           selectInvalid: '「{field}」的取值不在可选范围内',
-          selectInvalidSimple: '所选值无效'
+          selectInvalidSimple: '所选值无效',
+          loadProvidersFailed: '加载模型列表失败，请稍后重试'
+        },
+        parameters: {
+          embeddingModel: 'Embedding 模型',
+          embeddingModelPlaceholder: '请选择向量化模型',
+          embeddingModelHelp: '来自模型管理中“向量化”类型的模型，用于把测试输出转换成向量后再比较语义相似度。',
+          noEmbeddingModels: '暂无可用向量化模型，请先在模型管理中添加 embedding 模型。',
+          objective: '语义目标',
+          objectives: {
+            consistency: '一致性（稳定复现）',
+            diversity: '多样性（避免过度收敛）',
+            balanced: '平衡（相似度适中）'
+          },
+          objectiveHelp: '一致性适合确定性回答；多样性适合创意发散；平衡适合希望结果相似但不完全重复。',
+          maxSamples: '每组采样上限',
+          maxSamplesHelp: '每个“测试单元 + 变量组合”内最多抽取多少条输出参与两两相似度计算。样本较少时会全部计算，默认 100 可避免大批量任务计算过慢。'
         },
         chartTypes: {
           bar: '柱状图',
@@ -2379,6 +2408,9 @@ export const messages = {
           extraParameters: 'Extra Parameters (JSON)',
           inputSamples: 'Input Samples',
           analysisModules: 'Analysis Modules',
+          semanticEmbeddingModel: 'Embedding Model',
+          semanticObjective: 'Semantic Objective',
+          semanticMaxSamples: 'Samples per Group',
           aiScoring: 'AI Scoring'
         },
         temperatureModes: {
@@ -2397,6 +2429,7 @@ export const messages = {
           inputSamples:
             'First row: variable names separated by commas, semicolons, or tabs; each following row is one variable sample.\nExample:\ntext,tone\nHello,formal\nExplain PromptWorks,concise',
           analysisModules: 'Select analysis modules to auto-run after completion',
+          semanticEmbeddingModel: 'Select an embedding model',
           aiScoringModel: 'Select a scoring model'
         },
         tips: {
@@ -2414,7 +2447,15 @@ export const messages = {
             'When variable samples are provided, total runs = variable rows × execution rounds. Currently {rows} rows and {rounds} rounds, estimated {total} runs per model; without variables the same prompt repeats each round.',
           combinationCount: '{count} minimal test units will be generated.',
           analysisModules: 'Selected modules will run automatically once the task completes. You can still trigger additional analyses later.',
+          semanticEmbeddingModel: 'Uses a model whose type is set to embedding in Model Management.',
+          semanticObjective: 'Consistency fits stable reproduction, diversity fits creative variation, and balanced fits outputs that should stay similar without becoming identical.',
+          semanticMaxSamples: 'When one unit and variable case has many outputs, only up to this many samples are used for pairwise similarity. The default 100 is enough for most tests; smaller groups are fully evaluated.',
           aiScoring: 'When enabled, each output is scored immediately by the selected model. Reason language follows the current UI language.'
+        },
+        semanticObjectives: {
+          consistency: 'Consistency (stable)',
+          diversity: 'Diversity (varied)',
+          balanced: 'Balanced (moderate)'
         },
         aiScoring: {
           enabled: 'Enable scoring',
@@ -2443,6 +2484,7 @@ export const messages = {
         promptRequired: 'Please select a prompt and version.',
         modelRequired: 'Please select a model.',
         aiScoringModelRequired: 'Please select an AI scoring model.',
+        semanticEmbeddingModelRequired: 'Semantic analysis is selected. Please choose an embedding model first.',
         roundsInvalid: 'Rounds must be a positive integer.',
         parameterSetRequired: 'Configure at least one parameter set.',
         parameterSetRemoveLimit: 'Keep at least one parameter set.',
@@ -2541,7 +2583,23 @@ export const messages = {
           numberInvalid: '{field} must be a valid number.',
           numberInvalidSimple: 'Numeric value is invalid.',
           selectInvalid: '{field} is not within the available options.',
-          selectInvalidSimple: 'Selected value is invalid.'
+          selectInvalidSimple: 'Selected value is invalid.',
+          loadProvidersFailed: 'Failed to load model list. Please try again later.'
+        },
+        parameters: {
+          embeddingModel: 'Embedding Model',
+          embeddingModelPlaceholder: 'Select an embedding model',
+          embeddingModelHelp: 'Uses a Model Management entry with type embedding to vectorize test outputs before comparing semantic similarity.',
+          noEmbeddingModels: 'No embedding models are available. Add an embedding model in Model Management first.',
+          objective: 'Semantic Objective',
+          objectives: {
+            consistency: 'Consistency (stable)',
+            diversity: 'Diversity (varied)',
+            balanced: 'Balanced (moderate)'
+          },
+          objectiveHelp: 'Consistency is for deterministic answers, diversity is for creative variation, and balanced keeps outputs similar without being identical.',
+          maxSamples: 'Sample Cap per Group',
+          maxSamplesHelp: 'Maximum outputs sampled within each unit and variable case for pairwise similarity. Smaller groups are fully evaluated; the default 100 keeps large tests responsive.'
         },
         chartTypes: {
           bar: 'Bar',

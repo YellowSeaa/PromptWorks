@@ -531,7 +531,10 @@
             </template>
             <div v-if="moduleStates[moduleId]" class="analysis-module-card__body">
               <div
-                v-if="moduleStates[moduleId].definition.parameters.length"
+                v-if="
+                  moduleStates[moduleId].definition.parameters.length &&
+                  moduleId !== SEMANTIC_ANALYSIS_MODULE_ID
+                "
                 class="analysis-params"
               >
                 <el-form label-position="top" size="small" class="analysis-params__form">
@@ -574,6 +577,77 @@
                       />
                     </template>
                     <p v-if="param.help_text" class="analysis-param-tip">{{ param.help_text }}</p>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <div v-else-if="moduleId === SEMANTIC_ANALYSIS_MODULE_ID" class="analysis-params">
+                <el-form label-position="top" size="small" class="analysis-params__form">
+                  <el-form-item
+                    :label="t('promptTestResult.analysis.parameters.embeddingModel')"
+                    required
+                    class="analysis-param-item analysis-param-item--wide"
+                  >
+                    <el-select
+                      v-model="moduleStates[moduleId].form.semantic_embedding_model_key"
+                      filterable
+                      clearable
+                      class="analysis-param-input"
+                      :placeholder="t('promptTestResult.analysis.parameters.embeddingModelPlaceholder')"
+                    >
+                      <el-option
+                        v-for="option in embeddingModelOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      >
+                        <div class="analysis-option">
+                          <span class="analysis-option__title">{{ option.modelName }}</span>
+                          <span class="analysis-option__desc">{{ option.providerName }}</span>
+                        </div>
+                      </el-option>
+                    </el-select>
+                    <p class="analysis-param-tip">
+                      {{
+                        embeddingModelOptions.length
+                          ? t('promptTestResult.analysis.parameters.embeddingModelHelp')
+                          : t('promptTestResult.analysis.parameters.noEmbeddingModels')
+                      }}
+                    </p>
+                  </el-form-item>
+                  <el-form-item
+                    :label="t('promptTestResult.analysis.parameters.objective')"
+                    class="analysis-param-item"
+                  >
+                    <el-select
+                      v-model="moduleStates[moduleId].form.objective_override"
+                      class="analysis-param-input"
+                    >
+                      <el-option
+                        v-for="option in semanticObjectiveOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                    <p class="analysis-param-tip">
+                      {{ t('promptTestResult.analysis.parameters.objectiveHelp') }}
+                    </p>
+                  </el-form-item>
+                  <el-form-item
+                    :label="t('promptTestResult.analysis.parameters.maxSamples')"
+                    class="analysis-param-item"
+                  >
+                    <el-input-number
+                      v-model="moduleStates[moduleId].form.max_samples_per_group"
+                      :min="2"
+                      :max="1000"
+                      :step="10"
+                      controls-position="right"
+                      class="analysis-param-input"
+                    />
+                    <p class="analysis-param-tip">
+                      {{ t('promptTestResult.analysis.parameters.maxSamplesHelp') }}
+                    </p>
                   </el-form-item>
                 </el-form>
               </div>
@@ -930,6 +1004,13 @@ import type {
 import type { LLMProvider } from '../types/llm'
 import type { PromptTestResultUnit } from '../utils/promptTestResult'
 import {
+  buildEmbeddingModelOptions,
+  buildSemanticAnalysisParameters,
+  semanticModelKeyFromParameters,
+  SEMANTIC_ANALYSIS_MODULE_ID,
+  type SemanticObjectiveValue
+} from '../utils/analysisSemanticConfig'
+import {
   attachScoresToResultUnits,
   buildPromptTestResultUnit,
   detectMissingOutput,
@@ -1159,6 +1240,21 @@ const selectedScoringModel = computed<ModelInfo | null>(() => {
   if (!scoringModelKey.value) return null
   return scoringModelMap.value.get(scoringModelKey.value) ?? null
 })
+const embeddingModelOptions = computed(() => buildEmbeddingModelOptions(providers.value))
+const semanticObjectiveOptions = computed(() => [
+  {
+    value: 'consistency' as SemanticObjectiveValue,
+    label: t('promptTestResult.analysis.parameters.objectives.consistency')
+  },
+  {
+    value: 'diversity' as SemanticObjectiveValue,
+    label: t('promptTestResult.analysis.parameters.objectives.diversity')
+  },
+  {
+    value: 'balanced' as SemanticObjectiveValue,
+    label: t('promptTestResult.analysis.parameters.objectives.balanced')
+  }
+])
 
 const taskAIScoringConfig = computed(() => {
   const config = toRecord(task.value?.config ?? null)
@@ -1475,7 +1571,18 @@ function buildDefaultAnalysisForm(definition: AnalysisModuleDefinition): Record<
       form[param.key] = ''
     }
   })
+  if (definition.module_id === SEMANTIC_ANALYSIS_MODULE_ID) {
+    form.semantic_embedding_model_key = semanticModelKeyFromParameters(form)
+    form.objective_override = form.objective_override || 'consistency'
+    form.max_samples_per_group = form.max_samples_per_group || 100
+  }
   return form
+}
+
+function getConfiguredAnalysisParameters(moduleId: string): Record<string, unknown> {
+  const config = toRecord(task.value?.config ?? null)
+  const allParams = toRecord(config?.analysis_module_parameters)
+  return toRecord(allParams?.[moduleId]) ?? {}
 }
 
 function ensureModuleState(definition: AnalysisModuleDefinition) {
@@ -1494,6 +1601,12 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
         existing.form[param.key] = defaults[param.key]
       }
     })
+    Object.assign(existing.form, getConfiguredAnalysisParameters(definition.module_id))
+    if (definition.module_id === SEMANTIC_ANALYSIS_MODULE_ID) {
+      existing.form.semantic_embedding_model_key = semanticModelKeyFromParameters(existing.form)
+      existing.form.objective_override = existing.form.objective_override || 'consistency'
+      existing.form.max_samples_per_group = existing.form.max_samples_per_group || 100
+    }
     if (!Array.isArray(existing.charts)) {
       existing.charts = []
     }
@@ -1517,7 +1630,10 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
   }
   moduleStates[definition.module_id] = {
     definition,
-    form: buildDefaultAnalysisForm(definition),
+    form: {
+      ...buildDefaultAnalysisForm(definition),
+      ...getConfiguredAnalysisParameters(definition.module_id)
+    },
     status: 'idle',
     result: null,
     errorMessage: null,
@@ -1530,6 +1646,12 @@ function ensureModuleState(definition: AnalysisModuleDefinition) {
     unitLinkMapByLabel: new Map(),
     insightDetails: [],
     autoTriggered: false
+  }
+  if (definition.module_id === SEMANTIC_ANALYSIS_MODULE_ID) {
+    const form = moduleStates[definition.module_id].form
+    form.semantic_embedding_model_key = semanticModelKeyFromParameters(form)
+    form.objective_override = form.objective_override || 'consistency'
+    form.max_samples_per_group = form.max_samples_per_group || 100
   }
 }
 
@@ -2538,6 +2660,26 @@ function mapParameterValue(spec: AnalysisParameterSpec, value: unknown): unknown
 function prepareModuleParameters(moduleId: string): Record<string, unknown> | null {
   const state = getModuleState(moduleId)
   if (!state) return null
+  if (moduleId === SEMANTIC_ANALYSIS_MODULE_ID) {
+    const params = buildSemanticAnalysisParameters(
+      String(state.form.semantic_embedding_model_key ?? ''),
+      state.form.objective_override === 'diversity' ||
+        state.form.objective_override === 'balanced' ||
+        state.form.objective_override === 'consistency'
+        ? state.form.objective_override
+        : 'consistency',
+      typeof state.form.max_samples_per_group === 'number'
+        ? state.form.max_samples_per_group
+        : Number(state.form.max_samples_per_group)
+    )
+    if (!params.embedding_provider_id || !params.embedding_model_id) {
+      ElMessage.warning(t('promptTestResult.analysis.messages.paramRequired', {
+        field: t('promptTestResult.analysis.parameters.embeddingModel')
+      }))
+      return null
+    }
+    return params
+  }
   const params: Record<string, unknown> = {}
   for (const spec of state.definition.parameters) {
     const rawValue = state.form[spec.key]
@@ -3549,7 +3691,7 @@ watch(
 
 .analysis-modules-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -3642,6 +3784,10 @@ watch(
 
 .analysis-param-item {
   margin-bottom: 0;
+}
+
+.analysis-param-item--wide {
+  grid-column: 1 / -1;
 }
 
 .analysis-param-input {
@@ -3794,6 +3940,12 @@ watch(
 
 .analysis-empty-card :deep(.el-empty__description) {
   font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .analysis-modules-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .units-panel {
